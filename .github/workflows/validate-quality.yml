@@ -1,0 +1,79 @@
+# Reusable workflow — quality gate.
+# Workflow hygiene · digest-pinned Dockerfile · npm audit.
+# Called by ci.yml and release.yml. Must pass before push/release.
+name: Validate / Quality
+
+"on":
+  workflow_call:
+    inputs:
+      ref:
+        description: 'Git ref to check out (leave empty to use the caller ref)'
+        type: string
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
+jobs:
+  quality:
+    name: quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+          persist-credentials: false
+          token: ${{ secrets.CI_REPO_READ_TOKEN || github.token }}
+
+      - name: Set up Node
+        uses: actions/setup-node@v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Workflow files must use literal operators, not HTML entity encodings.
+      - name: Reject HTML-escaped operators in workflow files
+        run: |
+          if grep -REn '&(gt|lt|amp)' .github/workflows/ .github/scripts/; then
+            echo "::error::Workflow or script files contain HTML entities. Use literal operators instead."
+            exit 1
+          fi
+
+      - name: Reject CRLF in workflow scripts
+        run: |
+          if grep -RIl $'\r' .github/scripts .github/workflows Dockerfile nginx; then
+            echo "::error::CRLF line endings found. Save these files as LF so bash on the runner does not break."
+            exit 1
+          fi
+
+      # Enforce digest-pinned FROM lines in the Dockerfile. Floating tags can be
+      # silently overwritten by upstream maintainers.
+      - name: Dockerfile base image digest check
+        run: |
+          if grep -E '^FROM [^ @]+:[^ @]+( AS .+)?$' Dockerfile; then
+            echo "::error file=Dockerfile,title=Unpinned base image::Dockerfile FROM lines must use digest-pinned references (image:tag@sha256:...)."
+            exit 1
+          fi
+          echo "Dockerfile base images are digest-pinned."
+
+      - name: Check .dockerignore exists
+        run: test -f .dockerignore
+
+      # High and critical advisories in production dependencies block publish.
+      # Dev-only advisories are outside this gate: they are not in the browser
+      # bundle or the nginx image. The image is scanned again by Trivy.
+      - name: npm audit (production)
+        run: |
+          if ! npm audit --omit=dev --audit-level=high; then
+            echo "::error file=package-lock.json,title=Vulnerability found::npm audit reported high or critical advisories in production dependencies."
+            exit 1
+          fi

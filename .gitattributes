@@ -1,0 +1,4 @@
+.github/scripts/** text eol=lf
+*.sh text eol=lf
+Dockerfile text eol=lf
+nginx/** text eol=lf

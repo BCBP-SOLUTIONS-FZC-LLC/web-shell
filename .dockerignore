@@ -1,0 +1,28 @@
+.git
+.github
+.gitignore
+.gitattributes
+
+# Secrets and local env — never bake these into the image
+.env
+.env.*
+*.local
+docker.local.env
+
+# Host install and build output (the image runs npm ci itself)
+node_modules
+dist
+dist-ssr
+coverage
+.coverage
+test
+
+# Dev-only tooling
+.vscode
+.idea
+.mf
+@mf-types
+keycloak
+scripts
+*.md
+*.log

@@ -8,6 +8,9 @@
     "docker:dev": "docker run -it --rm -p 5173:5173 -v %cd%:/app -v /app/node_modules node:22-alpine sh -c \"cd /app && npm install && npm run dev\"",
     "docker:dev:mac": "docker run -it --rm -p 5173:5173 -v $(pwd):/app -v /app/node_modules node:22-alpine sh -c \"cd /app && npm install && npm run dev\"",
     "build": "tsc && vite build",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "test:ci": "vitest run --coverage && node .github/scripts/coverage-gate.mjs",
     "preview": "vite preview --port 5001 --strictPort",
     "keycloak:dev": "node scripts/keycloak-compose.mjs up",
     "keycloak:dev:detach": "node scripts/keycloak-compose.mjs up -d",
@@ -19,16 +22,22 @@
   "devDependencies": {
     "@module-federation/vite": "^1.23.4",
     "@tailwindcss/vite": "^4.3.3",
+    "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/react": "^16.3.3",
+    "@testing-library/user-event": "^14.6.8",
     "@types/node": "^26.6.5",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.2",
+    "@vitest/coverage-v8": "^5.0.5",
     "autoprefixer": "^10.6.1",
     "daisyui": "^5.7.50",
+    "happy-dom": "^21.0.4",
     "postcss": "^8.5.30",
     "tailwindcss": "^4.3.3",
     "typescript": "~6.0.2",
-    "vite": "^8.3.0"
+    "vite": "^8.3.0",
+    "vitest": "^5.0.5"
   },
   "dependencies": {
     "keycloak-js": "^26.2.4",

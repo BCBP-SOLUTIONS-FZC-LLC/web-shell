@@ -1,0 +1,4 @@
+# CVE allowlist for the published web-shell image.
+# Add an ID only when the finding is in a pinned base image with no patched
+# tag yet, and include an expiry so it is reviewed:
+#   CVE-2026-00000 exp:2026-12-31

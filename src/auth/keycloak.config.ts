@@ -13,7 +13,7 @@ export function isKeycloakConfigured(): boolean {
 }
 
 export function getKeycloakRedirectUri(): string {
-  const configured = (import.meta.env.VITE_KEYCLOAK_REDIRECT_URI ?? '').trim()
+  const configured = env('VITE_KEYCLOAK_REDIRECT_URI')
   if (configured) {
     return configured
   }
