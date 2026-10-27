@@ -1,0 +1,28 @@
+@import 'tailwindcss';
+@config '../tailwind.config.js';
+@plugin "daisyui" {
+  themes: all;
+}
+@import './theme/aura.css';
+@import './theme/daisyAuraBridge.css';
+
+@layer base {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  html,
+  body {
+    margin: 0;
+    min-height: 100%;
+    background-color: var(--aura-canvas);
+    color: var(--aura-text);
+  }
+
+  #app {
+    min-height: 100vh;
+    min-height: 100dvh;
+  }
+}

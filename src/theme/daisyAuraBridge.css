@@ -1,0 +1,23 @@
+/* Map Aura tokens from daisyUI theme variables (keeps existing utility classes working). */
+
+html[data-theme]:where(:not([data-theme='light']):not([data-theme='dark'])) {
+  --aura-canvas: var(--color-base-200);
+  --aura-surface: var(--color-base-100);
+  --aura-surface-elevated: var(--color-base-100);
+  --aura-border: var(--color-base-300);
+  --aura-text: var(--color-base-content);
+  --aura-text-muted: color-mix(in oklch, var(--color-base-content) 62%, var(--color-base-100));
+  --aura-primary: var(--color-primary);
+  --aura-primary-soft: color-mix(in oklch, var(--color-primary) 16%, var(--color-base-100));
+  --aura-secondary: var(--color-secondary);
+  --aura-secondary-soft: color-mix(in oklch, var(--color-secondary) 16%, var(--color-base-100));
+  --aura-tertiary: var(--color-accent);
+  --aura-tertiary-soft: color-mix(in oklch, var(--color-accent) 14%, var(--color-base-100));
+  --aura-accent-coral: var(--color-error);
+  --aura-accent-coral-soft: color-mix(in oklch, var(--color-error) 14%, var(--color-base-100));
+  --aura-accent-amber: var(--color-warning);
+  --aura-accent-amber-soft: color-mix(in oklch, var(--color-warning) 16%, var(--color-base-100));
+  --aura-hover: var(--color-base-200);
+  --aura-input: var(--color-base-200);
+  --aura-shadow: color-mix(in oklch, var(--color-neutral) 22%, transparent);
+}

@@ -1,0 +1,46 @@
+/* Aura Cybernetic — light & dark tokens (Primary #D92672, Secondary #8A3FFC, Tertiary #00F0FF) */
+
+:root,
+html[data-theme='light'] {
+  --aura-canvas: #f7f8fa;
+  --aura-surface: #ffffff;
+  --aura-surface-elevated: #faf9fc;
+  --aura-border: #e6e1ef;
+  --aura-text: #090a0f;
+  --aura-text-muted: #5c5670;
+  --aura-primary: #d92672;
+  --aura-primary-soft: #fce7f0;
+  --aura-secondary: #8a3ffc;
+  --aura-secondary-soft: #f0ebff;
+  --aura-tertiary: #00c8d4;
+  --aura-tertiary-soft: #e6fdff;
+  --aura-accent-coral: #e85d4c;
+  --aura-accent-coral-soft: #ffeeeb;
+  --aura-accent-amber: #c9870a;
+  --aura-accent-amber-soft: #fef5e4;
+  --aura-hover: #ece8f4;
+  --aura-input: #eeebf3;
+  --aura-shadow: rgba(9, 10, 15, 0.06);
+}
+
+html[data-theme='dark'] {
+  --aura-canvas: #241858;
+  --aura-surface: #2c1f6a;
+  --aura-surface-elevated: #322474;
+  --aura-border: #5a4a8a;
+  --aura-text: #f5f3ff;
+  --aura-text-muted: #b8b0d4;
+  --aura-primary: #d92672;
+  --aura-primary-soft: rgba(217, 38, 114, 0.14);
+  --aura-secondary: #8a3ffc;
+  --aura-secondary-soft: rgba(138, 63, 252, 0.14);
+  --aura-tertiary: #00f0ff;
+  --aura-tertiary-soft: rgba(0, 240, 255, 0.1);
+  --aura-accent-coral: #ff7a6b;
+  --aura-accent-coral-soft: rgba(232, 93, 76, 0.16);
+  --aura-accent-amber: #f5b942;
+  --aura-accent-amber-soft: rgba(201, 135, 10, 0.18);
+  --aura-hover: #382a7e;
+  --aura-input: #2f226e;
+  --aura-shadow: rgba(15, 8, 40, 0.45);
+}

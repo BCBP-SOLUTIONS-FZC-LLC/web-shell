@@ -1,0 +1,39 @@
+{
+  "name": "app1",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host",
+    "docker:dev": "docker run -it --rm -p 5173:5173 -v %cd%:/app -v /app/node_modules node:22-alpine sh -c \"cd /app && npm install && npm run dev\"",
+    "docker:dev:mac": "docker run -it --rm -p 5173:5173 -v $(pwd):/app -v /app/node_modules node:22-alpine sh -c \"cd /app && npm install && npm run dev\"",
+    "build": "tsc && vite build",
+    "preview": "vite preview --port 5001 --strictPort",
+    "keycloak:dev": "node scripts/keycloak-compose.mjs up",
+    "keycloak:dev:detach": "node scripts/keycloak-compose.mjs up -d",
+    "keycloak:logs": "node scripts/keycloak-compose.mjs logs -f keycloak",
+    "keycloak:status": "node scripts/check-keycloak.mjs",
+    "keycloak:setup": "node scripts/setup-keycloak.mjs",
+    "keycloak:seed-user": "node scripts/seed-keycloak-user.mjs"
+  },
+  "devDependencies": {
+    "@module-federation/vite": "^1.23.4",
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/node": "^26.6.5",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "autoprefixer": "^10.6.1",
+    "daisyui": "^5.7.50",
+    "postcss": "^8.5.30",
+    "tailwindcss": "^4.3.3",
+    "typescript": "~6.0.2",
+    "vite": "^8.3.0"
+  },
+  "dependencies": {
+    "keycloak-js": "^26.2.4",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "react-router-dom": "^7.18.4"
+  }
+}

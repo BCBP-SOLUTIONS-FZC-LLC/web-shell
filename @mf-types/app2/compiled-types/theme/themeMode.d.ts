@@ -1,0 +1,13 @@
+import { type AppThemeId, type AuraThemeMode } from './daisyThemes';
+export type ThemeMode = AuraThemeMode;
+export declare function readStoredAppTheme(): AppThemeId;
+export declare function readStoredThemeMode(): ThemeMode;
+export declare function applyAppTheme(themeId: AppThemeId): void;
+export declare function applyThemeMode(mode: ThemeMode): void;
+export declare function toggleThemeMode(current: ThemeMode): ThemeMode;
+export declare function logoThemeFromAppTheme(themeId: AppThemeId): ThemeMode;
+export declare const dashShellClass = "bg-aura-canvas text-aura-text";
+export declare const dashSurfaceClass = "bg-aura-surface";
+export declare const dashBorderClass = "border-aura-border";
+export declare const dashSidebarClass = "bg-aura-surface border-r border-aura-border";
+export declare const dashHeaderClass = "bg-aura-surface border-b border-aura-border shadow-dash";
