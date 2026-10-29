@@ -1,7 +1,13 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import LoginPage from '../../src/pages/LoginPage'
+import LoginLatest from '../../src/pages/LoginPage'
+import LoginPrevious from '../../src/pages/LoginPage1'
+
+const pages = [
+  ['latest', LoginLatest],
+  ['login1', LoginPrevious],
+] as const
 
 const redirectToKeycloakLogin = vi.hoisted(() => vi.fn())
 
@@ -12,7 +18,7 @@ vi.mock('../../src/auth/keycloak', async () => {
   return { ...actual, redirectToKeycloakLogin }
 })
 
-describe('login page sign-in errors', () => {
+describe.each(pages)('login page sign-in errors %s', (_name, LoginPage) => {
   beforeEach(() => {
     redirectToKeycloakLogin.mockReset()
   })

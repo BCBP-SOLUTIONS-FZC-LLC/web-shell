@@ -21,6 +21,13 @@ describe('shell routing', () => {
     setUrl('/')
     render(<App />)
     expect(await screen.findByRole('heading', { name: 'Login to your account' })).toBeInTheDocument()
+    expect(screen.getByText(/Access your unified workspace/)).toBeInTheDocument()
+  })
+
+  it('shows the previous login when the page asks for variant login1', async () => {
+    setUrl('/?variant=login1')
+    render(<App />)
+    expect(await screen.findByRole('heading', { name: /Best Possibilities/ })).toBeInTheDocument()
   })
 
   it('shows the login page for an anonymous dashboard section and can start sign-in', async () => {

@@ -1,7 +1,13 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import LoginPage from '../../src/pages/LoginPage'
+import LoginLatest from '../../src/pages/LoginPage'
+import LoginPrevious from '../../src/pages/LoginPage1'
+
+const pages = [
+  ['latest', LoginLatest],
+  ['login1', LoginPrevious],
+] as const
 
 function deferredFetch() {
   let release: (response: Response) => void = () => {}
@@ -12,7 +18,7 @@ function deferredFetch() {
   return (response: Response) => release(response)
 }
 
-describe('login page', () => {
+describe.each(pages)('login page %s', (_name, LoginPage) => {
   beforeEach(() => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
   })

@@ -1,0 +1,25 @@
+sequenceDiagram
+    participant Browser
+    participant Main as main.tsx
+    participant App as App.tsx
+    participant Config as keycloak.config
+    participant Facade as keycloak.ts
+    participant PKCE as oauth-pkce.ts
+
+    Browser->>Main: load document
+    Main->>PKCE: captureOAuthCallbackFromUrl()
+    Note over PKCE: If code or error is present, keep the first snapshot
+    Main->>App: render
+
+    App->>App: runId = ++authBootstrapId
+    App->>Config: isKeycloakConfigured()
+    alt URL, realm, or client id empty
+        App->>App: signed out, authReady
+    else no callback, no session, exchange not in flight
+        App->>App: signed out, authReady
+    else callback, session, or exchange in flight
+        App->>Facade: initKeycloak()
+        Facade->>PKCE: existing session, or completeOAuthCallbackFromUrl()
+        PKCE-->>App: session has accessToken, or throw
+        Note over App: Apply setState only when runId is still current
+    end

@@ -11,11 +11,13 @@ describe('login page without Keycloak config', () => {
       VITE_KEYCLOAK_REALM: ' ',
       VITE_KEYCLOAK_CLIENT_ID: ' ',
     })
-    const { default: LoginPage } = await import('../../src/pages/LoginPage')
+    const latest = await import('../../src/pages/LoginPage')
+    const previous = await import('../../src/pages/LoginPage1')
     const user = userEvent.setup()
-    const onDismissAuthError = vi.fn()
 
-    render(<LoginPage onDismissAuthError={onDismissAuthError} />)
+    for (const { default: LoginPage } of [latest, previous]) {
+      const onDismissAuthError = vi.fn()
+      const view = render(<LoginPage onDismissAuthError={onDismissAuthError} />)
     expect(screen.queryByText(/Checking Keycloak/)).not.toBeInTheDocument()
 
     await user.type(screen.getByRole('textbox', { name: /work email address/i }), 'ada@bcbp.com')
@@ -25,6 +27,8 @@ describe('login page without Keycloak config', () => {
       screen.getByText(/Keycloak is not configured. Add VITE_KEYCLOAK_\* variables/),
     ).toBeInTheDocument()
     expect(onDismissAuthError).toHaveBeenCalled()
-    expect(window.location.replace).not.toHaveBeenCalled()
+      expect(window.location.replace).not.toHaveBeenCalled()
+      view.unmount()
+    }
   })
 })

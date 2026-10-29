@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+# Local commit gates: secret files, workflow hygiene, image pin, and typecheck.
+# Installed by `npm run hooks:install` (copies this file to .git/hooks/pre-commit).
+# The full test suite and the image scan stay in CI. Re-run hooks:install after this file changes.
+set -euo pipefail
+
+cd "$(git rev-parse --show-toplevel)"
+
+echo "[pre-commit] checking staged files..."
+if git diff --cached --name-only --diff-filter=ACMR | grep -E '(^|/)(\.env|docker\.local\.env)$'; then
+  echo "[pre-commit] refusing to commit .env or docker.local.env"
+  exit 1
+fi
+
+echo "[pre-commit] checking workflow files..."
+if grep -REn '&(gt|lt|amp)' .github/workflows/ .github/scripts/; then
+  echo "[pre-commit] workflow or script files contain HTML entities. Use literal operators."
+  exit 1
+fi
+
+if grep -RIl $'\r' .github/scripts .github/workflows Dockerfile nginx .githooks; then
+  echo "[pre-commit] CRLF line endings found. Save these files as LF."
+  exit 1
+fi
+
+echo "[pre-commit] checking Dockerfile base image pins..."
+if grep -E '^FROM [^ @]+:[^ @]+( AS .+)?$' Dockerfile; then
+  echo "[pre-commit] Dockerfile FROM lines must be digest-pinned (image:tag@sha256:...)."
+  exit 1
+fi
+
+if [ ! -f .dockerignore ]; then
+  echo "[pre-commit] .dockerignore is missing"
+  exit 1
+fi
+
+echo "[pre-commit] running typecheck..."
+if [ ! -d node_modules/typescript ]; then
+  echo "[pre-commit] node_modules is missing. Run npm ci."
+  exit 1
+fi
+npx tsc --noEmit
+
+echo "[pre-commit] ok"

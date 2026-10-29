@@ -1,0 +1,22 @@
+flowchart LR
+    test["validate-test\nVitest and 95% gate\nnpm run build"]
+    quality["validate-quality\npin, LF, npm audit"]
+    build["build-image\nHadolint then Buildx cache"]
+    trivy["trivy\nCRITICAL HIGH UNKNOWN"]
+    smoke["smoke\nsize, /healthz, /, remoteEntry.js"]
+    summary["pr-summary\npull requests only"]
+    push["push\nmain and master only\nGHCR and Cosign"]
+
+    test --> trivy
+    build --> trivy
+    test --> smoke
+    build --> smoke
+    test --> summary
+    quality --> summary
+    build --> summary
+    trivy --> summary
+    smoke --> summary
+    test --> push
+    quality --> push
+    trivy --> push
+    smoke --> push

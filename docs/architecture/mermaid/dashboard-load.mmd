@@ -1,0 +1,13 @@
+sequenceDiagram
+    participant App as App.tsx
+    participant Boundary as DashboardBoundary
+    participant Suspense
+    participant Remote as app2/App
+
+    App->>Boundary: authenticated /dashboard/*
+    Boundary->>Suspense: lazy import app2/App
+    alt remoteEntry.js loads and App renders
+        Suspense->>Remote: userLabel, onLogout
+    else import or render throws
+        Boundary->>App: "Dashboard could not be loaded..."
+    end
