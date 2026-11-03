@@ -6,7 +6,7 @@ Product behavior is described in [README.md](./README.md). Module layout and the
 
 ## Prerequisites
 
-- Node.js 22 (matches CI and the image builder)
+- Node.js 26 (matches CI and the image builder)
 - npm
 - Docker, when you want the local Keycloak realm or a production-image smoke run
 
@@ -49,7 +49,7 @@ src/
 module-federation.config.ts  ← Container name, expose, shared singleton versions
 vite.config.ts           ← Port 5001, /__kc dev proxy, app2 remote URL
 nginx/default.conf       ← Runtime server for dist/
-Dockerfile               ← Node 22 builder, nginx-unprivileged runtime
+Dockerfile               ← Node 26 builder, nginx-unprivileged runtime
 keycloak/                ← Local realm import and the bcbp login theme
 scripts/                 ← Local Keycloak compose, health check, user seed, hook install
 .githooks/pre-commit     ← Local commit gate; install with npm run hooks:install

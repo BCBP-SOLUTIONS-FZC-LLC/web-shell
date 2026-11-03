@@ -2,7 +2,7 @@
 
 This document describes the internal structure, dependency direction, and browser flows of `web-shell`.
 
-`web-shell` is a **private Vite application** (`github.com/BCBP-SOLUTIONS-FZC-LLC/web-shell`, Node.js 22, React 19.3). The npm package name is `app1` and `"private": true`. Nothing installs it. What ships is a static bundle: the login page, a Keycloak PKCE session, and a Module Federation host that loads the dashboard remote. The production process is nginx on port **8080**, uid **101**. There is no API server, database, or message bus in this repository.
+`web-shell` is a **private Vite application** (`github.com/BCBP-SOLUTIONS-FZC-LLC/web-shell`, Node.js 26, React 19.3). The npm package name is `app1` and `"private": true`. Nothing installs it. What ships is a static bundle: the login page, a Keycloak PKCE session, and a Module Federation host that loads the dashboard remote. The production process is nginx on port **8080**, uid **101**. There is no API server, database, or message bus in this repository.
 
 The shell has not been tagged. `package.json` `version` is `0.0.0`. Image tags, the SemVer contract, and how to cut a release are in [VERSIONING.md](./VERSIONING.md).
 
@@ -53,7 +53,7 @@ graph TD
 
     subgraph image["Image"]
         nginx["nginx/default.conf\n8080, /healthz, cache rules"]
-        docker["Dockerfile\nNode 22 builder, nginx runtime"]
+        docker["Dockerfile\nNode 26 builder, nginx runtime"]
     end
 
     main --> pkce
@@ -319,8 +319,8 @@ A token HTTP error does not fall through to the next candidate. Only a thrown `f
 
 | Piece | Where | Role |
 |---|---|---|
-| Builder | `node:22-bookworm`, digest-pinned | `npm ci`, then `npm run build` |
-| Runtime | `nginxinc/nginx-unprivileged:1.30-alpine`, digest-pinned | Serves `/usr/share/nginx/html` as uid 101. `USER 101` because a named user fails Hadolint DL3066 |
+| Builder | `node:26-bookworm`, digest-pinned | `npm ci`, then `npm run build` |
+| Runtime | `nginxinc/nginx-unprivileged:1.31-alpine`, digest-pinned | Serves `/usr/share/nginx/html` as uid 101. `USER 101` because a named user fails Hadolint DL3066 |
 | Listen | 8080 | Same port the local Keycloak compose file publishes. Map the image to another host port when both run |
 | Health | `GET /healthz` | Body `ok` |
 | Document | `GET /` | `index.html`, `id="app"`, `Cache-Control: no-cache` |
