@@ -1,10 +1,10 @@
 # web-shell
 
-The browser shell for the BCBP micro-frontend platform. It owns the sign-in page, the Keycloak PKCE session, and the routes that decide whether the user sees that page or the dashboard. After sign-in it loads the dashboard as a Module Federation remote (`app2`) and renders it inside this origin.
+The browser shell for the BCBP micro-frontend platform. It runs the platform SDK's start-up sequence once for the whole page: identity, runtime config, telemetry, the Keycloak session, the workspace, permissions and flags. Then it renders the dashboard as a Module Federation remote (`app2`) inside this origin. The sign-in page and the session screens (signed out, session ended and so on) belong to the shell. Remotes initialise nothing; they read the shell's state through the SDK's hooks.
 
 **Repository:** `github.com/BCBP-SOLUTIONS-FZC-LLC/web-shell`
-**Runtime:** Node.js 26 · Vite 8 · React 19.3 · private npm package `app1` (`"private": true`) · production image is nginx on port **8080**
-**Contract:** Module Federation container `app1`, file `remoteEntry.js`, expose `./App`. Versioning of the image and that contract is in [VERSIONING.md](./VERSIONING.md).
+**Runtime:** Node.js 26 · Rsbuild 2 (Rspack) · React 19.3 · `@bcbp-solutions-fzc-llc/frontend-sdk` `1.0.0-alpha.2` · private npm package `app1` (`"private": true`) · production image is nginx on port **8080**
+**Contract:** Module Federation host `shell`, built with `@bcbp-solutions-fzc-llc/webpack-preset`. It provides React, React DOM, the OTel API and every SDK subpath to remotes, and exposes nothing. Versioning of the image and that contract is in [VERSIONING.md](./VERSIONING.md).
 
 ---
 
@@ -12,13 +12,13 @@ The browser shell for the BCBP micro-frontend platform. It owns the sign-in page
 
 | This shell owns | Lives elsewhere |
 |---|---|
-| The login page and the route decision: `/` and `/dashboard/*` show the login page until a session exists; a signed-in visit to `/` redirects to `/dashboard` | Dashboard pages, navigation inside the dashboard, and dashboard data (`mfe-dashboard`, loaded as `app2`) |
-| Authorization Code + PKCE (S256) against Keycloak: authorize redirect, code exchange, session in `sessionStorage`, logout | Credentials, password policy, MFA, and token issuance (Keycloak). This repo ships a local realm and theme for development |
-| The label passed into the dashboard (`userLabel`) and the logout callback (`onLogout`) | Tenant membership, roles, feature flags, and audit (IAM services) |
-| Shared singletons so the remote uses this shell's React: `react` `^19.3.0`, `react-dom` `^19.3.0`, `react-router-dom` `^7.18.4` | Any other remote. Only `app2` is wired today |
-| Static hosting of `index.html`, `remoteEntry.js`, `mf-manifest.json`, hashed `/assets/`, and `GET /healthz` | Cluster deploy. Publishing a tag pushes an image; it does not roll a cluster |
+| The SDK bootstrap (`src/bootstrap.tsx`) and the routes of the signed-in app: `/t/<slug>/dashboard/*` renders the dashboard remote | Dashboard pages, navigation inside the dashboard and dashboard data (`mfe-dashboard`, loaded as `app2`) |
+| The email sign-in page and the session screens. The SDK does Authorization Code + PKCE against the workspace's Keycloak realm and keeps tokens in memory | Credentials, password policy, MFA and token issuance (Keycloak). This repo ships a local realm and theme for development |
+| The IAM ports: PUB-1 (email or slug → realm) and P-35 (session context), over the SDK's `ApiClient` | The IAM APIs themselves, tenant membership, roles and audit |
+| The label (`userLabel`) and logout callback (`onLogout`) passed into the dashboard | Any other remote. Only `app2` is in the local manifest |
+| Static hosting of `index.html`, hashed `/assets/`, `/config/runtime.json`, `/remotes/manifest.json`, `/version.json` and `GET /healthz` | Cluster deploy and each environment's runtime config and remote manifest. Publishing a tag pushes an image; it does not roll a cluster |
 
-`VITE_*` values are compiled into the browser bundle. They are public configuration. Do not put secrets in them.
+Everything environment-specific is read at run time from `/config/runtime.json`. Only the identity environment and build version are compiled into the bundle.
 
 ---
 
@@ -26,51 +26,52 @@ The browser shell for the BCBP micro-frontend platform. It owns the sign-in page
 
 The dashboard is a separate build. The browser still needs one origin that can:
 
-- Send the user to Keycloak and finish the redirect without the dashboard knowing the PKCE details.
-- Load `app2/remoteEntry.js` from `VITE_APP2_URL` and keep a single copy of React and React Router.
-- Keep serving the document when the remote is down. A failed remote render shows "Dashboard could not be loaded" instead of a blank page.
+- Sign the user in to the right workspace once, and give every remote the same session, token source, consent state and telemetry.
+- Load each remote's `remoteEntry.js` from the remote manifest, and keep a single copy of React, the OTel API and the SDK.
+- Keep serving the document when a remote is down. A failed remote stays inside its `RemoteBoundary` ("Something went wrong. / Try again") instead of blanking the page.
 
-The shell is both the host and a federation container named `app1`. Another host can mount the exposed `./App`. Local development runs the shell itself at `http://localhost:5001`.
+Local development runs the shell at `http://localhost:5001`.
 
 ---
 
 ## What the browser sees
 
-There is no backend in this repository. The production process is nginx serving the Vite `dist/` tree.
+There is no backend in this repository. The production process is nginx serving the Rsbuild `dist/` tree.
 
 ### Routes
 
-| Path | Signed out | Signed in |
-|---|---|---|
-| `/` | Login page | Redirect to `/dashboard` |
-| `/dashboard/*` | Login page | Lazy-loaded `app2/App` |
-| anything else | Redirect to `/` | Redirect to `/dashboard` |
+Only an authenticated session renders the app. Before that, the bootstrap mounts the sign-in or session screens over the empty root.
 
-While Keycloak's redirect is being exchanged, the page shows "Completing sign-in…". A missing Keycloak config skips the redirect and stays on the login page.
+| Path | Signed in |
+|---|---|
+| `/t/<slug>/dashboard/*` | `app2` `./App` inside `RemoteBoundary` |
+| anything else under `/t/<slug>/` | Redirect to `/t/<slug>/dashboard` |
+| `/auth/callback` | Handled by the SDK, then moved to the page the user opened |
+
+After sign-in the SDK moves the URL under `/t/<slug>/` (`rememberWorkspace`), and the router uses that prefix as its basename. Without a session context there is no slug, and the routes start at the site root.
 
 ### Sign-in sequence
 
-1. `src/main.tsx` calls `captureOAuthCallbackFromUrl()` before React renders, so a refresh cannot drop `code` and `state`.
-2. The login form requires a work email. `redirectToKeycloakLogin` builds an authorize URL with `login_hint`, `state`, and a PKCE S256 challenge, then navigates the same tab to Keycloak.
-3. Keycloak redirects to `{origin}/dashboard` (or `VITE_KEYCLOAK_REDIRECT_URI` when that is set) with `code` and `state`.
-4. `completeOAuthCallbackFromUrl` checks `state`, posts the code and verifier to the token endpoint, and stores the session at `sessionStorage['app1.oauth.session']`.
-5. `App` treats the user as signed in when that session has an `accessToken`, then renders the dashboard.
+1. `src/index.ts` imports `src/bootstrap.tsx` behind the async boundary Module Federation needs.
+2. The bootstrap loads `/config/runtime.json` and calls the SDK's `idp.init()`. A reload with a live Keycloak session is restored silently (`prompt=none`).
+3. Signed out with a known workspace (the `/t/<slug>` in the URL, or the SDK's workspace cache): straight to that realm's authorize endpoint, with the remembered email as `login_hint`.
+4. Otherwise the login page asks for the work email. `GET /api/v1/public/tenants/resolve?identifier=<email>` (PUB-1) returns the realm. "Not found" and "unreachable" show the same generic message.
+5. Keycloak redirects to `{origin}/auth/callback`. The SDK checks `state`, exchanges the code with the PKCE verifier, and keeps the tokens in memory.
+6. The bootstrap loads the session context (`GET /api/v1/me/session-context`, P-35), sets permissions and flags, caches the workspace, loads `/remotes/manifest.json`, and renders.
 
-Logout clears the session and sends the browser to Keycloak's end-session endpoint with `post_logout_redirect_uri` set to `{origin}/`.
-
-In `vite dev`, discovery and token calls try the same-origin proxy `/__kc` first (`vite.config.ts` forwards it to `VITE_KEYCLOAK_URL`). The nginx image calls Keycloak directly. There is no `/__kc` location in `nginx/default.conf`.
+Sign-out is global by default: the Keycloak session ends, every tab drops its tokens, the app unmounts, and "You are signed out" waits for a click. A session that expires during use shows "Session ended". The shell never redirects on its own.
 
 ### Federation contract
 
 | Item | Value |
 |---|---|
-| Container | `app1` (`module-federation.config.ts`) |
-| Host entry the shell loads | `${VITE_APP2_URL}/remoteEntry.js`, remote name `app2` |
-| Exposed module | `./App` → `src/App.tsx` |
-| Props this shell passes to `app2/App` | `userLabel: string`, `onLogout: () => void` |
-| Shared | `react`, `react-dom`, `react-router-dom`, each `singleton: true` |
+| Host | `shell` (`rsbuild.config.ts`, `pluginPlatform({ role: 'shell' })`) |
+| Remote entries | `/remotes/manifest.json`: `{ "<name>": { "entry", "version", "ownerDomain", "integrity" } }`. `integrity` is required outside `local`, `dev` and `test` |
+| Remote the shell renders | `app2`, module `./App` |
+| Props this shell passes to `app2` `./App` | `userLabel: string`, `onLogout: () => void` |
+| Shared | `react`, `react-dom` (and their JSX and client entries), `@opentelemetry/api`, every SDK subpath. Strict singletons; a remote takes the SDK from the shell (`import: false`) |
 
-`userLabel` is the session email, then the session username, then `User`.
+`userLabel` is the user's email, then their name, then `User`. A remote must be built with `@bcbp-solutions-fzc-llc/webpack-preset` (`role: 'remote'`). A Vite ES-module remote does not load through the SDK's `loadRemote`.
 
 ### nginx paths
 
@@ -78,7 +79,7 @@ In `vite dev`, discovery and token calls try the same-origin proxy `/__kc` first
 |---|---|
 | `GET /healthz` | `200` and the text `ok`. No access log |
 | `GET /` | Shell document. `index.html` is `Cache-Control: no-cache`. Unknown paths fall through to `index.html` |
-| `GET /remoteEntry.js`, `GET /mf-manifest.json` | `no-cache`, `404` when the file is absent |
+| `GET /config/runtime.json`, `/remotes/manifest.json`, `/version.json` | `no-cache`, `404` when the file is absent |
 | `GET /assets/*` | Hashed files, `Cache-Control: public, max-age=31536000, immutable` |
 
 The container listens on **8080** as uid **101**.
@@ -90,39 +91,42 @@ The container listens on **8080** as uid **101**.
 ```
 web-shell/
 ├── src/
-│   ├── main.tsx                 # Captures the OAuth callback, mounts #app
-│   ├── App.tsx                  # Auth bootstrap, routes, dashboard error boundary
-│   ├── pages/LoginPage.tsx      # Email form, Keycloak reachability, remembered email
-│   ├── components/BrandLogo.tsx
-│   └── auth/
-│       ├── keycloak.config.ts   # Reads VITE_* once at module load
-│       ├── keycloak.ts          # Login, logout, session label
-│       └── oauth-pkce.ts        # PKCE, token exchange, sessionStorage
-├── module-federation.config.ts  # name, expose, shared versions
-├── vite.config.ts               # Port 5001, /__kc proxy, app2 remote URL
+│   ├── index.ts                 # Async boundary; "unavailable" message on a fatal start-up error
+│   ├── bootstrap.tsx            # SDK start-up sequence, session handling, render
+│   ├── App.tsx                  # Signed-in routes, dashboard RemoteBoundary
+│   ├── platform/
+│   │   ├── iam.ts               # PUB-1 resolver and P-35 session context over the ApiClient
+│   │   ├── SessionScreens.tsx   # Email sign-in, signed out, session ended, device clock, wrong workspace
+│   │   ├── screen.tsx           # Full-screen host for those screens, outside the app root
+│   │   ├── consent.ts           # Consent stand-in (essential only until accepted)
+│   │   └── permissions.ts       # Role → UI permission map
+│   ├── pages/                   # Login layouts, the shared email form hook, remember-email
+│   └── components/BrandLogo.tsx
+├── rsbuild.config.ts           # Platform plugin, React, Tailwind, dev server
+├── config/                      # Dev only: runtime.local.json, remotes.local.json, dev-platform.mjs
+├── public/                      # Static files; config/runtime.json and remotes/manifest.json defaults
+├── eslint.config.js             # TypeScript, React hooks, platform rules
 ├── nginx/default.conf           # Runtime server for dist/
 ├── Dockerfile                   # Node 26 builder, nginx-unprivileged runtime
-├── keycloak/                    # Local realm import and bcbp login theme
+├── keycloak/                    # Local realm import (tenant-bcbp) and bcbp login theme
 ├── scripts/                     # Local Keycloak compose, health check, user seed
 ├── test/
-│   ├── unit/                    # Auth and small components, no router
-│   ├── integration/             # Login page
-│   ├── e2e/                     # App routes and auth bootstrap
-│   └── fixtures/                # Stand-in for app2/App
+│   ├── unit/                    # IAM mappings, entry point, small helpers
+│   └── integration/             # Login pages, session screens, App, bootstrap
 ├── .github/workflows/           # ci, test, quality, changelog, release
 └── VERSIONING.md                # Image tags and how to cut a release
 ```
 
-`src/` never imports the dashboard's source. Vite resolves `app2/App` from the remote at dev and build time. Tests alias that specifier to `test/fixtures/DashboardApp.tsx` so the suite does not fetch port 5002.
+`src/` imports the SDK through public subpaths only (`@bcbp-solutions-fzc-llc/frontend-sdk/auth`, …); the ESLint plugin fails a root or deep import. `src/` never imports the dashboard's source.
 
-Browser storage this shell writes:
+Browser storage:
 
 | Key | Store | Purpose |
 |---|---|---|
-| `app1.oauth.session` | `sessionStorage` | Access token, optional refresh and id token, email, username |
-| `app1.oauth.pkce_verifier`, `app1.oauth.state`, `app1.oauth.redirect_uri` | `sessionStorage` | In-flight PKCE. Removed after a successful exchange |
-| `app1.oauth.pending.<state>` | `sessionStorage`, with a `localStorage` copy | Survives the redirect if the tab's session storage is cleared |
-| `bcbp.rememberEmail`, `bcbp.loginEmail` | `localStorage` | "Remember me" on the login form only. No tokens |
+| `@bcbp-solutions-fzc-llc/frontend-sdk:*` | `localStorage` | SDK metadata: workspace cache, session id, last activity, last user. No tokens |
+| `bcbp.rememberEmail`, `bcbp.loginEmail` | `localStorage` | "Remember Email" on the login form only |
+
+Tokens are never written to storage.
 
 ---
 
@@ -131,6 +135,7 @@ Browser storage this shell writes:
 ### Prerequisites
 
 - Node.js 26 and npm
+- A GitHub token with `read:packages`, SSO-authorised for the organisation, in `NODE_AUTH_TOKEN`. `.npmrc` sends the `@bcbp-solutions-fzc-llc` scope to GitHub Packages
 - Docker, when you want the local Keycloak realm or the production image
 
 ### Setup
@@ -138,24 +143,39 @@ Browser storage this shell writes:
 ```bash
 git clone https://github.com/BCBP-SOLUTIONS-FZC-LLC/web-shell
 cd web-shell
+gh auth refresh -s read:packages
+export NODE_AUTH_TOKEN=$(gh auth token)
 npm ci
-cp .env.example .env
 npm run keycloak:setup
 npm run dev
 ```
 
 The shell is at **http://localhost:5001**. Keycloak admin is at **http://localhost:8080** (`admin` / `admin`). The first Keycloak start can take one to two minutes. `npm run keycloak:setup` copies `docker.local.env` when needed, starts the compose stack, waits until Keycloak is ready, and seeds the local user. The seed script prints that user's email. The password it sets is in `scripts/seed-keycloak-user.mjs`.
 
-The dashboard is a second process. Start `mfe-dashboard` so it serves `remoteEntry.js` at `VITE_APP2_URL` (default `http://localhost:5002`). Until it is up, `/dashboard` shows the load-failure message from `DashboardBoundary`.
+The dev server stands in for what CloudFront and the platform APIs provide (`config/dev-platform.mjs`):
+
+| Path | Dev server answer |
+|---|---|
+| `/config/runtime.json` | `config/runtime.local.json` (Keycloak `http://localhost:8080`, client `app1`, environment `local`) |
+| `/remotes/manifest.json` | `config/remotes.local.json` (`app2` at `http://localhost:5002/remoteEntry.js`) |
+| `GET /api/v1/public/tenants/resolve` | Any identifier → realm `tenant-bcbp` |
+| `GET /api/v1/me/session-context` | Slug `bcbp`, role `tenant_admin` (401 without a bearer token) |
+| `POST /otel/*` | `204`, dropped |
+
+Set `DEV_API_URL` to proxy `/api` to a real API instead of the stubs, or `DEV_REALM` to stub a different realm.
+
+The dashboard is a second process. Start `mfe-dashboard` so it serves `remoteEntry.js` at `http://localhost:5002`. It has to be built with `@bcbp-solutions-fzc-llc/webpack-preset` as remote `app2`. Until then `/t/bcbp/dashboard` shows the remote boundary's error.
 
 ### Common commands
 
 | Command | Description |
 |---|---|
-| `npm run dev` | Vite on port 5001, strict port, `/__kc` proxy to Keycloak |
-| `npm run build` | `tsc` and the production bundle |
-| `npm run preview` | Serve the production bundle on port 5001 |
-| `npm test` | Vitest once (unit, integration, e2e) |
+| `npm run dev` | Rsbuild dev server on port 5001, with the dev stand-ins above |
+| `npm run build` | `tsc` and the production bundle (`rsbuild build`) |
+| `npm run preview` | Serve `dist/` on port 5001 |
+| `npm run lint` | ESLint, including the `@bcbp-solutions-fzc-llc` platform rules |
+| `npm run typecheck` | `tsc` over `src/` and `test/` (`tsconfig.test.json`) |
+| `npm test` | Vitest once (unit, integration) |
 | `npm run test:coverage` | Same, with the v8 coverage report |
 | `npm run test:ci` | Coverage plus the 95% gate (`.github/scripts/coverage-gate.mjs`) |
 | `npm run hooks:install` | Copy `.githooks/pre-commit` into `.git/hooks` |
@@ -165,19 +185,19 @@ The dashboard is a second process. Start `mfe-dashboard` so it serves `remoteEnt
 | `npm run keycloak:status` | Readiness check against `http://localhost:8080` |
 | `npm run keycloak:setup` | Start Keycloak, wait, seed the local user |
 | `npm run keycloak:seed-user` | Seed only, when Keycloak is already up |
-| `npm run docker:dev` | Dev server inside a Node 26 container (Windows path mount) |
+| `npm run docker:dev` | Dev server inside a Node 26 container (Windows path mount). Passes `NODE_AUTH_TOKEN` through |
 | `npm run docker:dev:mac` | Same mount syntax for macOS and Linux |
 
 ### Run one test file
 
 ```bash
-npx vitest run test/unit/oauth-pkce.test.ts
-npx vitest run test/e2e/app-flows.test.tsx
+npx vitest run test/integration/bootstrap.test.tsx
+npx vitest run test/unit/iam.test.ts
 ```
 
 ### Local Keycloak
 
-`docker-compose.keycloak.yml` runs `quay.io/keycloak/keycloak:26.8.1` with `start-dev --import-realm`. The imported realm is `bcbp`. The public client is `app1`, standard flow only, PKCE S256, redirect URIs `http://localhost:5001/*` and `http://127.0.0.1:5001/*`. The `bcbp` login theme is mounted from `keycloak/themes/bcbp`.
+`docker-compose.keycloak.yml` runs `quay.io/keycloak/keycloak:26.8.1` with `start-dev --import-realm`. The imported realm is `tenant-bcbp`: the SDK requires a paid workspace's realm to be `tenant-<slug>`. The public client is `app1`, standard flow only, PKCE S256, redirect URIs `http://localhost:5001/*` and `http://127.0.0.1:5001/*`, post-logout redirect URIs `+` (same as the redirect URIs). The `bcbp` login theme is mounted from `keycloak/themes/bcbp`. A container created before the rename still has realm `bcbp`; recreate it (`docker compose -f docker-compose.keycloak.yml up -d --force-recreate`) to import `tenant-bcbp`.
 
 Port **8080** is Keycloak in this compose file and also the port the shell image listens on. Map the shell image to another host port when both are running. See Docker below.
 
@@ -187,11 +207,10 @@ Port **8080** is Keycloak in this compose file and also the port the shell image
 
 | Layer | Path | What it exercises |
 |---|---|---|
-| Unit | `test/unit/` | Keycloak config, PKCE, the auth facade, `BrandLogo`, `main.tsx` |
-| Integration | `test/integration/` | Login page: configured, unconfigured, and error paths |
-| End to end | `test/e2e/` | `App` bootstrap, redirects, dashboard mount, auth errors |
+| Unit | `test/unit/` | PUB-1 and P-35 mappings and ports, the entry point, remember-email, consent, the screen host, `BrandLogo`, the login variant |
+| Integration | `test/integration/` | Both login layouts and the carousel, the session screens, `App` routes, and the bootstrap's order and branches |
 
-Vitest uses happy-dom and Testing Library. `vitest.config.ts` sets `VITE_KEYCLOAK_URL`, realm `bcbp`, and client `app1`, and aliases `app2/App` to the fixture. The fixture throws when `globalThis.__DASHBOARD_THROW__` is set, which is how the error boundary is tested.
+Vitest uses happy-dom and Testing Library. `vitest.config.ts` defines `__ENVIRONMENT__` and `__BUILD_VERSION__` as `test`. The bootstrap test replaces every SDK subpath with a recording fake, so the suite never calls Keycloak, the IAM APIs or port 5002.
 
 ### Coverage
 
@@ -199,23 +218,37 @@ Vitest uses happy-dom and Testing Library. `vitest.config.ts` sets `VITE_KEYCLOA
 
 ---
 
-## Environment variables
+## Configuration
 
-Vite inlines these at **build** time. Changing them on a running container has no effect. Restart is not enough. The image has to be rebuilt.
+### Runtime (`/config/runtime.json`)
 
-| Variable | Local default (`.env.example`) | Purpose |
+The SDK reads no environment variables in the browser. It loads `/config/runtime.json` at start-up and validates it strictly: an unknown key or an invalid value stops the app with "The app is unavailable right now." Change it per environment without rebuilding.
+
+| Key | Image default (`public/config/runtime.json`) | Local (`config/runtime.local.json`) |
 |---|---|---|
-| `VITE_KEYCLOAK_URL` | `http://localhost:8080` | Keycloak base URL. Required for sign-in |
-| `VITE_KEYCLOAK_REALM` | `bcbp` | Realm. Required for sign-in |
-| `VITE_KEYCLOAK_CLIENT_ID` | `app1` | Public client id. Required for sign-in |
-| `VITE_KEYCLOAK_REDIRECT_URI` | unset → `{origin}/dashboard` | Must match a redirect URI on the Keycloak client |
-| `VITE_APP2_URL` | `http://localhost:5002` | Origin of the dashboard `remoteEntry.js` |
+| `api.baseUrl` | `/api` | `/api` |
+| `auth.idpOrigin` | `https://auth.bcbpsolutions.com` | `http://localhost:8080` |
+| `auth.clientId` | `tender-web` | `app1` |
+| `auth.redirectPath` | `/auth/callback` | `/auth/callback` |
+| `auth.trialRealm` · `paidRealmPrefix` · `workspacePathPrefix` | `trial` · `tenant-` · `/t/` | same |
+| `auth.idleTimeoutMs` | `1800000` | `1800000` |
+| `telemetry` | `/otel`, sample `0.1`, `info` | `/otel`, sample `1`, `debug` |
+| `remotes.allowedOrigins` | `[]` | `["http://localhost:5002"]` |
+| `i18n` | `en` | `en` |
 
-`isKeycloakConfigured()` is true only when URL, realm, and client id are all non-empty after trim.
+The full schema is in the SDK's README (Runtime configuration) and LLD §12.1.
 
-The image build accepts `VITE_KEYCLOAK_URL` and `VITE_APP2_URL` as Docker build args. CI sets them from GitHub Actions variables of the same name, and otherwise uses the localhost defaults. Realm, client id, and redirect URI are **not** image build args, and `.dockerignore` excludes `.env`, so a plain `docker build` compiles those three as empty. Pass them in the build environment before `npm run build` inside the image when you need a configured production bundle. `BUILD_VERSION` and `SOURCE_DATE_EPOCH` are image metadata only.
+### Build time
 
-`docker.local.env` is for the Keycloak helper scripts (`DOCKER_CLI` on Windows). It is not read by Vite.
+| Variable | Default | Purpose |
+|---|---|---|
+| `PLATFORM_ENVIRONMENT` | `prod` for a production build, `local` for `npm run dev` | `__ENVIRONMENT__`, the identity environment passed to `initializeCore` (`local`, `dev`, `test`, `staging`, `prod`) |
+| `BUILD_VERSION` | `package.json` `version` | `__BUILD_VERSION__`, and the content of `/version.json` |
+| `NODE_AUTH_TOKEN` | — | `npm ci` only: reads `@bcbp-solutions-fzc-llc/*` from GitHub Packages |
+
+The image takes `PLATFORM_ENVIRONMENT`, `BUILD_VERSION` and `SOURCE_DATE_EPOCH` as build args, and the registry token as the BuildKit secret `npm_token`.
+
+`docker.local.env` is for the Keycloak helper scripts (`DOCKER_CLI` on Windows). The shell does not read it.
 
 ---
 
@@ -223,11 +256,13 @@ The image build accepts `VITE_KEYCLOAK_URL` and `VITE_APP2_URL` as Docker build 
 
 | Topic | Guidance |
 |---|---|
-| **Public client** | `app1` has no client secret. The possession proof is the PKCE verifier |
-| **Token storage** | The access token stays in `sessionStorage` under `app1.oauth.session`. "Remember me" stores the email only |
-| **Redirect** | `state` is checked before the code is exchanged. The redirect URI is the configured value or `{origin}/dashboard` |
-| **Remote code** | `app2` executes in this origin. `VITE_APP2_URL` must point at a remote you trust |
-| **Image** | nginx runs as uid 101. `.env` is not copied into the build context |
+| **Public client** | No client secret. The possession proof is the PKCE verifier |
+| **Token storage** | Tokens live in memory only, never in storage. "Remember Email" stores the email only |
+| **Redirect** | The SDK checks `state` before the code is exchanged. The redirect URI is `{origin}{auth.redirectPath}` |
+| **API calls** | The SDK's `ApiClient` sends the token to the page's own origin only and never sends identity headers. The ESLint plugin enforces subpath imports, no identity headers, no raw `window.*Storage`, no unsafe HTML |
+| **Remote code** | Remotes execute in this origin. Entries load only from the page's origin or `remotes.allowedOrigins`, pinned by `integrity` outside local, dev and test |
+| **CSP** | The bundle is Trusted-Types and `script-src 'self'` safe (preset output, `installTrustedTypesPolicy`). nginx sets no CSP header; the platform's CloudFront distribution does |
+| **Image** | nginx runs as uid 101. `.env` is not copied into the build context. The registry token is a BuildKit secret and never lands in a layer. Source maps are deleted from the image |
 | **Reporting** | [SECURITY.md](./.github/SECURITY.md). Email vijay@bcbpsolutions.com with subject `[web-shell]` |
 
 ---
@@ -236,11 +271,13 @@ The image build accepts `VITE_KEYCLOAK_URL` and `VITE_APP2_URL` as Docker build 
 
 Five workflow files. Markdown-only pushes do not run `ci.yml`. Job order and the failure runbooks are in [docs/pipeline](./docs/pipeline/README.md).
 
+Every `npm ci` reads `@bcbp-solutions-fzc-llc/*` from GitHub Packages with `GITHUB_TOKEN` (`packages: read`). This repository needs read access on each package's page: Package settings → Manage Actions access → Add repository.
+
 - **`ci.yml`** — orchestrator. `validate-test.yml` and `validate-quality.yml` run in parallel with `build-image` (Hadolint, then a Buildx cache build). Trivy and the smoke script follow the image build. Pull requests get a status comment. A push to `main` or `master` also pushes `ghcr.io/bcbp-solutions-fzc-llc/web-shell`, tagged with the branch name and `sha-<short>`, and Cosign-signs that digest.
 - **`validate-test.yml`** — `npm ci`, `npm run test:coverage`, the 95% coverage gate, then `npm run build`.
-- **`validate-quality.yml`** — workflow files must use literal operators and LF line endings, `Dockerfile` `FROM` lines must be digest-pinned, `.dockerignore` must exist, and `npm audit --omit=dev --audit-level=high` must pass.
-- **`changelog-check.yml`** — a pull request that touches `src/`, `package.json`, `package-lock.json`, `Dockerfile`, `nginx/`, `vite.config.ts`, `module-federation.config.ts`, or `index.html` must also update `CHANGELOG.md`.
-- **`release.yml`** — tag `vX.Y.Z` or `vX.Y.Z-*`, or a manual run with a tag input. Re-validates, requires a matching changelog section, packs `web-shell_<tag>_dist.tar.gz`, pushes the semver image tags, scans, attaches the SBOM and SLSA provenance, signs with Cosign, and opens the GitHub Release. Tagging does not deploy a cluster.
+- **`validate-quality.yml`** — ESLint (`--max-warnings 0`) and `npm run typecheck`. Workflow files must use literal operators and LF line endings, `Dockerfile` `FROM` lines must be digest-pinned, `.dockerignore` must exist, and `npm audit --omit=dev --audit-level=high` must pass.
+- **`changelog-check.yml`** — a pull request that touches `src/`, `package.json`, `package-lock.json`, `Dockerfile`, `nginx/`, `rsbuild.config.ts`, `config/**`, `public/config/**`, or `index.html` must also update `CHANGELOG.md`.
+- **`release.yml`** — tag `vX.Y.Z` or `vX.Y.Z-*`, or a manual run with a tag input. Re-validates, requires a matching changelog section, packs `web-shell_<tag>_dist.tar.gz` (source maps removed), pushes the semver image tags, scans, attaches the SBOM and SLSA provenance, signs with Cosign, and opens the GitHub Release. Tagging does not deploy a cluster.
 
 Image tag rules, the Cosign identity, and the maintainer steps are in [VERSIONING.md](./VERSIONING.md).
 
@@ -253,7 +290,8 @@ Dependabot is enabled for npm, Docker, and GitHub Actions.
 ### Production image
 
 ```bash
-docker build -t web-shell:local .
+export NODE_AUTH_TOKEN=$(gh auth token)
+docker build --secret id=npm_token,env=NODE_AUTH_TOKEN -t web-shell:local .
 docker run --rm -p 8080:8080 web-shell:local
 curl -s http://localhost:8080/healthz
 ```
@@ -265,13 +303,22 @@ docker run --rm -p 18080:8080 web-shell:local
 curl -s http://localhost:18080/healthz
 ```
 
-Two stages, both digest-pinned: `node:26-bookworm` runs `npm ci` and `npm run build`; `nginxinc/nginx-unprivileged:1.31-alpine` serves `/usr/share/nginx/html` as uid 101. The CI smoke test fails the image above 200 MB and requires `/healthz`, `/` (a document that contains `id="app"`), and `/remoteEntry.js` to return 200.
+To point the image at another environment, mount that environment's files over the defaults:
+
+```bash
+docker run --rm -p 18080:8080 \
+  -v "$PWD/runtime.json:/usr/share/nginx/html/config/runtime.json:ro" \
+  -v "$PWD/manifest.json:/usr/share/nginx/html/remotes/manifest.json:ro" \
+  web-shell:local
+```
+
+Two stages, both digest-pinned: `node:26-bookworm` runs `npm ci` and `npm run build`, then deletes the source maps; `nginxinc/nginx-unprivileged:1.31-alpine` serves `/usr/share/nginx/html` as uid 101. The CI smoke test fails the image above 200 MB, requires `/healthz`, `/` (a document that contains `id="app"`), `/config/runtime.json` and `/version.json` to return 200, and fails when the image contains a `.map` file.
 
 ### Local Keycloak compose
 
 | Container | Image | Host port | Purpose |
 |---|---|---|---|
-| `keycloak` | `quay.io/keycloak/keycloak:26.8.1` | `8080` | Realm `bcbp`, client `app1`, theme `bcbp` |
+| `keycloak` | `quay.io/keycloak/keycloak:26.8.1` | `8080` | Realm `tenant-bcbp`, client `app1`, theme `bcbp` |
 
 `npm run keycloak:dev` starts that one service. It does not start the shell. Use `npm run dev` for the shell.
 
@@ -279,30 +326,36 @@ Two stages, both digest-pinned: `node:26-bookworm` runs `npm ci` and `npm run bu
 
 | Endpoint | Returns | Meaning |
 |---|---|---|
-| `GET /healthz` | `200` and `ok` | nginx is serving. It does not check Keycloak or `app2` |
+| `GET /healthz` | `200` and `ok` | nginx is serving. It does not check Keycloak, the IAM APIs or `app2` |
 
 ---
 
 ## Cross-service dependencies
 
-### Keycloak
+### Keycloak (through the SDK)
 
 | Call | When |
 |---|---|
-| `GET /realms/{realm}/.well-known/openid-configuration` | Login page reachability check, and before the token request |
-| `GET /realms/{realm}/protocol/openid-connect/auth` | Browser redirect to sign in |
-| `POST /realms/{realm}/protocol/openid-connect/token` | Exchange the authorization code |
+| `GET /realms/{realm}/protocol/openid-connect/auth` | Browser redirect to sign in, or a silent `prompt=none` restore |
+| `POST /realms/{realm}/protocol/openid-connect/token` | Code exchange and refresh |
 | `GET /realms/{realm}/protocol/openid-connect/logout` | Sign out |
 
-The shell does not call the Keycloak Admin API. `scripts/seed-keycloak-user.mjs` uses `kcadm` inside the dev container only.
+`{realm}` is the workspace's realm (`trial`, or `tenant-<slug>`). The SDK builds these URLs from `{auth.idpOrigin}/realms/{realm}`; it does not fetch discovery. The shell does not call the Keycloak Admin API. `scripts/seed-keycloak-user.mjs` uses `kcadm` inside the dev container only.
+
+### IAM HTTP APIs (same origin, `/api`)
+
+| Call | When |
+|---|---|
+| `GET /api/v1/public/tenants/resolve?identifier=` (PUB-1) | The email sign-in screen, and workspace switching. No token |
+| `GET /api/v1/me/session-context` (P-35) | Once after sign-in. Without it the app renders with deny-all permissions |
 
 ### Dashboard remote (`app2`)
 
-The shell fetches `${VITE_APP2_URL}/remoteEntry.js` in the browser and renders its `App` with `userLabel` and `onLogout`. A missing remote is a page-level error, not a crash of the login route.
+The shell loads `app2`'s entry from `/remotes/manifest.json` in the browser and renders its `./App` with `userLabel` and `onLogout`. A missing or failing remote stays inside its boundary; the shell keeps running.
 
-### IAM HTTP APIs
+### Telemetry
 
-This repository does not call org-membership, authz, or any other platform API. The access token is stored for the session label and is not attached to outgoing API calls here.
+Traces, logs and metrics are exported over OTLP/HTTP to `telemetry.otlpBaseUrl` (`/otel`), gated by consent. The consent stand-in grants `essential` only.
 
 ---
 
@@ -312,8 +365,9 @@ This repository does not call org-membership, authz, or any other platform API. 
 |---|---|
 | Passwords, MFA, user registration, token issuance | Keycloak |
 | Dashboard layout, tickets, user management screens | `mfe-dashboard` (`app2`) |
-| Tenant, workspace, and role decisions | IAM services. This shell does not read them yet |
-| Notifications, localization, and live updates | Not implemented in this repository |
+| Tenant resolution, session context, authorization decisions | IAM services and the gateway. UI permissions here are hints |
+| Each environment's runtime config, remote manifest and CSP headers | The deploy pipeline and CloudFront |
+| Notifications and live updates | Not implemented in this repository |
 
 ---
 
@@ -326,12 +380,13 @@ Setup, how to extend the shell, the test gate, and the pull request checklist ar
 | Document | Description |
 |---|---|
 | [docs/README.md](./docs/README.md) | Pipeline map, architecture diagrams, and runbooks |
-| [ARCHITECTURE.md](./ARCHITECTURE.md) | Module layout, sign-in and dashboard flows, storage, and the threat model |
+| [ARCHITECTURE.md](./ARCHITECTURE.md) | Module layout, bootstrap, sign-in and dashboard flows, storage, and the threat model |
 | [CONTRIBUTING.md](./CONTRIBUTING.md) | Local setup, extension rules, tests, and the pull request checklist |
 | [VERSIONING.md](./VERSIONING.md) | SemVer rules, image tags, Cosign verify, how to cut a release |
 | [CHANGELOG.md](./CHANGELOG.md) | User-facing history. Releases are still `[Unreleased]` |
 | [SECURITY.md](./.github/SECURITY.md) | How to report a vulnerability |
 | [.github/pull_request_template.md](./.github/pull_request_template.md) | What a pull request needs, including `npm run test:ci` |
+| `platform-reactcommon` README | The SDK: API overview, integration guide, runtime config reference |
 
 ---
 

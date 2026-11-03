@@ -1,0 +1,3 @@
+{
+  "app2": { "entry": "http://localhost:5002/remoteEntry.js", "version": "local", "ownerDomain": "portal" }
+}

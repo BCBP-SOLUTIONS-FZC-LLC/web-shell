@@ -38,7 +38,7 @@ $deadline = (Get-Date).AddMinutes(3)
 $ok = $false
 while ((Get-Date) -lt $deadline) {
   try {
-    $r = Invoke-WebRequest -Uri 'http://127.0.0.1:8080/realms/bcbp/.well-known/openid-configuration' -UseBasicParsing -TimeoutSec 5
+    $r = Invoke-WebRequest -Uri 'http://127.0.0.1:8080/realms/tenant-bcbp/.well-known/openid-configuration' -UseBasicParsing -TimeoutSec 5
     if ($r.StatusCode -eq 200) {
       $ok = $true
       break

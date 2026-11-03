@@ -18,6 +18,7 @@ name: Validate / Test
 
 permissions:
   contents: read
+  packages: read
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
@@ -43,8 +44,12 @@ jobs:
           node-version: 26
           cache: npm
 
+      # @bcbp-solutions-fzc-llc/* come from GitHub Packages (.npmrc). This repository needs read
+      # access on each package's page: Package settings → Manage Actions access.
       - name: Install dependencies
         run: npm ci
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Tests — unit · integration · e2e
         run: npm run test:coverage

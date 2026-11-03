@@ -1,5 +1,5 @@
 const bases = ['http://127.0.0.1:8080', 'http://localhost:8080']
-const realm = process.env.VITE_KEYCLOAK_REALM || 'bcbp'
+const realm = process.env.KEYCLOAK_REALM || 'tenant-bcbp'
 const path = `/realms/${encodeURIComponent(realm)}/.well-known/openid-configuration`
 
 for (const base of bases) {
@@ -18,7 +18,7 @@ for (const base of bases) {
 }
 
 console.error('')
-console.error('Nothing is listening on port 8080 (or realm "bcbp" is missing).')
+console.error('Nothing is listening on port 8080 (or realm "tenant-bcbp" is missing).')
 console.error('1. Open Docker Desktop — engine must be running.')
 console.error('2. From app1: npm run keycloak:dev:detach')
 console.error('3. Watch logs: npm run keycloak:logs')

@@ -44,7 +44,7 @@ for (let i = 0; i < 36; i += 1) {
   const check = runNodeScript('check-keycloak.mjs')
   if (check.status === 0) {
     console.log('Keycloak is ready at http://localhost:8080')
-    console.log('Set in .env: VITE_KEYCLOAK_DEV_MOCK=false and VITE_KEYCLOAK_URL=http://localhost:8080')
+    console.log('Run npm run dev and sign in at http://localhost:5001 (realm tenant-bcbp).')
     const seed = runNodeScript('seed-keycloak-user.mjs')
     process.exit(seed.status === 0 ? 0 : (seed.status ?? 1))
   }

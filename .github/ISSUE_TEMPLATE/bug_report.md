@@ -40,4 +40,4 @@ What actually happened. Include the browser console output.
 ```
 
 ## Additional context
-Browser, remote URL (`VITE_APP2_URL`), Keycloak realm, related issues.
+Browser, workspace slug and realm, the remote's manifest entry, related issues.

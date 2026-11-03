@@ -41,23 +41,31 @@ if [ "${ready}" -ne 1 ]; then
 fi
 
 index_code=$(curl -s -o /tmp/web-shell-index.html -w '%{http_code}' "http://127.0.0.1:${PORT}/")
-remote_code=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:${PORT}/remoteEntry.js")
+config_code=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:${PORT}/config/runtime.json")
+version_code=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:${PORT}/version.json")
+map_count=$(docker exec "${CID}" sh -c 'find /usr/share/nginx/html -name "*.map" | wc -l')
 echo "GET / -> ${index_code}"
-echo "GET /remoteEntry.js -> ${remote_code}"
+echo "GET /config/runtime.json -> ${config_code}"
+echo "GET /version.json -> ${version_code}"
+echo "Source maps in image: ${map_count}"
 
 if [ "${index_code}" != "200" ] || ! grep -q 'id="app"' /tmp/web-shell-index.html; then
   echo "::error file=index.html,title=Startup gate::Shell document was not served"
   exit 1
 fi
-if [ "${remote_code}" != "200" ]; then
-  echo "::error file=module-federation.config.ts,title=Startup gate::remoteEntry.js was not served (${remote_code})"
+if [ "${config_code}" != "200" ] || [ "${version_code}" != "200" ]; then
+  echo "::error file=nginx/default.conf,title=Startup gate::runtime.json (${config_code}) or version.json (${version_code}) was not served"
+  exit 1
+fi
+if [ "${map_count}" -ne 0 ]; then
+  echo "::error file=Dockerfile,title=Startup gate::${map_count} source maps were shipped in the image"
   exit 1
 fi
 echo "::endgroup::"
 
 {
   echo "### Smoke test results"
-  echo "- ✅ Startup gate: \`/healthz\`, \`/\`, and \`/remoteEntry.js\` returned 200"
+  echo "- ✅ Startup gate: \`/healthz\`, \`/\`, \`/config/runtime.json\` and \`/version.json\` returned 200; no source maps in the image"
   echo "- 📦 Image size (linux/amd64): **${mb} MB** (limit: ${MAX_MB} MB)"
   echo "- 🔍 [Security (Trivy SARIF results)](https://github.com/${GITHUB_REPOSITORY}/security/code-scanning)"
 } >> "$GITHUB_STEP_SUMMARY"

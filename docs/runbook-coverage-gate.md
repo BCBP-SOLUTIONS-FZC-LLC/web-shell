@@ -5,7 +5,7 @@
 `.github/workflows/validate-test.yml` is the reusable test job for pull requests, pushes to `main`, and release tags.
 
 1. `npm ci`
-2. `npm run test:coverage` (Vitest unit, integration, and end-to-end)
+2. `npm run test:coverage` (Vitest unit and integration)
 3. `.github/scripts/coverage-gate.mjs`
 4. Upload the `coverage/` directory as an artifact
 5. `npm run build` (`tsc`, then the production bundle)
@@ -32,9 +32,9 @@ npm run build
 
 ## What to change
 
-- Cover the lines the report names. Auth modules read `import.meta.env` at load time. Stub the env, then import through `test/helpers/load-auth.ts` (`vi.resetModules()`). A static import keeps the first snapshot.
-- An unconfigured Keycloak case uses a whitespace env value such as `' '`. `env()` trims that to empty. An empty-string stub is unreliable.
-- `app2/App` is aliased to `test/fixtures/DashboardApp.tsx`. Set `globalThis.__DASHBOARD_THROW__` to exercise the error boundary. The suite does not fetch port 5002.
+- Cover the lines the report names. A new bootstrap branch goes in `test/integration/bootstrap.test.tsx`, where every SDK subpath is a `vi.mock` fake that records its call; set the fake's return (for example `initResult`, `loadContext`) for the branch you need.
+- Components that use SDK hooks are tested with `@bcbp-solutions-fzc-llc/frontend-sdk/react` mocked (`test/integration/app.test.tsx`). `RemoteBoundary` is replaced there, so the suite does not fetch port 5002.
+- `npm ci` needs `NODE_AUTH_TOKEN` with `read:packages` before any of this runs locally.
 
 ## What to leave alone
 

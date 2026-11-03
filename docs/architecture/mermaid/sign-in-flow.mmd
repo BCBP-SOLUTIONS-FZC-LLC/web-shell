@@ -1,21 +1,25 @@
 sequenceDiagram
     participant User
     participant Login as LoginPage
-    participant Facade as keycloak.ts
-    participant PKCE as oauth-pkce.ts
+    participant Screens as SessionScreens
+    participant IAM as /api PUB-1
+    participant SDK as frontend-sdk /auth
     participant KC as Keycloak
 
     User->>Login: submit work email
     Login->>Login: persistRememberEmail
-    Login->>Facade: redirectToKeycloakLogin(email)
-    Facade->>PKCE: buildKeycloakAuthorizeUrl
-    Note over PKCE: verifier, S256 challenge, state UUID<br/>pending record in sessionStorage and localStorage<br/>location.replace(authorize URL)
-
-    PKCE->>KC: GET .../auth?response_type=code&code_challenge_method=S256
-    KC->>PKCE: redirect to {origin}/dashboard?code&state
-    Note over PKCE: main.tsx snapshots code and state first
-
-    PKCE->>PKCE: state must match the pending record
-    PKCE->>KC: POST .../token (code, verifier, client_id, redirect_uri)
-    KC-->>PKCE: access_token, refresh_token, id_token
-    PKCE->>PKCE: sessionStorage app1.oauth.session, strip query
+    Login->>Screens: onContinue(email)
+    Screens->>IAM: GET /v1/public/tenants/resolve?identifier=email (no token)
+    alt not found or unreachable
+        IAM-->>Login: generic "could not find a workspace" message
+    else realm resolved
+        IAM-->>Screens: realm, strategy
+        Screens->>SDK: idp.login(workspace, loginHint=email)
+        Note over SDK: verifier, S256 challenge, state<br/>location to the realm's authorize URL
+        SDK->>KC: GET /realms/{realm}/.../auth?code_challenge_method=S256&login_hint
+        KC->>SDK: redirect to {origin}/auth/callback?code&state
+        SDK->>SDK: state must match
+        SDK->>KC: POST /realms/{realm}/.../token (code, verifier)
+        KC-->>SDK: tokens, kept in memory only
+        SDK->>SDK: move the URL back to the page the user opened
+    end

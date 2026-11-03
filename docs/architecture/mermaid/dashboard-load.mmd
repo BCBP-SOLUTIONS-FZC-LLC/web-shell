@@ -1,13 +1,15 @@
 sequenceDiagram
     participant App as App.tsx
-    participant Boundary as DashboardBoundary
-    participant Suspense
-    participant Remote as app2/App
+    participant Boundary as RemoteBoundary
+    participant MFE as frontend-sdk /mfe
+    participant Remote as app2 ./App
 
-    App->>Boundary: authenticated /dashboard/*
-    Boundary->>Suspense: lazy import app2/App
-    alt remoteEntry.js loads and App renders
-        Suspense->>Remote: userLabel, onLogout
-    else import or render throws
-        Boundary->>App: "Dashboard could not be loaded..."
+    App->>Boundary: /t/slug/dashboard/*
+    Boundary->>MFE: loadRemote('app2', './App')
+    Note over MFE: entry from /remotes/manifest.json<br/>kill switch, allowed origin, integrity, timeout, retries
+    alt remoteEntry.js loads and ./App renders
+        MFE-->>Boundary: component
+        Boundary->>Remote: userLabel, onLogout
+    else disabled, load fails, or render throws
+        Boundary->>App: "Something went wrong." with Try again
     end

@@ -16,7 +16,7 @@ Email: vijay@bcbpsolutions.com
 Subject: `[web-shell] Security vulnerability`
 
 Include in your report:
-- Description of the vulnerability and the affected component (shell, auth redirect, module-federation remote, static hosting)
+- Description of the vulnerability and the affected component (shell bootstrap, sign-in screens, IAM ports, Module Federation remote loading, static hosting)
 - Steps to reproduce
 - Potential impact (token leakage, XSS, open redirect, untrusted remote load, privilege escalation)
 - Suggested fix or patch (if any)
@@ -36,6 +36,6 @@ We follow responsible disclosure. Reporters will be credited in release notes un
 
 Areas of particular sensitivity in this shell:
 
-- **Authentication** — Keycloak login, token storage, and session handling in the browser.
+- **Authentication** — the sign-in and session screens and how the shell drives the platform SDK's Keycloak session. Token handling itself is in `platform-reactcommon`.
 - **Module Federation remotes** — the shell loads remote entry points; a compromised or substituted remote executes in the shell origin.
-- **Build-time configuration** — `VITE_*` values are compiled into the static bundle and are public in the browser.
+- **Runtime configuration** — `/config/runtime.json` and `/remotes/manifest.json` are served to every browser and are public.
