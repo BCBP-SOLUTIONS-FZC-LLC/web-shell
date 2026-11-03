@@ -402,7 +402,7 @@ Use this before serving this image in an environment, or before changing `app2`.
 
 **Serving this shell**
 
-- [ ] Serve `index.html` for client-side routes, or use this image's nginx config, which already falls through to `index.html`.
+- [ ] Serve `index.html` for extension-less client-side routes only, as `platform-reactcommon` `examples/cloudfront/spa-rewrite.js` does (this image's nginx config follows it). Missing config, remote, asset and API files must stay 404.
 - [ ] Serve this environment's `/config/runtime.json` and `/remotes/manifest.json`, revalidated. Cache `/assets/` as immutable.
 - [ ] Route `/api` to the platform API (PUB-1 and P-35 must exist) and `/otel` to the collector, same origin.
 - [ ] Send the platform's CSP with the Trusted Types policies (`platform-reactcommon/examples/cloudfront`).

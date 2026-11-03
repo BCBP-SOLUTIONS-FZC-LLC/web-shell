@@ -78,7 +78,7 @@ A remote must be built with `@bcbp-solutions-fzc-llc/webpack-preset` (`role: 're
 | Path | Behavior |
 |---|---|
 | `GET /healthz` | `200` and the text `ok`. No access log |
-| `GET /` | Shell document. `index.html` is `Cache-Control: no-cache`. Unknown paths fall through to `index.html` |
+| `GET /` | Shell document. `index.html` is `Cache-Control: no-cache`. Only extension-less paths fall through to `index.html` (the platform's rule, `platform-reactcommon` `examples/cloudfront/spa-rewrite.js`); a missing file under `/api/`, `/otel/`, `/config/`, `/remotes/`, `/assets/`, or any missing file with an extension, is 404 |
 | `GET /config/runtime.json`, `/remotes/manifest.json`, `/version.json` | `no-cache`, `404` when the file is absent |
 | `GET /assets/*` | Hashed files, `Cache-Control: public, max-age=31536000, immutable` |
 
