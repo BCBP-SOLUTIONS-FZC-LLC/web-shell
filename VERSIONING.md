@@ -162,7 +162,7 @@ Both match the `v[0-9]*.[0-9]*.[0-9]*-*` tag trigger and produce a signed, scann
 
 | web-shell | Node | React | react-router-dom | Dashboard remote |
 |-----------|------|-------|------------------|------------------|
-| Unreleased (`main`) | 22 (image builder `node:22-bookworm`, CI `node-version: 22`) | `^19.3.0` (singleton) | `^7.18.4` (singleton) | Loaded at runtime from `VITE_APP2_URL/remoteEntry.js`. Not versioned in this repo |
+| Unreleased (`main`) | 22 (image builder `node:26-bookworm`, CI `node-version: 26`) | `^19.3.0` (singleton) | `^7.18.4` (singleton) | Loaded at runtime from `VITE_APP2_URL/remoteEntry.js`. Not versioned in this repo |
 
 Keycloak itself is not a library dependency of the image. The shell talks to whatever `VITE_KEYCLOAK_URL` / `VITE_KEYCLOAK_REALM` / `VITE_KEYCLOAK_CLIENT_ID` were set to at **build** time. The runtime image is nginx and the static files.
 

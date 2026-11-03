@@ -68,7 +68,7 @@ jobs:
           token: ${{ secrets.CI_REPO_READ_TOKEN || github.token }}
 
       - name: Hadolint
-        uses: hadolint/hadolint-action@v3.3.0
+        uses: hadolint/hadolint-action@v3.5.0
         with:
           dockerfile: Dockerfile
 
@@ -83,17 +83,17 @@ jobs:
         run: bash .github/scripts/docker-build-prep.sh
 
       - name: Log in to GHCR
-        uses: docker/login-action@v4.6.0
+        uses: docker/login-action@v4.7.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4.2.0
+        uses: docker/setup-buildx-action@v4.4.1
 
       - name: Build image → cache
-        uses: docker/build-push-action@v7.3.0
+        uses: docker/build-push-action@v7.4.0
         with:
           context: .
           file: ./Dockerfile
@@ -125,10 +125,10 @@ jobs:
           token: ${{ secrets.CI_REPO_READ_TOKEN || github.token }}
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4.2.0
+        uses: docker/setup-buildx-action@v4.4.1
 
       - name: Load image from cache
-        uses: docker/build-push-action@v7.3.0
+        uses: docker/build-push-action@v7.4.0
         with:
           context: .
           file: ./Dockerfile
@@ -173,7 +173,7 @@ jobs:
           cache-dir: /tmp/trivy-cache
 
       - name: Upload SARIF to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@v4.37.4
+        uses: github/codeql-action/upload-sarif@v4.39.1
         continue-on-error: true
         with:
           sarif_file: trivy-results.sarif
@@ -188,7 +188,7 @@ jobs:
           cache-dir: /tmp/trivy-cache
 
       - name: Upload SBOM artifact
-        uses: actions/upload-artifact@v7.0.1
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: sbom-${{ github.sha }}
           path: sbom.cyclonedx.json
@@ -206,10 +206,10 @@ jobs:
           token: ${{ secrets.CI_REPO_READ_TOKEN || github.token }}
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4.2.0
+        uses: docker/setup-buildx-action@v4.4.1
 
       - name: Load image from cache
-        uses: docker/build-push-action@v7.3.0
+        uses: docker/build-push-action@v7.4.0
         with:
           context: .
           file: ./Dockerfile
@@ -275,7 +275,7 @@ jobs:
         run: bash .github/scripts/set-source-date-epoch.sh
 
       - name: Log in to GHCR
-        uses: docker/login-action@v4.6.0
+        uses: docker/login-action@v4.7.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -291,11 +291,11 @@ jobs:
             type=sha,prefix=sha-,format=short
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4.2.0
+        uses: docker/setup-buildx-action@v4.4.1
 
       - name: Build and push
         id: pushed
-        uses: docker/build-push-action@v7.3.0
+        uses: docker/build-push-action@v7.4.0
         with:
           context: .
           file: ./Dockerfile

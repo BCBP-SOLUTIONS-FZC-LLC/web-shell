@@ -3,7 +3,7 @@
 The browser shell for the BCBP micro-frontend platform. It owns the sign-in page, the Keycloak PKCE session, and the routes that decide whether the user sees that page or the dashboard. After sign-in it loads the dashboard as a Module Federation remote (`app2`) and renders it inside this origin.
 
 **Repository:** `github.com/BCBP-SOLUTIONS-FZC-LLC/web-shell`
-**Runtime:** Node.js 22 · Vite 8 · React 19.3 · private npm package `app1` (`"private": true`) · production image is nginx on port **8080**
+**Runtime:** Node.js 26 · Vite 8 · React 19.3 · private npm package `app1` (`"private": true`) · production image is nginx on port **8080**
 **Contract:** Module Federation container `app1`, file `remoteEntry.js`, expose `./App`. Versioning of the image and that contract is in [VERSIONING.md](./VERSIONING.md).
 
 ---
@@ -101,7 +101,7 @@ web-shell/
 ├── module-federation.config.ts  # name, expose, shared versions
 ├── vite.config.ts               # Port 5001, /__kc proxy, app2 remote URL
 ├── nginx/default.conf           # Runtime server for dist/
-├── Dockerfile                   # Node 22 builder, nginx-unprivileged runtime
+├── Dockerfile                   # Node 26 builder, nginx-unprivileged runtime
 ├── keycloak/                    # Local realm import and bcbp login theme
 ├── scripts/                     # Local Keycloak compose, health check, user seed
 ├── test/
@@ -130,7 +130,7 @@ Browser storage this shell writes:
 
 ### Prerequisites
 
-- Node.js 22 and npm
+- Node.js 26 and npm
 - Docker, when you want the local Keycloak realm or the production image
 
 ### Setup
@@ -165,7 +165,7 @@ The dashboard is a second process. Start `mfe-dashboard` so it serves `remoteEnt
 | `npm run keycloak:status` | Readiness check against `http://localhost:8080` |
 | `npm run keycloak:setup` | Start Keycloak, wait, seed the local user |
 | `npm run keycloak:seed-user` | Seed only, when Keycloak is already up |
-| `npm run docker:dev` | Dev server inside a Node 22 container (Windows path mount) |
+| `npm run docker:dev` | Dev server inside a Node 26 container (Windows path mount) |
 | `npm run docker:dev:mac` | Same mount syntax for macOS and Linux |
 
 ### Run one test file
@@ -265,7 +265,7 @@ docker run --rm -p 18080:8080 web-shell:local
 curl -s http://localhost:18080/healthz
 ```
 
-Two stages, both digest-pinned: `node:22-bookworm` runs `npm ci` and `npm run build`; `nginxinc/nginx-unprivileged:1.30-alpine` serves `/usr/share/nginx/html` as uid 101. The CI smoke test fails the image above 200 MB and requires `/healthz`, `/` (a document that contains `id="app"`), and `/remoteEntry.js` to return 200.
+Two stages, both digest-pinned: `node:26-bookworm` runs `npm ci` and `npm run build`; `nginxinc/nginx-unprivileged:1.31-alpine` serves `/usr/share/nginx/html` as uid 101. The CI smoke test fails the image above 200 MB and requires `/healthz`, `/` (a document that contains `id="app"`), and `/remoteEntry.js` to return 200.
 
 ### Local Keycloak compose
 
