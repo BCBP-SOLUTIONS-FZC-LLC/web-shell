@@ -133,7 +133,7 @@ npx vitest run test/unit/iam.test.ts
 These tests pin behavior other repos and the login flow depend on. Change them only when the contract change is intentional, and update `README.md` and `VERSIONING.md` in the same pull request.
 
 - **`test/integration/bootstrap.test.tsx`** — the exact SDK initialisation order, no automatic login after a logout or a device-clock refusal, the app never renders for a wrong-workspace login, deny-all without a session context, and the app unmounts on sign-out.
-- **`test/unit/iam.test.ts`** — the PUB-1 → `Workspace` and P-35 → `SessionContext` mappings, and that PUB-1 is called without a token.
+- **`test/unit/iam.test.ts`** — the PUB-1 → `Workspace` and P-35 → `SessionContext` ports, through the real `ApiClient` (`createTestPlatform`, `mockApi`), against the SDK's contract cases in `@bcbp-solutions-fzc-llc/frontend-sdk/contracts`; PUB-1 is called without a token.
 - **`test/integration/session-screens.test.tsx`** — "not found" and "unreachable" show the same message.
 - **`test/integration/app.test.tsx`** — `/dashboard/*` renders `app2` `./App` with no props, under the workspace basename.
 

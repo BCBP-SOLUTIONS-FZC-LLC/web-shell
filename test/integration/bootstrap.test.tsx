@@ -213,12 +213,12 @@ describe('bootstrap, signed in', () => {
     await waitFor(() => expect(signInAgain).toHaveBeenCalledOnce())
   })
 
-  it('unmounts the app on sign-out and signs back in with prompt=login on click', async () => {
+  it('unmounts the app on sign-out and signs back in on click', async () => {
     await act(() => bootstrap())
     act(() => subscriber!({ status: 'anonymous', reason: 'signed-out' }))
     expect(screen.queryByRole('main')).not.toBeInTheDocument()
     await userEvent.setup().click(screen.getByRole('button', { name: 'Sign in' }))
-    expect(idp.login).toHaveBeenCalledWith({ workspace: acme, returnUrl: '/t/acme/', prompt: 'login' })
+    expect(idp.login).toHaveBeenCalledWith({ workspace: acme, returnUrl: '/t/acme/' })
 
     const other: Workspace = { realm: 'tenant-other', trial: false }
     act(() => subscriber!({ status: 'anonymous', reason: 'signed-out', workspace: other }))

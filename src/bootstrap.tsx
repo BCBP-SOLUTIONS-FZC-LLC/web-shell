@@ -117,13 +117,11 @@ export async function bootstrap(): Promise<void> {
       )
     }
     // Signed out here or in another tab: unmount so the previous user's data is not left under
-    // the dialog on a shared device. The next sign-in asks for credentials (prompt=login).
+    // the dialog on a shared device. The SDK makes the next sign-in ask for credentials.
     if (s.status === 'anonymous' && s.reason === 'signed-out') {
       app?.unmount()
       app = undefined
-      showSignedOut(() =>
-        idp.login({ workspace: s.workspace ?? session.workspace, returnUrl: returnUrl(), prompt: 'login' }),
-      )
+      showSignedOut(() => idp.login({ workspace: s.workspace ?? session.workspace, returnUrl: returnUrl() }))
     }
   })
 
