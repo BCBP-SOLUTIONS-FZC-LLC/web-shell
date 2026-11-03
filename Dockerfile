@@ -1,7 +1,7 @@
 # Pin base images to SHA digests for reproducible, supply-chain-safe builds.
 # CI (validate-quality.yml, "Dockerfile base image digest check") fails when a
 # FROM line uses a floating tag without @sha256.
-FROM node:22-bookworm@sha256:63538dfe497cc29dfafdda25ada09b46db68a3f4cc205abf1f5d6bf0913f3384 AS builder
+FROM node:26-bookworm@sha256:fa52d1669505e29b58c042875b1d65c229e0787a3610fd52869b22b68e480853 AS builder
 
 WORKDIR /app
 
