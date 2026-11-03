@@ -1,0 +1,23 @@
+graph LR
+    main(["main.tsx"])
+    app(["App.tsx"])
+    login(["LoginPage.tsx"])
+    logo(["BrandLogo.tsx"])
+    facade(["auth/keycloak.ts"])
+    pkce(["auth/oauth-pkce.ts"])
+    config(["auth/keycloak.config.ts"])
+    vite(["vite.config.ts"])
+    mf(["module-federation.config.ts"])
+
+    main --> app
+    main --> pkce
+    app --> facade
+    app --> config
+    app --> login
+    login --> facade
+    login --> pkce
+    login --> config
+    login --> logo
+    facade --> pkce
+    pkce --> config
+    vite --> mf

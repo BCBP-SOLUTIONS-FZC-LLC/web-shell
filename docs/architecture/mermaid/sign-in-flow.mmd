@@ -1,0 +1,21 @@
+sequenceDiagram
+    participant User
+    participant Login as LoginPage
+    participant Facade as keycloak.ts
+    participant PKCE as oauth-pkce.ts
+    participant KC as Keycloak
+
+    User->>Login: submit work email
+    Login->>Login: persistRememberEmail
+    Login->>Facade: redirectToKeycloakLogin(email)
+    Facade->>PKCE: buildKeycloakAuthorizeUrl
+    Note over PKCE: verifier, S256 challenge, state UUID<br/>pending record in sessionStorage and localStorage<br/>location.replace(authorize URL)
+
+    PKCE->>KC: GET .../auth?response_type=code&code_challenge_method=S256
+    KC->>PKCE: redirect to {origin}/dashboard?code&state
+    Note over PKCE: main.tsx snapshots code and state first
+
+    PKCE->>PKCE: state must match the pending record
+    PKCE->>KC: POST .../token (code, verifier, client_id, redirect_uri)
+    KC-->>PKCE: access_token, refresh_token, id_token
+    PKCE->>PKCE: sessionStorage app1.oauth.session, strip query

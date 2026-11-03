@@ -16,39 +16,55 @@ const FEATURES = [
   { dotClass: 'bg-green-500', label: 'Safety & Compliance' },
 ] as const
 
-/** Left panel — diagonal inner edge (40% top → 35% bottom), mirror of right */
-const leftPanelClip = '[clip-path:polygon(0_0,50%_0,60%_100%,0_100%)]' as const
+const SLIDES = [
+  {
+    image: '/image/image1.jpg',
+    title: ['Next-Gen System, Built for You.', 'Supercharged and Limitless.'],
+    body: 'Access your unified workspace with automated governance, low-latency telemetry, and institutional-grade access controls.',
+  },
+  {
+    image: '/image/image2.jpg',
+    title: ['Airside programs, held to the plan.'],
+    body: 'Coordinate gates, works, and contractors from one workspace while the apron stays in motion.',
+  },
+  {
+    image: '/image/image3.jpg',
+    title: ['Port calls, coordinated end to end.'],
+    body: 'Track berth work, cargo, and contractors together so the quay stays on schedule.',
+  },
+  {
+    image: '/image/image4.jpg',
+    title: ['Road corridors, delivered on grade.'],
+    body: 'Keep earthworks, paving, and lane closures aligned so every kilometer stays on the critical path.',
+  },
+  {
+    image: '/image/image5.jpg',
+    title: ['Bridge spans, raised with precision.'],
+    body: 'Orchestrate foundations, decks, and lifting windows so each span lands safely and on time.',
+  },
+  {
+    image: '/image/image6.jpg',
+    title: ['High-voltage lines, laid with care.'],
+    body: 'Plan stringing, clearances, and outages in one view so transmission work stays energized and safe.',
+  },
+  {
+    image: '/image/image7.jpg',
+    title: ['Refinery builds, sequenced to startup.'],
+    body: 'Align modules, turnarounds, and commissioning so process units reach mechanical completion together.',
+  },
+  {
+    image: '/image/image8.jpg',
+    title: ['Chemical plants, built to operate.'],
+    body: 'Coordinate piping, utilities, and HSE gates so every unit is ready when production begins.',
+  },
+  {
+    image: '/image/image9.jpg',
+    title: ['Village programs, built for people.'],
+    body: 'Track housing, water, and civic works together so communities see progress that lasts.',
+  },
+] as const
 
-/** Right panel — mirrored diagonal (60% top → 65% bottom) */
-const rightPanelClip = '[clip-path:polygon(100%_0,90%_0,100%_100%,100%_100%)]' as const
-
-/** ~20% center band where cityscape shows (40%–60% at top) */
-const centerBandClip = '[clip-path:polygon(0%_0,100%_0,100%_100%,0%_100%)]' as const
-
-const leftPanelGlow =
-  '[filter:drop-shadow(2px_0_0_rgba(255,60,170,0.95))_drop-shadow(6px_0_18px_rgba(255,45,154,0.55))]' as const
-
-const rightPanelGlow =
-  '[filter:drop-shadow(-2px_0_0_rgba(255,60,170,0.95))_drop-shadow(-6px_0_18px_rgba(255,45,154,0.55))]' as const
-
-function PanelLayers({ clip, mirrored = false }: { clip: string; mirrored?: boolean }) {
-  return (
-    <>
-      <div
-        className={`absolute inset-0 bg-gradient-to-br from-[#08071e] via-[#121038] to-[#241858] ${clip} max-md:[clip-path:none]`}
-        aria-hidden
-      />
-      <div
-        className={`pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(255,45,154,0.055)_1px,transparent_1px),linear-gradient(90deg,rgba(255,45,154,0.055)_1px,transparent_1px)] bg-[length:40px_40px] [mask-image:linear-gradient(165deg,black_20%,transparent_88%)] ${clip} max-md:[clip-path:none]`}
-        aria-hidden
-      />
-      <div
-        className={`pointer-events-none absolute inset-0 bg-gradient-to-br from-transparent from-40% to-[rgba(120,40,160,0.35)] to-100% ${clip} max-md:[clip-path:none] ${mirrored ? 'scale-x-[-1]' : ''}`}
-        aria-hidden
-      />
-    </>
-  )
-}
+const SLIDE_MS = 6000
 
 type LoginPageProps = {
   authCallbackError?: string | null
@@ -64,6 +80,26 @@ export default function LoginPage({
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [keycloakOnline, setKeycloakOnline] = useState<boolean | null>(null)
+  const [slide, setSlide] = useState(0)
+  const [settledSlide, setSettledSlide] = useState(0)
+  const [loadedSlides, setLoadedSlides] = useState<ReadonlySet<number>>(() => new Set())
+  const [slidePaused, setSlidePaused] = useState(false)
+  const [slideDirection, setSlideDirection] = useState<1 | -1>(1)
+
+  function markSlideLoaded(index: number) {
+    setLoadedSlides((current) => {
+      if (current.has(index)) return current
+      const next = new Set(current)
+      next.add(index)
+      return next
+    })
+  }
+
+  useEffect(() => {
+    if (!loadedSlides.has(slide) || slide === settledSlide) return
+    const timer = window.setTimeout(() => setSettledSlide(slide), 900)
+    return () => window.clearTimeout(timer)
+  }, [slide, loadedSlides, settledSlide])
 
   useEffect(() => {
     if (!isKeycloakConfigured()) {
@@ -107,6 +143,32 @@ export default function LoginPage({
     }
   }, [authCallbackError])
 
+  useEffect(() => {
+    if (slidePaused) {
+      return
+    }
+    const timer = window.setInterval(() => {
+      setSlideDirection(1)
+      setSlide((current) => (current + 1) % SLIDES.length)
+    }, SLIDE_MS)
+    return () => window.clearInterval(timer)
+  }, [slidePaused])
+
+  function showSlide(next: number) {
+    const count = SLIDES.length
+    const normalized = ((next % count) + count) % count
+    if (normalized === slide) {
+      return
+    }
+    const forward = (normalized - slide + count) % count
+    const backward = (slide - normalized + count) % count
+    setSlideDirection(forward <= backward ? 1 : -1)
+    setSlide(normalized)
+  }
+
+  const activeSlide = SLIDES[slide]!
+  const heroShift = slideDirection === 1 ? '4%' : '-4%'
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
     setError(null)
@@ -128,180 +190,231 @@ export default function LoginPage({
   }
 
   return (
-    <div className="relative min-h-dvh overflow-hidden bg-[#030d1b] font-sans text-white">
-      {/* Full-bleed cityscape; center band stays visible between mirrored panels */}
-      <div
-        className="absolute inset-0 z-0 bg-[url('/image/cityscape.jpg')] bg-cover bg-center bg-no-repeat"
-        aria-hidden
-      />
-      <div
-        className={`pointer-events-none absolute inset-0 z-[1] bg-black/15 ${centerBandClip} max-md:[clip-path:none]`}
-        aria-hidden
-      />
-
-      {/* Left brand panel */}
-      <div
-        className={`absolute inset-0 z-[2] min-h-dvh ${leftPanelClip} ${leftPanelGlow} max-md:relative max-md:[clip-path:none] max-md:[filter:none]`}
+    <div className="flex min-h-dvh flex-col bg-[#061018] font-sans lg:flex-row">
+      <section
+        className="relative z-0 min-h-[68vh] flex-1 overflow-hidden lg:min-h-dvh"
+        aria-roledescription="carousel"
+        aria-label="Product highlights"
+        onMouseEnter={() => setSlidePaused(true)}
+        onMouseLeave={() => setSlidePaused(false)}
       >
-        <PanelLayers clip={leftPanelClip} />
-        <div className="relative z-[1] flex min-h-dvh w-full flex-col justify-end px-6 pb-12 pl-8 pr-[10%] sm:pl-12 sm:pb-14 lg:pl-16 max-md:min-h-0 max-md:justify-start max-md:p-6">
-          <div className="flex w-full max-w-none flex-col gap-6 pb-2">
-            <BrandLogo className="block" size={128} />
-            <h1 className="text-[clamp(4.75rem,4.2vw,3.5rem)] font-bold leading-[1.12] tracking-tight">
-              <span className="text-[#d81b60]">Beyond </span>
-              <span className="text-white">Code,</span>
-              <br />
-              <span className="text-[#7e57c2]">Best </span>
-              <span className="text-white">Possibilities.</span>
-            </h1>
-            <p className="text-[clamp(3rem,2vw,1.65rem)] font-semibold leading-snug">
-              Next-Gen System, Built for You.
-              <br />
-              Supercharged and Limitless.
-            </p>
-            <p className="max-w-[min(52rem,95%)] text-[clamp(1.5rem,1.5vw,1.25rem)] leading-relaxed text-white/85">
-              Ultimate AI platform for Tender/Project Management automation. Built on latest High-End Technologie
-            </p>
-            <ul className="flex list-none flex-wrap gap-2.5 pt-2">
-              {FEATURES.map(({ dotClass, label }) => (
-                <li
-                  key={label}
-                  className="inline-flex items-center gap-2 rounded-full border border-[#4a3f6b] bg-[#1a1535] px-3.5 py-2 text-[clamp(0.7rem,1vw,0.85rem)] font-medium text-white/90"
-                >
-                  <span className={`h-2 w-2 shrink-0 rounded-full ${dotClass}`} />
-                  {label}
-                </li>
-              ))}
-            </ul>
-          </div>
-        </div>
-      </div>
-
-      {/* Right panel — same diagonal slice, mirrored */}
-      <div
-        className={`pointer-events-none absolute inset-0 z-[2] min-h-dvh ${rightPanelClip} ${rightPanelGlow} max-md:hidden`}
-        aria-hidden
-      >
-        <PanelLayers clip={rightPanelClip} mirrored />
-      </div>
-
-      {/* Login over center 20% cityscape band */}
-      <div
-        className={`absolute inset-0 z-[4] flex flex-col items-end justify-end px-50 py-24 max-md:relative max-md:min-h-[52vh] ${centerBandClip} max-md:[clip-path:none]`}
-      >
-        <div className="flex w-full max-w-[420px] flex-col items-center gap-3">
-          <div className="w-full shrink-0 rounded-xl bg-white px-7 pb-7 pt-[1.65rem] text-gray-900 shadow-login-card">
-            <div className="mb-[1.15rem] flex items-start justify-between gap-3">
-              <h2 className="m-0 text-[0.98rem] font-bold text-[#1a1a2e]">Login to your account</h2>
-              <a
-                href="#help"
-                className="mt-0.5 shrink-0 whitespace-nowrap text-[0.68rem] font-medium text-aura-secondary no-underline hover:underline"
-              >
-                Trouble logging in?
-              </a>
-            </div>
-            <form onSubmit={handleSubmit}>
-              {isKeycloakConfigured() ? (
-                <p
-                  className={`mb-3 rounded-md border px-3 py-2 text-xs ${
-                    keycloakOnline === true
-                      ? 'border-green-200 bg-green-50 text-green-800'
-                      : keycloakOnline === false
-                        ? 'border-amber-200 bg-amber-50 text-amber-900'
-                        : 'border-gray-200 bg-gray-50 text-gray-600'
-                  }`}
-                >
-                  {keycloakOnline === null && 'Checking Keycloak…'}
-                  {keycloakOnline === true &&
-                    `Keycloak ready (realm ${keycloakConfig.realm}). Sign in with your realm account on the next screen.`}
-                  {keycloakOnline === false && (
-                    <>
-                      Keycloak is not responding on port 8080. With Docker Desktop running, run{' '}
-                      <code className="text-[0.65rem]">npm run keycloak:setup</code>, wait until it
-                      reports ready (1–2 minutes after a fresh start), then refresh this page.
-                    </>
-                  )}
-                </p>
-              ) : null}
-              {authCallbackError ? (
-                <p className="mb-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
-                  {authCallbackError}
-                </p>
-              ) : null}
-              {error ? (
-                <div className="mb-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
-                  <p>{error}</p>
-                  {error.includes('Cannot reach Keycloak') ? (
-                    <ol className="mt-2 list-decimal space-y-1 pl-4">
-                      <li>Open Docker Desktop and wait until the engine is running.</li>
-                      <li>
-                        In <code className="text-[0.65rem]">app1</code>, run{' '}
-                        <code className="text-[0.65rem]">npm run keycloak:dev:detach</code>.
-                      </li>
-                      <li>
-                        Open <code className="text-[0.65rem]">http://localhost:8080</code> (wait 1–2 min on
-                        first start), refresh <code className="text-[0.65rem]">http://localhost:5001</code>,
-                        then retry.
-                      </li>
-                    </ol>
-                  ) : null}
-                </div>
-              ) : null}
-              <label className="mb-3.5 block">
-                <span className="mb-1.5 block text-[0.6rem] font-semibold uppercase tracking-widest text-gray-500">
-                  Work email address
+        {SLIDES.map((item, index) => {
+          const isIncoming = index === slide && index !== settledSlide && loadedSlides.has(index)
+          const isBase = index === settledSlide
+          return (
+            <img
+              key={item.image}
+              src={item.image}
+              alt=""
+              decoding="async"
+              draggable={false}
+              onLoad={(event) => {
+                if (event.currentTarget.naturalWidth > 0) markSlideLoaded(index)
+              }}
+              ref={(node) => {
+                if (node?.complete && node.naturalWidth > 0) markSlideLoaded(index)
+              }}
+              className={`pointer-events-none absolute inset-0 h-full w-full object-cover ${
+                isIncoming ? 'z-[1] hero-image-in' : isBase ? 'z-0 opacity-100' : 'z-0 opacity-0'
+              }`}
+              style={isIncoming ? { ['--hero-shift' as string]: heroShift } : undefined}
+              aria-hidden
+            />
+          )
+        })}
+        <div
+          className="pointer-events-none absolute inset-0 z-[2] bg-gradient-to-t from-black/55 via-black/15 to-transparent"
+          aria-hidden
+        />
+        <div className="relative z-10 flex min-h-[68vh] flex-col justify-end px-8 pb-12 pt-16 sm:px-12 lg:min-h-dvh lg:px-16 lg:pb-16 xl:px-20">
+          <BrandLogo size={84} />
+          <p className="mt-8 text-[clamp(1.75rem,3vw,2.6rem)] font-extrabold tracking-[0.08em] text-[#ff2d9a]">
+            BCBP SOLUTIONS
+          </p>
+          <div
+            key={slide}
+            className="hero-copy-in"
+            style={{ ['--hero-shift' as string]: slideDirection === 1 ? '1.5rem' : '-1.5rem' }}
+          >
+            <h1 className="mt-4 max-w-[22em] text-[clamp(1.85rem,2.7vw,3rem)] font-bold leading-[1.12] tracking-tight text-white">
+              {activeSlide.title.map((line, index) => (
+                <span key={line}>
+                  {index > 0 ? <br /> : null}
+                  {line}
                 </span>
-                <input
-                  type="email"
-                  name="email"
-                  autoComplete="email"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="box-border w-full rounded-md border border-gray-200 bg-white px-2.5 py-2.5 text-sm text-gray-900 outline-none transition-[border-color,box-shadow] focus:border-brand-pink focus:shadow-[0_0_0_3px_rgba(233,30,140,0.12)]"
-                />
-              </label>
-              <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-                <label className="inline-flex cursor-pointer select-none items-center gap-1.5 text-[0.72rem] text-gray-700">
-                  <input
-                    type="checkbox"
-                    checked={remember}
-                    onChange={(e) => setRemember(e.target.checked)}
-                    className="h-3 w-3 cursor-pointer accent-brand-pink"
-                  />
-                  <span>Remember Email</span>
-                </label>
-                <a
-                  href="#forgot"
-                  className="text-[0.72rem] font-medium text-aura-secondary no-underline hover:underline"
-                >
-                  Forgot your password?
-                </a>
-              </div>
-              <button
-                type="submit"
-                disabled={submitting}
-                className="w-full cursor-pointer rounded-lg border-0 bg-[linear-gradient(90deg,#ff2d9a_0%,#7c3aed_55%,#6366f1_100%)] px-4 py-2.5 text-sm font-semibold text-white shadow-[0_4px_16px_rgba(124,58,237,0.35)] transition-[filter,transform,background] hover:bg-[linear-gradient(90deg,#6366f1_0%,#7c3aed_55%,#ff2d9a_100%)] hover:brightness-105 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-70"
-              >
-                {submitting ? 'Redirecting…' : 'Continue with Email'}
-              </button>
-            </form>
+              ))}
+            </h1>
+            <p className="mt-5 max-w-[36rem] text-[clamp(0.95rem,1.4vw,1.15rem)] leading-relaxed text-white/90">
+              {activeSlide.body}
+            </p>
           </div>
-          <footer className="flex flex-wrap items-center justify-center gap-x-1.5 gap-y-1 text-[0.65rem]">
-            <a href="#privacy" className="text-white/90 no-underline hover:underline">
-              Privacy Policy
-            </a>
-            <span className="text-white/50">|</span>
-            <a href="#terms" className="text-white/90 no-underline hover:underline">
-              Terms of service
-            </a>
-            <span className="text-white/50">|</span>
-            <a href="#trust" className="text-white/90 no-underline hover:underline">
-              Trust &amp; Security
-            </a>
-          </footer>
+          <ul className="mt-8 flex list-none flex-wrap gap-2.5">
+            {FEATURES.map(({ dotClass, label }) => (
+              <li
+                key={label}
+                className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-[#1a1030]/80 px-3.5 py-2 text-[clamp(0.7rem,1vw,0.85rem)] font-medium text-white"
+              >
+                <span className={`h-2 w-2 shrink-0 rounded-full ${dotClass}`} />
+                {label}
+              </li>
+            ))}
+          </ul>
+          <div className="mt-8 flex items-center gap-3">
+            <button
+              type="button"
+              className="inline-flex h-9 w-9 cursor-pointer items-center justify-center rounded-full border border-white/30 bg-black/30 text-lg text-white"
+              aria-label="Previous slide"
+              onClick={() => showSlide(slide - 1)}
+            >
+              ‹
+            </button>
+            <div className="flex items-center gap-2">
+              {SLIDES.map((item, index) => (
+                <button
+                  key={item.image}
+                  type="button"
+                  aria-label={`Show slide ${index + 1}`}
+                  aria-current={index === slide ? 'true' : undefined}
+                  onClick={() => showSlide(index)}
+                  className={`h-2.5 cursor-pointer rounded-full transition-all ${
+                    index === slide ? 'w-7 bg-[#ff2d9a]' : 'w-2.5 bg-white/70'
+                  }`}
+                />
+              ))}
+            </div>
+            <button
+              type="button"
+              className="inline-flex h-9 w-9 cursor-pointer items-center justify-center rounded-full border border-white/30 bg-black/30 text-lg text-white"
+              aria-label="Next slide"
+              onClick={() => showSlide(slide + 1)}
+            >
+              ›
+            </button>
+          </div>
         </div>
-      </div>
+      </section>
+
+      <aside className="relative z-20 flex w-full shrink-0 flex-col bg-white text-gray-900 lg:w-[min(100%,30rem)] lg:shadow-[-16px_0_40px_rgba(6,16,24,0.18)] xl:w-[34rem]">
+        <div className="flex flex-1 flex-col justify-center px-8 py-12 sm:px-12">
+          <div className="mb-10 flex items-center gap-3">
+            <img
+              src="/image/logo.png"
+              alt=""
+              aria-hidden
+              width={64}
+              height={64}
+              className="h-16 w-16 object-contain mix-blend-multiply"
+            />
+            <div className="leading-none">
+              <p className="text-[1.65rem] font-extrabold tracking-wide text-[#1a1a2e]">BCBP</p>
+              <p className="mt-1 text-sm font-semibold tracking-[0.28em] text-[#ff2d9a]">SOLUTIONS</p>
+            </div>
+          </div>
+
+          <h2 className="m-0 text-lg font-semibold text-[#1a1a2e]">Login to your account</h2>
+
+          <form className="mt-8" onSubmit={handleSubmit}>
+            {isKeycloakConfigured() ? (
+              <p
+                className={`mb-4 rounded-md border px-3 py-2 text-xs ${
+                  keycloakOnline === true
+                    ? 'border-green-200 bg-green-50 text-green-800'
+                    : keycloakOnline === false
+                      ? 'border-amber-200 bg-amber-50 text-amber-900'
+                      : 'border-gray-200 bg-gray-50 text-gray-600'
+                }`}
+              >
+                {keycloakOnline === null && 'Checking Keycloak…'}
+                {keycloakOnline === true &&
+                  `Keycloak ready (realm ${keycloakConfig.realm}). Sign in with your realm account on the next screen.`}
+                {keycloakOnline === false && (
+                  <>
+                    Keycloak is not responding on port 8080. With Docker Desktop running, run{' '}
+                    <code className="text-[0.65rem]">npm run keycloak:setup</code>, wait until it
+                    reports ready (1–2 minutes after a fresh start), then refresh this page.
+                  </>
+                )}
+              </p>
+            ) : null}
+            {authCallbackError ? (
+              <p className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                {authCallbackError}
+              </p>
+            ) : null}
+            {error ? (
+              <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                <p>{error}</p>
+                {error.includes('Cannot reach Keycloak') ? (
+                  <ol className="mt-2 list-decimal space-y-1 pl-4">
+                    <li>Open Docker Desktop and wait until the engine is running.</li>
+                    <li>
+                      In <code className="text-[0.65rem]">app1</code>, run{' '}
+                      <code className="text-[0.65rem]">npm run keycloak:dev:detach</code>.
+                    </li>
+                    <li>
+                      Open <code className="text-[0.65rem]">http://localhost:8080</code> (wait 1–2 min on
+                      first start), refresh <code className="text-[0.65rem]">http://localhost:5001</code>,
+                      then retry.
+                    </li>
+                  </ol>
+                ) : null}
+              </div>
+            ) : null}
+            <label className="mb-5 block">
+              <span className="mb-2 block text-[0.65rem] font-semibold uppercase tracking-[0.16em] text-gray-500">
+                Work email address
+              </span>
+              <input
+                type="email"
+                name="email"
+                autoComplete="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="box-border w-full rounded-md border border-gray-200 bg-white px-3 py-3 text-sm text-gray-900 outline-none transition-[border-color,box-shadow] focus:border-[#ff2d9a] focus:shadow-[0_0_0_3px_rgba(255,45,154,0.12)]"
+              />
+            </label>
+            <label className="mb-6 inline-flex cursor-pointer select-none items-center gap-2 text-sm text-gray-600">
+              <input
+                type="checkbox"
+                checked={remember}
+                onChange={(e) => setRemember(e.target.checked)}
+                className="h-3.5 w-3.5 cursor-pointer accent-[#ff2d9a]"
+              />
+              <span>Remember Email</span>
+            </label>
+            <button
+              type="submit"
+              disabled={submitting}
+              className="w-full cursor-pointer rounded-lg border-0 bg-[linear-gradient(90deg,#ff4fa3_0%,#8b5cf6_100%)] px-4 py-3 text-sm font-semibold text-white shadow-[0_8px_20px_rgba(139,92,246,0.35)] transition-[filter,transform] hover:brightness-105 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-70"
+            >
+              {submitting ? 'Redirecting…' : 'Continue with Email'}
+            </button>
+          </form>
+
+          <div className="mt-6 flex items-center justify-center gap-4 text-sm">
+            <a href="#forgot" className="font-medium text-[#6d5efc] no-underline hover:underline">
+              Forgot your password?
+            </a>
+            <span className="h-4 w-px bg-gray-200" aria-hidden />
+            <a href="#help" className="font-medium text-[#6d5efc] no-underline hover:underline">
+              Trouble logging in?
+            </a>
+          </div>
+        </div>
+
+        <footer className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 px-8 pb-6 text-[0.7rem] text-gray-400">
+          <a href="#privacy" className="no-underline hover:underline">
+            Privacy Policy
+          </a>
+          <a href="#terms" className="no-underline hover:underline">
+            Terms of Service
+          </a>
+          <a href="#trust" className="no-underline hover:underline">
+            Trust &amp; Security
+          </a>
+        </footer>
+      </aside>
     </div>
   )
 }

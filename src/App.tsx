@@ -10,6 +10,8 @@ import {
 } from './auth/keycloak'
 import { isKeycloakConfigured } from './auth/keycloak.config'
 import LoginPage from './pages/LoginPage'
+import LoginPage1 from './pages/LoginPage1'
+import { resolveLoginVariant, type LoginVariant } from './pages/loginVariant'
 
 const DashboardApp = lazy(() => import('app2/App'))
 
@@ -32,6 +34,18 @@ class DashboardBoundary extends Component<{ children: ReactNode }, DashboardBoun
     }
     return this.props.children
   }
+}
+
+function SignedOutLogin({
+  authCallbackError,
+  onDismissAuthError,
+}: {
+  authCallbackError: string | null
+  onDismissAuthError: () => void
+}) {
+  const variant: LoginVariant = resolveLoginVariant(window.location.search)
+  const Page = variant === 'login1' ? LoginPage1 : LoginPage
+  return <Page authCallbackError={authCallbackError} onDismissAuthError={onDismissAuthError} />
 }
 
 function AuthenticatedDashboard() {
@@ -125,7 +139,7 @@ export default function App() {
             authenticated ? (
               <AuthenticatedDashboard />
             ) : (
-              <LoginPage authCallbackError={authError} onDismissAuthError={() => setAuthError(null)} />
+              <SignedOutLogin authCallbackError={authError} onDismissAuthError={() => setAuthError(null)} />
             )
           }
         />
@@ -135,7 +149,7 @@ export default function App() {
             authenticated ? (
               <Navigate to="/dashboard" replace />
             ) : (
-              <LoginPage authCallbackError={authError} onDismissAuthError={() => setAuthError(null)} />
+              <SignedOutLogin authCallbackError={authError} onDismissAuthError={() => setAuthError(null)} />
             )
           }
         />

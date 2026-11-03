@@ -1,0 +1,45 @@
+graph TD
+    subgraph entry["Entry"]
+        main["main.tsx\ncapture OAuth callback, then createRoot #app"]
+    end
+
+    subgraph ui["UI"]
+        app["App.tsx\nauth bootstrap, routes, dashboard boundary"]
+        login["LoginPage.tsx\nemail form, Keycloak reachability, remember-me"]
+        logo["BrandLogo.tsx"]
+    end
+
+    subgraph auth["Auth"]
+        facade["auth/keycloak.ts\ninit, redirect, logout, session label"]
+        pkce["auth/oauth-pkce.ts\nPKCE, token exchange, sessionStorage"]
+        config["auth/keycloak.config.ts\nVITE_* snapshot at module load"]
+    end
+
+    subgraph remote["Remote, loaded in the browser"]
+        app2["app2/App\nuserLabel, onLogout"]
+    end
+
+    subgraph build["Build, not imported by src/"]
+        vite["vite.config.ts\nport 5001, /__kc proxy, remote URL"]
+        mf["module-federation.config.ts\nname, expose, shared versions"]
+    end
+
+    subgraph image["Image"]
+        nginx["nginx/default.conf\n8080, /healthz, cache rules"]
+        docker["Dockerfile\nNode 22 builder, nginx runtime"]
+    end
+
+    main --> pkce
+    main --> app
+    app --> facade
+    app --> config
+    app --> login
+    app --> app2
+    login --> facade
+    login --> pkce
+    login --> config
+    login --> logo
+    facade --> pkce
+    pkce --> config
+    vite --> mf
+    docker --> nginx

@@ -1,0 +1,10 @@
+# Default: every file requires review from the web-shell team.
+* @BCBP-SOLUTIONS-FZC-LLC/web-shell
+
+# Workflow and release automation changes require explicit sign-off.
+.github/workflows/ @BCBP-SOLUTIONS-FZC-LLC/web-shell
+.github/dependabot.yml @BCBP-SOLUTIONS-FZC-LLC/web-shell
+
+# Image and static-host config.
+Dockerfile @BCBP-SOLUTIONS-FZC-LLC/web-shell
+nginx/ @BCBP-SOLUTIONS-FZC-LLC/web-shell
