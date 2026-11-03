@@ -31,12 +31,11 @@ LABEL org.opencontainers.image.title="web-shell" \
       org.opencontainers.image.vendor="BCBP Solutions FZC LLC" \
       org.opencontainers.image.revision="${BUILD_VERSION}"
 
-# The pinned base still ships Alpine packages with published fixes. Upgrade
-# only those so the Trivy gate passes. Remove this step once nginxinc
-# publishes a rebuilt image that includes them.
+# The pinned base lags Alpine security fixes, so upgrade its packages to keep
+# the Trivy gate green. Remove this step once nginxinc rebuilds often enough.
 USER 0
 # hadolint ignore=DL3017,DL3018
-RUN apk upgrade --no-cache brotli-libs curl libcurl musl musl-utils
+RUN apk upgrade --no-cache
 
 COPY nginx/default.conf /etc/nginx/conf.d/default.conf
 # 101 is the nginx user in nginxinc/nginx-unprivileged. A name fails Hadolint DL3066.
