@@ -9,7 +9,8 @@ sequenceDiagram
     Note over MFE: entry from /remotes/manifest.json<br/>kill switch, allowed origin, integrity, timeout, retries
     alt remoteEntry.js loads and ./App renders
         MFE-->>Boundary: component
-        Boundary->>Remote: userLabel, onLogout
+        Boundary->>Remote: render (no props)
+        Remote->>Remote: useCurrentUser(), useSignOut()
     else disabled, load fails, or render throws
         Boundary->>App: "Something went wrong." with Try again
     end

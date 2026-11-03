@@ -97,7 +97,7 @@ test/
 1. Add the remote to `config/remotes.local.json` for development. Each environment's `/remotes/manifest.json` comes from the deploy pipeline.
 2. Render it with `<RemoteBoundary remote="<name>" module="./<Module>" props={…} />`. The remote must be built with `@bcbp-solutions-fzc-llc/webpack-preset` (`role: 'remote'`).
 3. The shared map comes from the preset; do not add entries in `rsbuild.config.ts`. Bumping the SDK raises the version remotes require; see [VERSIONING.md](./VERSIONING.md).
-4. Props passed into `app2` `./App` are `userLabel` and `onLogout` (`src/App.tsx`). New data for remotes should come from SDK hooks, not props. Update the federation table in `README.md`.
+4. `app2` `./App` gets no props (`src/App.tsx`). Data a remote needs from the shell goes into the `PlatformProvider` shell value and is read through SDK hooks, never props. Update the federation table in `README.md`.
 
 ### Adding a runtime config key or a build constant
 
@@ -135,7 +135,7 @@ These tests pin behavior other repos and the login flow depend on. Change them o
 - **`test/integration/bootstrap.test.tsx`** — the exact SDK initialisation order, no automatic login after a logout or a device-clock refusal, the app never renders for a wrong-workspace login, deny-all without a session context, and the app unmounts on sign-out.
 - **`test/unit/iam.test.ts`** — the PUB-1 → `Workspace` and P-35 → `SessionContext` mappings, and that PUB-1 is called without a token.
 - **`test/integration/session-screens.test.tsx`** — "not found" and "unreachable" show the same message.
-- **`test/integration/app.test.tsx`** — `/dashboard/*` renders `app2` `./App` with `userLabel` and `onLogout`, under the workspace basename.
+- **`test/integration/app.test.tsx`** — `/dashboard/*` renders `app2` `./App` with no props, under the workspace basename.
 
 ### Coverage gate
 

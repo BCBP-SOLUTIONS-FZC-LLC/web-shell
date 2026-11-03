@@ -11,7 +11,7 @@ The shell has not been tagged. `package.json` `version` is `0.0.0`. Image tags, 
 | The SDK start-up sequence, the email sign-in page, the session screens | Passwords, MFA, registration, token issuance (Keycloak). PKCE, token handling, refresh and idle timeout (the SDK's `/auth`) |
 | The IAM ports: PUB-1 resolver and P-35 session context | The IAM APIs, tenant membership, authorization decisions (IAM services, the gateway) |
 | Federation host `shell` and the shared map from `@bcbp-solutions-fzc-llc/webpack-preset` | Dashboard screens (`mfe-dashboard`, loaded as `app2`) |
-| Props passed into the remote: `userLabel`, `onLogout` | Each environment's `/config/runtime.json` and `/remotes/manifest.json` (deploy pipeline, CloudFront) |
+| The shell value remotes read through SDK hooks (`user`, `signOut`, `workspace`, `context`) | Each environment's `/config/runtime.json` and `/remotes/manifest.json` (deploy pipeline, CloudFront) |
 | `GET /healthz` and the static files nginx serves | Cluster rollout. A tag publishes an image. It does not deploy |
 
 Only `__ENVIRONMENT__` and `__BUILD_VERSION__` are compiled into the bundle. Everything else is runtime configuration.
@@ -50,7 +50,7 @@ graph TD
     end
 
     subgraph remote["Remote, loaded in the browser"]
-        app2["app2 ./App\nuserLabel, onLogout"]
+        app2["app2 ./App\nSDK hooks, no props"]
     end
 
     subgraph build["Build, not imported by src/"]
@@ -284,13 +284,14 @@ sequenceDiagram
     Note over MFE: entry from /remotes/manifest.json<br/>kill switch, allowed origin, integrity, timeout, retries
     alt remoteEntry.js loads and ./App renders
         MFE-->>Boundary: component
-        Boundary->>Remote: userLabel, onLogout
+        Boundary->>Remote: render (no props)
+        Remote->>Remote: useCurrentUser(), useSignOut()
     else disabled, load fails, or render throws
         Boundary->>App: "Something went wrong." with Try again
     end
 ```
 
-`userLabel` is the user's email, then name, then `User`. `onLogout` calls the SDK's `useSignOut()` with its default, a global sign-out.
+The shell passes no props. `app2` reads the user with `useCurrentUser()` and signs out with `useSignOut()` (global by default: the Keycloak session ends too, and every tab follows), from the shell value `PlatformProvider` holds.
 
 `loadRemote` reads the entry from the manifest the bootstrap loaded, checks the kill switch (`remotes.killSwitch`, flag `remote.app2.disabled`) and the entry origin (the page's, or `remotes.allowedOrigins`), injects `remoteEntry.js` as a classic script with its `integrity`, and reads the container from `window.app2`. A remote must therefore be built with `@bcbp-solutions-fzc-llc/webpack-preset` (`role: 'remote'`, library type `var`; webpack, Rspack or Rsbuild). The share scope gives it this shell's React, OTel API and SDK; a remote built against a newer SDK than the shell's is refused at share negotiation, inside the boundary. "Try again" creates a new lazy import.
 
@@ -412,7 +413,7 @@ Use this before serving this image in an environment, or before changing `app2`.
 
 - [ ] Build with `pluginPlatform({ role: 'remote', name: 'app2', exposes: { './App': … } })` (Rsbuild), or `platformRspackConfig` / `platformWebpackConfig` with the same options. A Vite ES-module remote does not load.
 - [ ] List the entry in the manifest with `version`, `ownerDomain` and, outside local, dev and test, `integrity`.
-- [ ] Accept `userLabel?: string` and `onLogout?: () => void` on the default export of `./App`. Prefer the SDK hooks (`useCurrentUser`, `useSignOut`) for anything new.
+- [ ] Take no props from the shell. Read the user, workspace, sign-out and session context through the SDK hooks (`useCurrentUser`, `useWorkspace`, `useSignOut`, `useSessionContext`).
 - [ ] Initialise nothing. Read the shell's state through the SDK.
 - [ ] Fail by throwing if the remote cannot render. The boundary catches that.
 

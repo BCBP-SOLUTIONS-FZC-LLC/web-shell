@@ -21,7 +21,7 @@ This shell has no package for another app to import from npm. Its public contrac
 | In scope (SemVer applies) | Out of scope (may change without MAJOR) |
 |---------------------------|------------------------------------------|
 | The shell's SDK version (`@bcbp-solutions-fzc-llc/frontend-sdk`, shared as a strict singleton). A remote requires at least the SDK version it was built against | Internal file layout under `src/`, component names, CSS class names |
-| Props the shell passes into the `app2` dashboard remote: `userLabel` (string) and `onLogout` (function) | The dashboard's own UI. That remote is versioned in its own repository |
+| `app2` `./App` gets no props: the remote reads the signed-in user (`useCurrentUser`) and sign-out (`useSignOut`) from the SDK this shell provides through `PlatformProvider` (`user`, `signOut`) | The dashboard's own UI. That remote is versioned in its own repository |
 | Shared singletons from `@bcbp-solutions-fzc-llc/webpack-preset`: `react` and `react-dom` `^19.0.0`, `@opentelemetry/api` `~1.10.0`, every SDK subpath | Patch-level upgrades inside those ranges |
 | Routes `/t/<slug>/dashboard/*` (remote dashboard), the catch-all redirect to `/dashboard`, and the callback path `/auth/callback` | Copy, theme class names, the login-page feature list, and the session screens' wording |
 | `/config/runtime.json` keys the shell relies on (the SDK schema) and the `/remotes/manifest.json` format; the IAM endpoints it calls (PUB-1, P-35); build args `PLATFORM_ENVIRONMENT` and `BUILD_VERSION` | The default `public/config/runtime.json` the image ships. Each environment serves its own |
@@ -149,7 +149,7 @@ When cutting a tagged release:
    - `docker` — builds and pushes the semver-tagged `linux/amd64` image (see the tag scheme above), fails the release on unfixed CRITICAL/HIGH CVEs, writes a CycloneDX SBOM and SLSA provenance, signs with Cosign, and verifies the signature.
    - `publish` — creates the GitHub Release from the CHANGELOG section and attaches the tarball, checksums, SBOM, and provenance. It runs only after `build` and `docker` succeed.
 
-7. **Notify consumers** — whoever hosts the shell image, and the dashboard remote (`app2`) if the SDK version or the `userLabel` / `onLogout` props changed. Call out any new required runtime config key.
+7. **Notify consumers** — whoever hosts the shell image, and the dashboard remote (`app2`) if the SDK version or the `PlatformProvider` shell value (`user`, `signOut`, `workspace`, `context`) changed. Call out any new required runtime config key.
 
 ### Pre-release tags (optional)
 
