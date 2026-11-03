@@ -265,7 +265,7 @@ docker run --rm -p 18080:8080 web-shell:local
 curl -s http://localhost:18080/healthz
 ```
 
-Two stages, both digest-pinned: `node:22-bookworm` runs `npm ci` and `npm run build`; `nginxinc/nginx-unprivileged:1.27-alpine` serves `/usr/share/nginx/html` as uid 101. The CI smoke test fails the image above 200 MB and requires `/healthz`, `/` (a document that contains `id="app"`), and `/remoteEntry.js` to return 200.
+Two stages, both digest-pinned: `node:22-bookworm` runs `npm ci` and `npm run build`; `nginxinc/nginx-unprivileged:1.30-alpine` serves `/usr/share/nginx/html` as uid 101. The CI smoke test fails the image above 200 MB and requires `/healthz`, `/` (a document that contains `id="app"`), and `/remoteEntry.js` to return 200.
 
 ### Local Keycloak compose
 

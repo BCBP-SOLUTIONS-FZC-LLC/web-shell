@@ -320,7 +320,7 @@ A token HTTP error does not fall through to the next candidate. Only a thrown `f
 | Piece | Where | Role |
 |---|---|---|
 | Builder | `node:22-bookworm`, digest-pinned | `npm ci`, then `npm run build` |
-| Runtime | `nginxinc/nginx-unprivileged:1.27-alpine`, digest-pinned | Serves `/usr/share/nginx/html` as uid 101. `USER 101` because a named user fails Hadolint DL3066 |
+| Runtime | `nginxinc/nginx-unprivileged:1.30-alpine`, digest-pinned | Serves `/usr/share/nginx/html` as uid 101. `USER 101` because a named user fails Hadolint DL3066 |
 | Listen | 8080 | Same port the local Keycloak compose file publishes. Map the image to another host port when both run |
 | Health | `GET /healthz` | Body `ok` |
 | Document | `GET /` | `index.html`, `id="app"`, `Cache-Control: no-cache` |

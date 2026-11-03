@@ -21,7 +21,7 @@ ENV SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH} \
 
 RUN npm run build
 
-FROM nginxinc/nginx-unprivileged:1.27-alpine@sha256:65e3e85dbaed8ba248841d9d58a899b6197106c23cb0ff1a132b7bfe0547e4c0
+FROM nginxinc/nginx-unprivileged:1.30-alpine@sha256:f5116ed4606f3eb015dd4a8e28cb9b351476dc0ad4bc6e9f93b19cec130cdf03
 
 ARG BUILD_VERSION=dev
 ENV BUILD_VERSION=${BUILD_VERSION}
@@ -30,6 +30,13 @@ LABEL org.opencontainers.image.title="web-shell" \
       org.opencontainers.image.source="https://github.com/BCBP-SOLUTIONS-FZC-LLC/web-shell" \
       org.opencontainers.image.vendor="BCBP Solutions FZC LLC" \
       org.opencontainers.image.revision="${BUILD_VERSION}"
+
+# The pinned base still ships Alpine packages with published fixes. Upgrade
+# only those so the Trivy gate passes. Remove this step once nginxinc
+# publishes a rebuilt image that includes them.
+USER 0
+# hadolint ignore=DL3017,DL3018
+RUN apk upgrade --no-cache brotli-libs curl libcurl musl musl-utils
 
 COPY nginx/default.conf /etc/nginx/conf.d/default.conf
 # 101 is the nginx user in nginxinc/nginx-unprivileged. A name fails Hadolint DL3066.
