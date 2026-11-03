@@ -103,11 +103,11 @@ jobs:
           pull: ${{ github.event_name != 'pull_request' }}
           cache-from: ${{ steps.cache.outputs.from }}
           cache-to: ${{ steps.cache.outputs.to }}
+          secrets: |
+            npm_token=${{ secrets.GITHUB_TOKEN }}
           build-args: |
             BUILD_VERSION=${{ github.sha }}
             SOURCE_DATE_EPOCH=${{ steps.cache.outputs.SOURCE_DATE_EPOCH }}
-            VITE_KEYCLOAK_URL=${{ vars.VITE_KEYCLOAK_URL || 'http://localhost:8080' }}
-            VITE_APP2_URL=${{ vars.VITE_APP2_URL || 'http://localhost:5002' }}
 
   trivy:
     name: Trivy CVE scan
@@ -116,6 +116,7 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: read
+      packages: read
       security-events: write
       actions: read
     steps:
@@ -137,10 +138,10 @@ jobs:
           load: true
           tags: web-shell-ci-test
           cache-from: type=gha
+          secrets: |
+            npm_token=${{ secrets.GITHUB_TOKEN }}
           build-args: |
             BUILD_VERSION=${{ github.sha }}
-            VITE_KEYCLOAK_URL=${{ vars.VITE_KEYCLOAK_URL || 'http://localhost:8080' }}
-            VITE_APP2_URL=${{ vars.VITE_APP2_URL || 'http://localhost:5002' }}
 
       - name: Cache Trivy DB
         uses: actions/cache@v6.1.0
@@ -218,10 +219,10 @@ jobs:
           load: true
           tags: web-shell-ci-test
           cache-from: type=gha
+          secrets: |
+            npm_token=${{ secrets.GITHUB_TOKEN }}
           build-args: |
             BUILD_VERSION=${{ github.sha }}
-            VITE_KEYCLOAK_URL=${{ vars.VITE_KEYCLOAK_URL || 'http://localhost:8080' }}
-            VITE_APP2_URL=${{ vars.VITE_APP2_URL || 'http://localhost:5002' }}
 
       - name: Smoke tests
         run: bash .github/scripts/smoke-tests.sh
@@ -306,11 +307,11 @@ jobs:
           sbom: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          secrets: |
+            npm_token=${{ secrets.GITHUB_TOKEN }}
           build-args: |
             BUILD_VERSION=${{ github.sha }}
             SOURCE_DATE_EPOCH=${{ steps.sde.outputs.SOURCE_DATE_EPOCH }}
-            VITE_KEYCLOAK_URL=${{ vars.VITE_KEYCLOAK_URL || 'http://localhost:8080' }}
-            VITE_APP2_URL=${{ vars.VITE_APP2_URL || 'http://localhost:5002' }}
           cache-from: |
             type=gha
             type=registry,ref=${{ env.IMAGE_NAME }}:buildcache

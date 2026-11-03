@@ -1,5 +1,5 @@
 /**
- * Ensures the local dev user exists in realm "bcbp" (for existing imports that skip realm JSON).
+ * Ensures the local dev user exists in realm "tenant-bcbp" (for existing imports that skip realm JSON).
  * Usage: npm run keycloak:seed-user
  */
 import { spawnSync } from 'node:child_process'
@@ -10,7 +10,7 @@ import { envWithFullPath } from './load-docker-env.mjs'
 const projectRoot = join(dirname(fileURLToPath(import.meta.url)), '..')
 const runEnv = envWithFullPath()
 
-const REALM = 'bcbp'
+const REALM = 'tenant-bcbp'
 const DEV_EMAIL = 'balaji.selvarangam@bcbpsolutions.com'
 const DEV_USERNAME = DEV_EMAIL
 const DEV_PASSWORD = 'BS@bcbpsolutions'

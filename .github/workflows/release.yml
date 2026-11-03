@@ -66,6 +66,8 @@ jobs:
 
       - name: Prepare release bundle
         run: bash .github/scripts/prepare-release-asset.sh
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload bundle artifact
         uses: actions/upload-artifact@v7.0.2
@@ -135,11 +137,11 @@ jobs:
           sbom: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          secrets: |
+            npm_token=${{ secrets.GITHUB_TOKEN }}
           build-args: |
             BUILD_VERSION=${{ env.RELEASE_TAG }}
             SOURCE_DATE_EPOCH=${{ steps.sde.outputs.SOURCE_DATE_EPOCH }}
-            VITE_KEYCLOAK_URL=${{ vars.VITE_KEYCLOAK_URL || 'http://localhost:8080' }}
-            VITE_APP2_URL=${{ vars.VITE_APP2_URL || 'http://localhost:5002' }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 

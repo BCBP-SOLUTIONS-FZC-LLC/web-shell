@@ -1,159 +1,52 @@
-import { Component, lazy, Suspense, useEffect, useRef, useState, type ReactNode } from 'react'
+// The signed-in shell. The bootstrap renders this only with an authenticated session, so there is
+// no signed-out route here: sign-in screens are mounted by the bootstrap outside this tree.
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import {
-  getAuthenticatedUserLabel,
-  getOAuthSession,
-  hasOAuthCallbackInUrl,
-  initKeycloak,
-  isOAuthCallbackInProgress,
-  keycloakLogout,
-} from './auth/keycloak'
-import { isKeycloakConfigured } from './auth/keycloak.config'
-import LoginPage from './pages/LoginPage'
-import LoginPage1 from './pages/LoginPage1'
-import { resolveLoginVariant, type LoginVariant } from './pages/loginVariant'
+  RemoteBoundary,
+  useCurrentUser,
+  useRouteTemplate,
+  useSignOut,
+} from '@bcbp-solutions-fzc-llc/frontend-sdk/react'
 
-const DashboardApp = lazy(() => import('app2/App'))
+/** The remote that renders the dashboard, as named in /remotes/manifest.json. */
+export const DASHBOARD_REMOTE = 'app2'
 
-type DashboardBoundaryState = { failed: boolean }
-
-class DashboardBoundary extends Component<{ children: ReactNode }, DashboardBoundaryState> {
-  state: DashboardBoundaryState = { failed: false }
-
-  static getDerivedStateFromError(): DashboardBoundaryState {
-    return { failed: true }
-  }
-
-  render() {
-    if (this.state.failed) {
-      return (
-        <div className="flex min-h-dvh items-center justify-center bg-[#030d1b] px-6 text-center font-sans text-white/80">
-          Dashboard could not be loaded. Start mfe-dashboard on port 5002, then refresh this page.
-        </div>
-      )
-    }
-    return this.props.children
-  }
-}
-
-function SignedOutLogin({
-  authCallbackError,
-  onDismissAuthError,
-}: {
-  authCallbackError: string | null
-  onDismissAuthError: () => void
-}) {
-  const variant: LoginVariant = resolveLoginVariant(window.location.search)
-  const Page = variant === 'login1' ? LoginPage1 : LoginPage
-  return <Page authCallbackError={authCallbackError} onDismissAuthError={onDismissAuthError} />
-}
-
-function AuthenticatedDashboard() {
+function Loading({ children }: { children: string }) {
   return (
-    <DashboardBoundary>
-      <Suspense
-        fallback={
-          <div className="flex min-h-dvh items-center justify-center bg-[#030d1b] font-sans text-white/80">
-            Loading dashboard…
-          </div>
-        }
-      >
-        <DashboardApp userLabel={getAuthenticatedUserLabel()} onLogout={() => keycloakLogout()} />
-      </Suspense>
-    </DashboardBoundary>
+    <div className="flex min-h-dvh items-center justify-center bg-[#030d1b] font-sans text-white/80">
+      {children}
+    </div>
   )
 }
 
-export default function App() {
-  const [authReady, setAuthReady] = useState(false)
-  const [authenticated, setAuthenticated] = useState(false)
-  const [authError, setAuthError] = useState<string | null>(null)
-
-  const authBootstrapId = useRef(0)
-
-  useEffect(() => {
-    const runId = ++authBootstrapId.current
-
-    async function bootstrapAuth() {
-      if (!isKeycloakConfigured()) {
-        if (runId === authBootstrapId.current) {
-          setAuthenticated(false)
-          setAuthReady(true)
-        }
-        return
-      }
-
-      const hasSession = Boolean(getOAuthSession()?.accessToken)
-
-      if (!hasOAuthCallbackInUrl() && !hasSession && !isOAuthCallbackInProgress()) {
-        if (runId === authBootstrapId.current) {
-          setAuthenticated(false)
-          setAuthReady(true)
-        }
-        return
-      }
-
-      try {
-        const isAuthenticated = await initKeycloak()
-        const sessionOk = isAuthenticated || Boolean(getOAuthSession()?.accessToken)
-        if (runId === authBootstrapId.current) {
-          setAuthenticated(sessionOk)
-          if (sessionOk) {
-            setAuthError(null)
-          }
-        }
-      } catch (error) {
-        if (runId === authBootstrapId.current) {
-          setAuthenticated(false)
-          setAuthError(
-            error instanceof Error ? error.message : 'Failed to complete Keycloak sign-in.',
-          )
-        }
-      } finally {
-        if (runId === authBootstrapId.current) {
-          setAuthReady(true)
-        }
-      }
-    }
-
-    void bootstrapAuth()
-  }, [])
-
-  const completingSignIn =
-    !authReady && (hasOAuthCallbackInUrl() || isOAuthCallbackInProgress())
-
-  if (!authReady) {
-    return (
-      <div className="flex min-h-dvh items-center justify-center bg-[#030d1b] font-sans text-white/80">
-        {completingSignIn ? 'Completing sign-in…' : 'Loading…'}
-      </div>
-    )
-  }
-
+function Dashboard() {
+  useRouteTemplate('/t/:slug/dashboard')
+  const user = useCurrentUser()
+  const signOut = useSignOut()
   return (
-    <BrowserRouter>
+    <RemoteBoundary
+      remote={DASHBOARD_REMOTE}
+      module="./App"
+      fallback={<Loading>Loading dashboard…</Loading>}
+      props={{
+        userLabel: user?.email ?? user?.name ?? 'User',
+        // Global by default: the Keycloak session ends too, and every tab follows.
+        onLogout: () => void signOut(),
+      }}
+    />
+  )
+}
+
+/**
+ * Routes under /t/<slug>/ once the workspace has a slug (the SDK moves the URL there after
+ * sign-in, from the session context); otherwise from the site root.
+ */
+export default function App({ basename }: { basename?: string }) {
+  return (
+    <BrowserRouter {...(basename ? { basename } : {})}>
       <Routes>
-        <Route
-          path="/dashboard/*"
-          element={
-            authenticated ? (
-              <AuthenticatedDashboard />
-            ) : (
-              <SignedOutLogin authCallbackError={authError} onDismissAuthError={() => setAuthError(null)} />
-            )
-          }
-        />
-        <Route
-          path="/"
-          element={
-            authenticated ? (
-              <Navigate to="/dashboard" replace />
-            ) : (
-              <SignedOutLogin authCallbackError={authError} onDismissAuthError={() => setAuthError(null)} />
-            )
-          }
-        />
-        <Route path="*" element={<Navigate to={authenticated ? '/dashboard' : '/'} replace />} />
+        <Route path="/dashboard/*" element={<Dashboard />} />
+        <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
     </BrowserRouter>
   )

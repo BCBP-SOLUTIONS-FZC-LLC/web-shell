@@ -9,7 +9,7 @@ describe('login hero carousel', () => {
 
   it('advances on a timer and follows the slide controls', async () => {
     vi.useFakeTimers()
-    render(<LoginPage />)
+    render(<LoginPage onContinue={async () => {}} />)
 
     expect(screen.getByRole('heading', { name: /Next-Gen System/ })).toBeInTheDocument()
     expect(screen.getByText(/Access your unified workspace/)).toBeInTheDocument()
@@ -53,5 +53,35 @@ describe('login hero carousel', () => {
       await vi.advanceTimersByTimeAsync(6000)
     })
     expect(screen.getByRole('heading', { name: /Port calls/ })).toBeInTheDocument()
+  })
+
+  it('cross-fades to a slide once its image has loaded, and ignores a click on the current slide', async () => {
+    vi.useFakeTimers()
+    vi.spyOn(HTMLImageElement.prototype, 'naturalWidth', 'get').mockReturnValue(1200)
+    const { container } = render(<LoginPage onContinue={async () => {}} />)
+    const images = () => [...container.querySelectorAll('section img')]
+
+    fireEvent.click(screen.getByRole('button', { name: 'Show slide 1' }))
+    expect(screen.getByRole('heading', { name: /Next-Gen System/ })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Show slide 2' }))
+    fireEvent.load(images()[1]!)
+    fireEvent.load(images()[1]!)
+    expect(images()[1]).toHaveClass('hero-image-in')
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(900)
+    })
+    expect(images()[1]).toHaveClass('opacity-100')
+    expect(images()[0]).toHaveClass('opacity-0')
+  })
+
+  it('does not mark an image that failed to decode as loaded', () => {
+    vi.spyOn(HTMLImageElement.prototype, 'naturalWidth', 'get').mockReturnValue(0)
+    const { container } = render(<LoginPage onContinue={async () => {}} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Show slide 2' }))
+    const img = container.querySelectorAll('section img')[1]!
+    fireEvent.load(img)
+    expect(img).not.toHaveClass('hero-image-in')
   })
 })

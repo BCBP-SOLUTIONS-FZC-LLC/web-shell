@@ -5,21 +5,26 @@ FROM node:26-bookworm@sha256:fa52d1669505e29b58c042875b1d65c229e0787a3610fd52869
 
 WORKDIR /app
 
-COPY package.json package-lock.json ./
-RUN npm ci --no-audit --no-fund
+COPY package.json package-lock.json .npmrc ./
+# The @bcbp-solutions-fzc-llc packages come from GitHub Packages. The token is a BuildKit secret
+# (docker build --secret id=npm_token,env=NODE_AUTH_TOKEN), so it never lands in a layer.
+RUN --mount=type=secret,id=npm_token,required=true \
+    NODE_AUTH_TOKEN="$(cat /run/secrets/npm_token)" npm ci --no-audit --no-fund
 
 COPY . .
 
 ARG BUILD_VERSION=dev
 ARG SOURCE_DATE_EPOCH=0
-ARG VITE_KEYCLOAK_URL=http://localhost:8080
-ARG VITE_APP2_URL=http://localhost:5002
+# Identity environment passed to initializeCore. Everything else is read at run time from
+# /config/runtime.json, which each environment serves.
+ARG PLATFORM_ENVIRONMENT=prod
 
 ENV SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH} \
-    VITE_KEYCLOAK_URL=${VITE_KEYCLOAK_URL} \
-    VITE_APP2_URL=${VITE_APP2_URL}
+    BUILD_VERSION=${BUILD_VERSION} \
+    PLATFORM_ENVIRONMENT=${PLATFORM_ENVIRONMENT}
 
-RUN npm run build
+# Hidden source maps are uploaded privately, never served.
+RUN npm run build && find dist -name '*.map' -delete
 
 FROM nginxinc/nginx-unprivileged:1.31-alpine@sha256:b5047b9b76845eac124358373c6852377c52e4b05834a47647e955dd91cb8f1e
 

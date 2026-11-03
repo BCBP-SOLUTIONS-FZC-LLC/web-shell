@@ -11,8 +11,9 @@ name: Changelog check
       - 'package-lock.json'
       - 'Dockerfile'
       - 'nginx/**'
-      - 'vite.config.ts'
-      - 'module-federation.config.ts'
+      - 'rsbuild.config.ts'
+      - 'config/**'
+      - 'public/config/**'
       - 'index.html'
 
 permissions:

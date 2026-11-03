@@ -1,27 +1,34 @@
 graph TD
     subgraph entry["Entry"]
-        main["main.tsx\ncapture OAuth callback, then createRoot #app"]
+        index["index.ts\nasync boundary, unavailable message"]
+        boot["bootstrap.tsx\nSDK start-up sequence, session handling, render"]
     end
 
     subgraph ui["UI"]
-        app["App.tsx\nauth bootstrap, routes, dashboard boundary"]
-        login["LoginPage.tsx\nemail form, Keycloak reachability, remember-me"]
+        app["App.tsx\nsigned-in routes, dashboard RemoteBoundary"]
+        screens["platform/SessionScreens.tsx\nemail sign-in, signed out, session ended"]
+        login["pages/LoginPage*.tsx\nemail form, remember email"]
         logo["BrandLogo.tsx"]
     end
 
-    subgraph auth["Auth"]
-        facade["auth/keycloak.ts\ninit, redirect, logout, session label"]
-        pkce["auth/oauth-pkce.ts\nPKCE, token exchange, sessionStorage"]
-        config["auth/keycloak.config.ts\nVITE_* snapshot at module load"]
+    subgraph ports["Platform ports"]
+        iam["platform/iam.ts\nPUB-1 resolver, P-35 session context"]
+        consent["platform/consent.ts\nconsent stand-in"]
+        perms["platform/permissions.ts\nrole → UI permissions"]
+        screen["platform/screen.tsx\nfull-screen host"]
+    end
+
+    subgraph sdk["@bcbp-solutions-fzc-llc/frontend-sdk, shared with remotes"]
+        sdkmods["/core /config /auth /http /authz /flags\n/tracing /logging /metrics /i18n /mfe /security /react"]
     end
 
     subgraph remote["Remote, loaded in the browser"]
-        app2["app2/App\nuserLabel, onLogout"]
+        app2["app2 ./App\nuserLabel, onLogout"]
     end
 
     subgraph build["Build, not imported by src/"]
-        vite["vite.config.ts\nport 5001, /__kc proxy, remote URL"]
-        mf["module-federation.config.ts\nname, expose, shared versions"]
+        rsbuild["rsbuild.config.ts\nplatform plugin, React, Tailwind"]
+        devplat["config/dev-platform.mjs\nruntime.json, manifest, IAM stubs"]
     end
 
     subgraph image["Image"]
@@ -29,17 +36,20 @@ graph TD
         docker["Dockerfile\nNode 26 builder, nginx runtime"]
     end
 
-    main --> pkce
-    main --> app
-    app --> facade
-    app --> config
-    app --> login
-    app --> app2
-    login --> facade
-    login --> pkce
-    login --> config
+    index --> boot
+    boot --> app
+    boot --> screens
+    boot --> iam
+    boot --> consent
+    boot --> perms
+    boot --> screen
+    boot --> sdkmods
+    screens --> login
+    screens --> iam
+    screens --> screen
     login --> logo
-    facade --> pkce
-    pkce --> config
-    vite --> mf
+    app --> sdkmods
+    app --> app2
+    iam --> sdkmods
+    rsbuild --> devplat
     docker --> nginx

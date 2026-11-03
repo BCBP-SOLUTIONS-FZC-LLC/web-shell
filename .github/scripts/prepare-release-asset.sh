@@ -7,7 +7,9 @@ set -euo pipefail
 
 echo "Building web-shell static bundle for ${RELEASE_TAG}"
 npm ci --no-audit --no-fund
-npm run build
+BUILD_VERSION="${RELEASE_TAG}" npm run build
+# Hidden source maps are uploaded privately, never shipped with the bundle.
+find dist -name '*.map' -delete
 
 ASSET_NAME="web-shell_${RELEASE_TAG}_dist.tar.gz"
 tar -C dist -czf "${ASSET_NAME}" .

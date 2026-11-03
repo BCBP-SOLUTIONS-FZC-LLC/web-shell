@@ -1,25 +1,37 @@
 sequenceDiagram
     participant Browser
-    participant Main as main.tsx
-    participant App as App.tsx
-    participant Config as keycloak.config
-    participant Facade as keycloak.ts
-    participant PKCE as oauth-pkce.ts
+    participant Index as index.ts
+    participant Boot as bootstrap.tsx
+    participant SDK as frontend-sdk
+    participant IAM as /api (IAM)
+    participant Screens as SessionScreens
 
-    Browser->>Main: load document
-    Main->>PKCE: captureOAuthCallbackFromUrl()
-    Note over PKCE: If code or error is present, keep the first snapshot
-    Main->>App: render
-
-    App->>App: runId = ++authBootstrapId
-    App->>Config: isKeycloakConfigured()
-    alt URL, realm, or client id empty
-        App->>App: signed out, authReady
-    else no callback, no session, exchange not in flight
-        App->>App: signed out, authReady
-    else callback, session, or exchange in flight
-        App->>Facade: initKeycloak()
-        Facade->>PKCE: existing session, or completeOAuthCallbackFromUrl()
-        PKCE-->>App: session has accessToken, or throw
-        Note over App: Apply setState only when runId is still current
+    Browser->>Index: load document
+    Index->>Boot: import('./bootstrap'), bootstrap()
+    Boot->>SDK: installTrustedTypesPolicy, initializeCore
+    Boot->>SDK: loadRuntimeConfig (/config/runtime.json)
+    Note over Boot,SDK: a failure so far shows "The app is unavailable right now."
+    Boot->>SDK: consent, tracing, logging, metrics, error handlers, web vitals
+    Boot->>SDK: createOidcProvider, initializeAuth, setTokenSource
+    Boot->>SDK: idp.init()
+    alt anonymous
+        alt signed-out
+            Boot->>Screens: showSignedOut (wait for a click)
+        else device-clock
+            Boot->>Screens: showDeviceClock (wait for a click)
+        else none or login-required
+            Boot->>SDK: workspace from the failed attempt, or chooseWorkspace
+            opt no known workspace
+                Boot->>Screens: askForWorkspace (email → PUB-1)
+            end
+            Boot->>SDK: idp.login(workspace, loginHint)
+        end
+    else authenticated, wrong workspace
+        Boot->>Screens: showWrongWorkspace (app never renders)
+    else authenticated
+        Boot->>SDK: idp.subscribe (expired, signed out)
+        Boot->>IAM: GET /v1/me/session-context
+        Boot->>SDK: authorizer, subject, flags, rememberWorkspace (/t/slug/)
+        Boot->>SDK: initializeI18n, loadManifest, startVersionPolling
+        Boot->>Browser: render App inside PlatformProvider
     end

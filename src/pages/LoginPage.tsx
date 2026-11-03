@@ -1,13 +1,5 @@
-import { useEffect, useState, type FormEvent } from 'react'
-import {
-  getRememberedEmail,
-  hasOAuthCallbackInUrl,
-  persistRememberEmail,
-  redirectToKeycloakLogin,
-  stripOAuthParamsFromUrl,
-} from '../auth/keycloak'
-import { isKeycloakServerReachable } from '../auth/oauth-pkce'
-import { isKeycloakConfigured, keycloakConfig } from '../auth/keycloak.config'
+import { useEffect, useState } from 'react'
+import { useEmailSignIn, type LoginPageProps } from './useEmailSignIn'
 import { BrandLogo } from '../components/BrandLogo'
 
 const FEATURES = [
@@ -66,20 +58,9 @@ const SLIDES = [
 
 const SLIDE_MS = 6000
 
-type LoginPageProps = {
-  authCallbackError?: string | null
-  onDismissAuthError?: () => void
-}
-
-export default function LoginPage({
-  authCallbackError = null,
-  onDismissAuthError,
-}: LoginPageProps) {
-  const [email, setEmail] = useState('')
-  const [remember, setRemember] = useState(false)
-  const [submitting, setSubmitting] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [keycloakOnline, setKeycloakOnline] = useState<boolean | null>(null)
+export default function LoginPage({ onContinue, notice = null }: LoginPageProps) {
+  const { email, setEmail, remember, setRemember, submitting, error, handleSubmit } =
+    useEmailSignIn(onContinue)
   const [slide, setSlide] = useState(0)
   const [settledSlide, setSettledSlide] = useState(0)
   const [loadedSlides, setLoadedSlides] = useState<ReadonlySet<number>>(() => new Set())
@@ -100,48 +81,6 @@ export default function LoginPage({
     const timer = window.setTimeout(() => setSettledSlide(slide), 900)
     return () => window.clearTimeout(timer)
   }, [slide, loadedSlides, settledSlide])
-
-  useEffect(() => {
-    if (!isKeycloakConfigured()) {
-      setKeycloakOnline(false)
-      return
-    }
-
-    let cancelled = false
-
-    function refreshKeycloakStatus() {
-      isKeycloakServerReachable().then((online) => {
-        if (!cancelled) {
-          setKeycloakOnline(online)
-        }
-      })
-    }
-
-    refreshKeycloakStatus()
-    const interval = window.setInterval(refreshKeycloakStatus, 12_000)
-    const onFocus = () => refreshKeycloakStatus()
-    window.addEventListener('focus', onFocus)
-
-    return () => {
-      cancelled = true
-      window.clearInterval(interval)
-      window.removeEventListener('focus', onFocus)
-    }
-  }, [])
-
-  useEffect(() => {
-    const remembered = getRememberedEmail()
-    if (remembered) {
-      setEmail(remembered)
-      setRemember(true)
-    }
-  }, [])
-
-  useEffect(() => {
-    if (authCallbackError && !hasOAuthCallbackInUrl()) {
-      stripOAuthParamsFromUrl()
-    }
-  }, [authCallbackError])
 
   useEffect(() => {
     if (slidePaused) {
@@ -168,26 +107,6 @@ export default function LoginPage({
 
   const activeSlide = SLIDES[slide]!
   const heroShift = slideDirection === 1 ? '4%' : '-4%'
-
-  async function handleSubmit(e: FormEvent) {
-    e.preventDefault()
-    setError(null)
-    onDismissAuthError?.()
-
-    if (!isKeycloakConfigured()) {
-      setError('Keycloak is not configured. Add VITE_KEYCLOAK_* variables (see .env.example).')
-      return
-    }
-
-    setSubmitting(true)
-    try {
-      persistRememberEmail(email, remember)
-      await redirectToKeycloakLogin(email)
-    } catch (err) {
-      setSubmitting(false)
-      setError(err instanceof Error ? err.message : 'Unable to start sign-in.')
-    }
-  }
 
   return (
     <div className="flex min-h-dvh flex-col bg-[#061018] font-sans lg:flex-row">
@@ -314,50 +233,14 @@ export default function LoginPage({
           <h2 className="m-0 text-lg font-semibold text-[#1a1a2e]">Login to your account</h2>
 
           <form className="mt-8" onSubmit={handleSubmit}>
-            {isKeycloakConfigured() ? (
-              <p
-                className={`mb-4 rounded-md border px-3 py-2 text-xs ${
-                  keycloakOnline === true
-                    ? 'border-green-200 bg-green-50 text-green-800'
-                    : keycloakOnline === false
-                      ? 'border-amber-200 bg-amber-50 text-amber-900'
-                      : 'border-gray-200 bg-gray-50 text-gray-600'
-                }`}
-              >
-                {keycloakOnline === null && 'Checking Keycloak…'}
-                {keycloakOnline === true &&
-                  `Keycloak ready (realm ${keycloakConfig.realm}). Sign in with your realm account on the next screen.`}
-                {keycloakOnline === false && (
-                  <>
-                    Keycloak is not responding on port 8080. With Docker Desktop running, run{' '}
-                    <code className="text-[0.65rem]">npm run keycloak:setup</code>, wait until it
-                    reports ready (1–2 minutes after a fresh start), then refresh this page.
-                  </>
-                )}
-              </p>
-            ) : null}
-            {authCallbackError ? (
+            {notice ? (
               <p className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
-                {authCallbackError}
+                {notice}
               </p>
             ) : null}
             {error ? (
               <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
                 <p>{error}</p>
-                {error.includes('Cannot reach Keycloak') ? (
-                  <ol className="mt-2 list-decimal space-y-1 pl-4">
-                    <li>Open Docker Desktop and wait until the engine is running.</li>
-                    <li>
-                      In <code className="text-[0.65rem]">app1</code>, run{' '}
-                      <code className="text-[0.65rem]">npm run keycloak:dev:detach</code>.
-                    </li>
-                    <li>
-                      Open <code className="text-[0.65rem]">http://localhost:8080</code> (wait 1–2 min on
-                      first start), refresh <code className="text-[0.65rem]">http://localhost:5001</code>,
-                      then retry.
-                    </li>
-                  </ol>
-                ) : null}
               </div>
             ) : null}
             <label className="mb-5 block">

@@ -43,9 +43,9 @@ git push origin vX.Y.Z
 
 ## Build args on the tagged image
 
-`release.yml` passes `VITE_KEYCLOAK_URL` and `VITE_APP2_URL` from repository variables. Unset variables become `http://localhost:8080` and `http://localhost:5002`.
+`release.yml` passes `BUILD_VERSION` (the tag) and `SOURCE_DATE_EPOCH`, and the registry token as the BuildKit secret `npm_token`. `PLATFORM_ENVIRONMENT` keeps its default, `prod`.
 
-`VITE_KEYCLOAK_REALM`, `VITE_KEYCLOAK_CLIENT_ID`, and `VITE_KEYCLOAK_REDIRECT_URI` are not build args. `.dockerignore` excludes `.env`. A tag built that way serves the shell and leaves sign-in unconfigured. Set those three in the build environment before treating the image as a production shell. The gap is recorded in [CHANGELOG.md](../CHANGELOG.md).
+The tagged image is the same for every environment. It ships `public/config/runtime.json` (SDK defaults) and an empty `/remotes/manifest.json`. Each environment serves its own `/config/runtime.json` and `/remotes/manifest.json` over those paths; nothing about Keycloak, the API or the remotes is baked in at build time.
 
 ## What to leave alone
 

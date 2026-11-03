@@ -1,0 +1,18 @@
+{
+  "api": { "baseUrl": "/api", "timeoutMs": 35000, "propagationAllowlist": [] },
+  "telemetry": { "otlpBaseUrl": "/otel", "sampleRatio": 1, "logLevel": "debug", "sendSessionHeader": true },
+  "auth": {
+    "idpOrigin": "http://localhost:8080",
+    "trialRealm": "trial",
+    "paidRealmPrefix": "tenant-",
+    "workspacePathPrefix": "/t/",
+    "clientId": "app1",
+    "scopes": ["openid"],
+    "idleTimeoutMs": 1800000,
+    "redirectPath": "/auth/callback"
+  },
+  "flags": {},
+  "remotes": { "killSwitch": [], "loadTimeoutMs": 10000, "retries": 1, "allowedOrigins": ["http://localhost:5002"] },
+  "i18n": { "defaultLocale": "en", "supportedLocales": ["en"] },
+  "appUpdate": { "pollIntervalMs": 300000 }
+}

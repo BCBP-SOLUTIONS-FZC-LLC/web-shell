@@ -15,7 +15,8 @@ Provide a clear description of the changes.
 ---
 
 ## Testing
-- [ ] `npm run test:ci` passes (unit, integration, e2e, coverage ≥ 95%)
+- [ ] `npm run lint` and `npm run typecheck` pass
+- [ ] `npm run test:ci` passes (unit, integration, coverage ≥ 95%)
 - [ ] `npm run build` passes (typecheck and production bundle)
 - [ ] Manual testing performed (login, remote load, navigation)
 
@@ -29,8 +30,8 @@ Provide a clear description of the changes.
 - [ ] `CHANGELOG.md` updated under `Unreleased` when this PR changes `src/`, dependencies, the Dockerfile, or nginx config
 
 ### Shell contract
-- [ ] Module Federation exposes and shared dependency versions still match consumers (`module-federation.config.ts`)
-- [ ] New `VITE_*` variables documented and given a Dockerfile `ARG` default when the image build needs them
+- [ ] Remotes still load against the shell's SDK version (all three `@bcbp-solutions-fzc-llc/*` packages on one version)
+- [ ] New runtime config keys added to `public/config/runtime.json` and `config/runtime.local.json`, and documented
 
 ### Security
 - [ ] No tokens written to `localStorage` beyond the existing auth flow
@@ -44,4 +45,4 @@ Closes #<issue-id>
 ---
 
 ## Deployment Notes
-Mention anything operators need when upgrading (new `VITE_*` build args, remote URL changes, nginx path changes).
+Mention anything operators need when upgrading (new runtime config keys, SDK version bumps, remote manifest changes, nginx path changes).
