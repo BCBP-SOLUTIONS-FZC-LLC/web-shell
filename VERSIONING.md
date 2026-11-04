@@ -164,7 +164,7 @@ Both match the `v[0-9]*.[0-9]*.[0-9]*-*` tag trigger and produce a signed, scann
 
 | web-shell | Node | React | Platform SDK | Dashboard remote |
 |-----------|------|-------|--------------|------------------|
-| Unreleased (`main`) | 26 (image builder `node:26-bookworm`, CI `node-version: 26`) | `^19.0.0` (strict singleton, from the preset) | `@bcbp-solutions-fzc-llc/*` `1.0.0-alpha.2`, all three on one version | From `/remotes/manifest.json`. Must be built with `webpack-preset` against an SDK no newer than the shell's. Not versioned in this repo |
+| Unreleased (`main`) | 26 (image builder `node:26-bookworm`, CI `node-version: 26`) | `^19.0.0` (strict singleton, from the preset) | `@bcbp-solutions-fzc-llc/*` `1.0.0-alpha.3`, all three on one version | From `/remotes/manifest.json`. Must be built with `webpack-preset` against an SDK no newer than the shell's. Not versioned in this repo |
 
 Keycloak itself is not a library dependency of the image. The shell talks to the `auth.idpOrigin` and `auth.clientId` in `/config/runtime.json`, and to the realm PUB-1 resolves for the workspace. The runtime image is nginx and the static files.
 
