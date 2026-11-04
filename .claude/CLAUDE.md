@@ -8,7 +8,7 @@ A **private Rsbuild application** (npm name `app1`, `"private": true`, `0.0.0`) 
 
 Node 26, TypeScript `~6.0.3` (typescript-eslint has no TS 7 support), React 19.3, Rsbuild 2 (Rspack), Tailwind 4 + daisyUI. Platform packages from **GitHub Packages** (`.npmrc`, `NODE_AUTH_TOKEN` with `read:packages`): `@bcbp-solutions-fzc-llc/frontend-sdk`, `webpack-preset`, `eslint-plugin`, all **`1.0.0-alpha.3`, pinned exactly, on one version**.
 
-**Status:** never tagged or deployed; everything is `[Unreleased]` in `CHANGELOG.md`. Open items: [LLD §15](../docs/lld/web-shell-lld.md#15-open-items) (Google Fonts vs the platform CSP, no real-browser suite, consent stand-in, unused SDK app-update/navigator/i18n-detect).
+**Status:** never tagged or deployed; everything is `[Unreleased]` in `CHANGELOG.md`. Open items: [LLD §15](../docs/lld/web-shell-lld.md#15-open-items) (official legal/help URLs for `src/pages/links.ts`, no real-browser suite, unused SDK navigator/i18n-detect). v1 decisions: essential-only consent; fonts self-hosted; Forgot password → Keycloak reset.
 
 **The shell owns:** `src/bootstrap.tsx` (SDK order, session branches, render), `src/App.tsx` (routes under `/t/<slug>/`, `RemoteBoundary` for `app2` `./App`), `src/platform/` (PUB-1 and P-35 ports, role map, consent stand-in, session screens and their host), `src/pages/` (login layouts, remember-email), `rsbuild.config.ts`, `config/dev-platform.mjs` (dev stand-ins), `nginx/default.conf`, `Dockerfile`.
 
@@ -23,7 +23,7 @@ npm run dev               # :5001 with config/dev-platform.mjs stand-ins (Keyclo
 npm run lint              # ESLint + platform rules (CI: --max-warnings 0)
 npm run typecheck         # tsc over src/ and test/
 npm test                  # Vitest: unit, integration, e2e
-npm run test:ci           # + coverage gate 95% (100% today, 105 tests)
+npm run test:ci           # + coverage gate 95% (100% today, 120 tests)
 npm run build             # tsc + rsbuild build
 npm run test-smoke        # needs SMOKE_BASE_URL (test/smoke/README.md)
 ```
@@ -42,7 +42,8 @@ Run one test: `npx vitest run test/e2e/shell.test.tsx -t "sign-out"`. Full list:
 - **No login without a click** after a logout, a device-clock refusal or an expiry. The app is **unmounted** before "You are signed out". A wrong-workspace login never renders.
 - **Remotes get no props.** Data a remote needs goes into the `PlatformProvider` shell value and is read through SDK hooks.
 - **Role map keys are IAM's closed set** (`member`, `tenant_owner`, `tenant_admin`, `tender_admin`); department levels are never roles. UI hints only.
-- **CSP-safe:** no inline script or style (`inlineScripts`/`inlineStyles: false`), no `eval`, no runtime CSS-in-JS. Never add a third-party origin to `index.html`.
+- **CSP-safe:** no inline script or style (`inlineScripts`/`inlineStyles: false`), no `eval`, no runtime CSS-in-JS. Never add a third-party origin to `index.html`; fonts are self-hosted (`@fontsource-variable/*`).
+- **No dead or invented links.** Help and legal URLs live only in `src/pages/links.ts` and render only when set; never guess an official URL.
 - **nginx SPA rule:** only extension-less paths get `index.html`; `/api`, `/otel`, `/csp-report`, `/config`, `/remotes`, `/assets` and any missing file with an extension stay 404. Unhashed files are `no-cache`, `/assets/` immutable. Change `test/smoke/deployment.test.ts` with it.
 - **SDK upgrades:** all three packages together, exact pins, **shell before remotes** (a remote must not be built against a newer SDK than the shell's). Add a CHANGELOG entry.
 - **Registry token never in an image layer** (BuildKit secret `npm_token`). Dockerfile `FROM` lines stay digest-pinned.

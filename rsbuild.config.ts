@@ -46,8 +46,9 @@ export default defineConfig(({ envMode }) => {
       inlineScripts: false,
       inlineStyles: false,
     },
-    // Root-relative url()s in the CSS point at files in public/; leave them as written.
-    tools: { cssLoader: { url: false } },
+    // Root-relative url()s in the CSS point at files in public/; leave them as written. Relative ones
+    // (the self-hosted fonts' woff2 files) are bundled into /assets/ with a hash.
+    tools: { cssLoader: { url: { filter: (url: string) => !url.startsWith('/') } } },
     server: {
       port: 5001,
       strictPort: true,

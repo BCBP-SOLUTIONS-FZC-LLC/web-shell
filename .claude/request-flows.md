@@ -20,6 +20,10 @@ Condensed from the [LLD](../docs/lld/web-shell-lld.md) §5–§6. Step numbers r
 
 The SDK builds the authorize URL (`{idpOrigin}/realms/{realm}/protocol/openid-connect/auth`, S256, `state`, `nonce`, `login_hint`), adds `prompt=login` after a sign-out, and defaults `returnUrl` to the current page. The shell passes neither.
 
+## Forgot password
+
+Typed email → PUB-1 (generic message on failure) → `location.assign({idpOrigin}/realms/{realm}/login-actions/reset-credentials?client_id={clientId})`. No sign-in starts. Empty email → "Enter your work email first…".
+
 ## Callback and restore
 
 `{origin}/auth/callback?code&state&iss` → SDK checks `iss` and `state`, exchanges the code with the verifier, keeps tokens in memory, moves the URL to the page the user opened. A reload may do one `prompt=none` round trip; failure is `login-required` with the workspace.
@@ -30,6 +34,7 @@ The SDK builds the authorize URL (`{idpOrigin}/realms/{realm}/protocol/openid-co
 |---|---|
 | `expired` | "Session ended" over the app (text: `serverEnded`, `idle`, other); Sign in → `signInAgain` with the email screen as `ask` |
 | `anonymous` / `signed-out` (here or another tab) | Unmount `#app`, then "You are signed out"; Sign in → `idp.login({ workspace })` |
+| New `/version.json` | "A new version is available." with Reload (`useAppUpdate`); never forced |
 | `switchWorkspace(id)` | PUB-1 → not found: "Workspace not found"; else `idp.switchWorkspace` |
 | Remote `useSignOut()` | `idp.logout()`; global by default: end-session redirect, then `/` shows the signed-out dialog |
 

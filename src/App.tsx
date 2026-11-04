@@ -1,7 +1,12 @@
 // The signed-in shell. The bootstrap renders this only with an authenticated session, so there is
 // no signed-out route here: sign-in screens are mounted by the bootstrap outside this tree.
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
-import { RemoteBoundary, useRouteTemplate, useSessionContext } from '@bcbp-solutions-fzc-llc/frontend-sdk/react'
+import {
+  RemoteBoundary,
+  useAppUpdate,
+  useRouteTemplate,
+  useSessionContext,
+} from '@bcbp-solutions-fzc-llc/frontend-sdk/react'
 
 /** The remote that renders the dashboard, as named in /remotes/manifest.json. */
 export const DASHBOARD_REMOTE = 'app2'
@@ -46,6 +51,30 @@ function ContextUnavailable() {
 }
 
 /**
+ * A newer deployment is live (the bootstrap's startVersionPolling found a new /version.json). Offer
+ * the reload instead of forcing it: the user may be mid-task in the remote.
+ */
+function UpdateAvailable() {
+  const update = useAppUpdate()
+  if (!update.available) return null
+  return (
+    <div
+      role="status"
+      className="fixed inset-x-0 top-0 z-40 flex flex-wrap items-center justify-center gap-3 bg-[#1a1030] px-4 py-2 text-center font-sans text-sm text-white shadow"
+    >
+      <span>A new version is available.</span>
+      <button
+        type="button"
+        onClick={() => update.reload()}
+        className="cursor-pointer rounded border border-white/30 bg-white px-3 py-1 font-medium text-[#1a1030]"
+      >
+        Reload
+      </button>
+    </div>
+  )
+}
+
+/**
  * Routes under /t/<slug>/ once the workspace has a slug (the SDK moves the URL there after
  * sign-in, from the session context); otherwise from the site root.
  */
@@ -53,6 +82,7 @@ export default function App({ basename }: { basename?: string }) {
   const context = useSessionContext()
   return (
     <BrowserRouter {...(basename ? { basename } : {})}>
+      <UpdateAvailable />
       {context ? null : <ContextUnavailable />}
       <Routes>
         <Route path="/dashboard/*" element={<Dashboard />} />

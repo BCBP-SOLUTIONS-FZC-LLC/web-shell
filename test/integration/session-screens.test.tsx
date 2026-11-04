@@ -6,6 +6,9 @@ import type { IdentityProvider, Workspace } from '@bcbp-solutions-fzc-llc/fronte
 const resolve = vi.fn<(identifier: string) => Promise<Workspace | undefined>>()
 vi.mock('../../src/platform/iam', () => ({ workspaceResolver: { resolve: (i: string) => resolve(i) } }))
 
+vi.mock('../../src/platform/passwordReset', () => ({
+  passwordResetUrl: (w: Workspace) => `https://idp.test/realms/${w.realm}/login-actions/reset-credentials`,
+}))
 const screens = await import('../../src/platform/SessionScreens')
 const { resetScreen } = await import('../../src/platform/screen')
 
@@ -44,10 +47,32 @@ describe('askForWorkspace', () => {
     expect(screen.getAllByRole('alert').map((e) => e.textContent)).toEqual(['Your session has ended.', screens.WORKSPACE_NOT_FOUND])
   })
 
+  it("Forgot your password? resolves the email and goes to that realm's reset page", async () => {
+    const assign = vi.mocked(window.location.assign)
+    resolve.mockResolvedValueOnce(acme).mockResolvedValueOnce(undefined)
+    void screens.askForWorkspace()
+    const user = userEvent.setup()
+    await user.type(await screen.findByRole('textbox', { name: /work email address/i }), 'ada@acme.com')
+    await user.click(screen.getByRole('button', { name: 'Forgot your password?' }))
+    await waitFor(() => expect(assign).toHaveBeenCalledWith('https://idp.test/realms/tenant-acme/login-actions/reset-credentials'))
+    expect(resolve).toHaveBeenCalledWith('ada@acme.com')
+  })
+
+  it('Forgot your password? for an unknown email shows the generic message and stays', async () => {
+    const assign = vi.mocked(window.location.assign)
+    resolve.mockResolvedValueOnce(undefined)
+    void screens.askForWorkspace()
+    const user = userEvent.setup()
+    await user.type(await screen.findByRole('textbox', { name: /work email address/i }), 'nobody@else.com')
+    await user.click(screen.getByRole('button', { name: 'Forgot your password?' }))
+    expect(await screen.findByText(screens.WORKSPACE_NOT_FOUND)).toBeInTheDocument()
+    expect(assign).not.toHaveBeenCalled()
+  })
+
   it('uses the previous layout for ?variant=login1', async () => {
     window.history.replaceState({}, '', '/?variant=login1')
     void screens.askForWorkspace()
-    expect(await screen.findByText(/Trouble logging in\?/)).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Login to your account' })).toBeInTheDocument()
     expect(screen.queryByRole('region', { name: 'Product highlights' })).not.toBeInTheDocument()
   })
 })

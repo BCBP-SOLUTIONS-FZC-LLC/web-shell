@@ -11,6 +11,8 @@ graph LR
     hook(["pages/useEmailSignIn.ts"])
     remember(["pages/rememberEmail.ts"])
     variant(["pages/loginVariant.ts"])
+    links(["pages/links.ts\npages/PageLinks.tsx"])
+    reset(["platform/passwordReset.ts"])
     logo(["BrandLogo.tsx"])
     sdk(["frontend-sdk subpaths"])
 
@@ -28,8 +30,11 @@ graph LR
     screens --> variant
     screens --> iam
     screens --> screen
+    screens --> reset
+    reset --> sdk
     login --> hook
     login --> logo
+    login --> links
     hook --> remember
     iam --> sdk
     consent --> sdk

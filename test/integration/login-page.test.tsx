@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import LoginLatest from '../../src/pages/LoginPage'
 import LoginPrevious from '../../src/pages/LoginPage1'
+import { EMAIL_FIRST } from '../../src/pages/useEmailSignIn'
 
 const pages = [
   ['latest', LoginLatest],
@@ -81,5 +82,37 @@ describe.each(pages)('login page %s', (_name, LoginPage) => {
     await user.type(emailBox(), 'ada@bcbp.com')
     await user.click(submit())
     expect(await screen.findByText('Unable to start sign-in.')).toBeInTheDocument()
+  })
+
+  it('has no dead links: no Forgot without a handler, and no help or legal link without a URL', () => {
+    const { container } = render(<LoginPage onContinue={vi.fn()} />)
+    expect(screen.queryByRole('button', { name: 'Forgot your password?' })).toBeNull()
+    expect(screen.queryByText('Trouble logging in?')).toBeNull()
+    expect(container.querySelector('footer')).toBeNull()
+    expect(container.querySelector('a[href^="#"]')).toBeNull()
+  })
+
+  it('Forgot your password? asks for the email first', async () => {
+    const onForgotPassword = vi.fn(async () => {})
+    render(<LoginPage onContinue={vi.fn()} onForgotPassword={onForgotPassword} />)
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Forgot your password?' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent(EMAIL_FIRST)
+    expect(onForgotPassword).not.toHaveBeenCalled()
+  })
+
+  it('Forgot your password? continues with the typed email, and shows why it failed', async () => {
+    const user = userEvent.setup()
+    const onForgotPassword = vi
+      .fn<(email: string) => Promise<void>>()
+      .mockRejectedValueOnce(new Error('We could not find a workspace for that email.'))
+      .mockRejectedValueOnce('nope')
+    render(<LoginPage onContinue={vi.fn()} onForgotPassword={onForgotPassword} />)
+    await user.type(emailBox(), ' ada@bcbp.com ')
+    await user.click(screen.getByRole('button', { name: 'Forgot your password?' }))
+    expect(onForgotPassword).toHaveBeenCalledWith('ada@bcbp.com')
+    expect(await screen.findByText('We could not find a workspace for that email.')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Forgot your password?' })).toBeEnabled())
+    await user.click(screen.getByRole('button', { name: 'Forgot your password?' }))
+    expect(await screen.findByText('Unable to start the password reset.')).toBeInTheDocument()
   })
 })

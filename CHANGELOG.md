@@ -42,6 +42,13 @@ Pull requests that change the shell, its dependencies, or the image add an entry
 
 ### Changed
 
+- **Launch decisions applied (`2026-11-04`).**
+  - Fonts are self-hosted: Geist and Inter from Fontsource (`@fontsource-variable/geist`, `@fontsource-variable/inter` 5.3.0, SIL OFL 1.1), bundled into `/assets/` with hashed names. `index.html` no longer loads `fonts.googleapis.com`, so the platform CSP (`font-src 'self'; style-src 'self'`) holds. `rsbuild.config.ts` now bundles relative CSS `url()`s and keeps root-relative ones as written. Tailwind's `sans` is `Geist Variable`, `Inter Variable`, system fonts.
+  - "Forgot your password?" is a button: it resolves the typed email through PUB-1 and opens Keycloak's reset page for that realm (`{idpOrigin}/realms/{realm}/login-actions/reset-credentials?client_id={clientId}`, `src/platform/passwordReset.ts`). Without an email it asks for one; an unknown email shows the generic message.
+  - Help and legal links (`src/pages/links.ts`, `PageLinks.tsx`) render only when their URL is set. No official Privacy, Terms, Trust & Security or Help page exists on bcbpsolutions.com yet, so none is shown; the dead `#…` anchors are gone.
+  - Consent for v1 is essential only, by decision (no analytics consent manager): `src/platform/consent.ts` documents it.
+  - "A new version is available." with Reload appears when the SDK's `useAppUpdate()` reports a newer `/version.json`.
+
 - **Production-readiness fixes (`2026-11-04`).**
   - Login page weight: the carousel photos are resized to 1600 px (JPEG q45, 160–380 KB each; `public/image/` 15 MB → 2.5 MB), and the carousel sets `src` only on the current slide, the next one, and slides already loaded, so a first visit fetches two photos instead of nine. Unused `building.jpg` and three `logo-*.png` files are removed.
   - nginx: gzip for text responses, `server_tokens off`, and baseline headers on every response (`X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `X-Frame-Options: DENY`, `Cross-Origin-Opener-Policy: same-origin`, `Permissions-Policy`), kept in every location by `add_header_inherit merge`. Dotfile paths (`/.git/…`, `/.env`) are 404 instead of `index.html`. CloudFront's CSP and HSTS stay the source of those two.
@@ -73,9 +80,11 @@ Pull requests that change the shell, its dependencies, or the image add an entry
 
 ### Known gaps
 
-- **Google Fonts versus the platform CSP.** `index.html` loads Geist and Inter from `fonts.googleapis.com`; the platform's CSP (`style-src 'self'; font-src 'self'`) blocks them, so a CloudFront-served page falls back to system fonts and reports violations. Self-host them under `/assets/`. A real-browser suite under the production CSP (as in `platform-reactcommon` `test/browser`) waits on this.
+- **Official help and legal URLs.** Privacy Policy, Terms of Service, Trust & Security and "Trouble logging in?" are hidden until their URLs are set in `src/pages/links.ts`; none is published on bcbpsolutions.com yet.
 
-- **SDK features not used yet.** `useAppUpdate` / `subscribeAppUpdate` (version polling runs, but the user is never told), `registerNavigator` (a remote's `navigate()` does a full page load), and i18n `detect` with the P-35 `locale`.
+- **No real-browser suite.** Nothing runs the shell in Chromium, Firefox and WebKit under the production CSP (as `platform-reactcommon` `test/browser` does for the SDK). The fonts no longer block it.
+
+- **SDK features not used yet.** `registerNavigator` (a remote's `navigate()` does a full page load) and i18n `detect` with the P-35 `locale`.
 
 - **The IAM endpoints are stubbed locally only.** PUB-1 and P-35 must exist behind `/api` in every real environment. Without P-35 the shell renders with deny-all permissions and logs a warning.
 
@@ -83,7 +92,7 @@ Pull requests that change the shell, its dependencies, or the image add an entry
 
 - **No CSP headers yet.** The bundle is CSP-safe (Trusted Types policy, no `eval`, no inline script), but `nginx/default.conf` sets no `Content-Security-Policy`. The platform's headers come from CloudFront (`platform-reactcommon/examples/cloudfront`).
 
-- **Consent is a stand-in.** `src/platform/consent.ts` grants `essential` only, so telemetry and analytics export stays off until a real consent management platform is wired in.
+- **Essential telemetry only (v1 decision).** `src/platform/consent.ts` grants `essential` only: errors and essential warnings are exported; traces, metrics and info logs are not, until a consent manager is added.
 
 - **No cluster deploy.** `release.yml` publishes the image and the GitHub Release. Nothing in this repo applies a Helm chart or rolls a deployment. An operator rolls the new tag and serves that environment's `/config/runtime.json` and `/remotes/manifest.json`.
 

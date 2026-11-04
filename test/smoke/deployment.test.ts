@@ -116,6 +116,8 @@ describe(`web-shell smoke (${mode}, ${baseUrl})`, () => {
       expect(tags.length, where(r, 'external scripts')).toBeGreaterThan(0)
       for (const t of tags) expect(t.integrity, where(r, `<script src=${t.src}> integrity`)).toMatch(/^sha384-/)
       expect(r.text, where(r, 'inline event handler attribute')).not.toMatch(/<[^>]+\son[a-z]+\s*=/i)
+      // Fonts and styles are self-hosted: the platform CSP allows no third-party origin.
+      expect(r.text, where(r, 'third-party <link>/<script> origin')).not.toMatch(/<(link|script)\b[^>]*\b(href|src)=["']?(https?:)?\/\//i)
     })
 
     it.each(['/t/acme/dashboard', '/t/acme/dashboard/members', '/auth/callback?code=x&state=y'])(

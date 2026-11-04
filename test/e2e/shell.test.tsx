@@ -315,6 +315,17 @@ describe('the shell, end to end', () => {
     expect(assigned).toEqual([])
   })
 
+  it("Forgot your password? resolves the email and opens the realm's Keycloak reset page", async () => {
+    await load('/')
+    await userEvent.type(await emailBox(), EMAIL)
+    await userEvent.click(screen.getByRole('button', { name: 'Forgot your password?' }))
+    await until(() => assigned.length > 0, 'the redirect to the reset page')
+    const reset = new URL(assigned[0]!)
+    expect(`${reset.origin}${reset.pathname}`).toBe(`${IDP}/realms/tenant-acme/login-actions/reset-credentials`)
+    expect(reset.searchParams.get('client_id')).toBe('tender-web')
+    expect(kc.requests).toEqual([]) // no sign-in was started
+  })
+
   it('an unknown email keeps the email screen up with the generic message, and never redirects', async () => {
     await load('/')
     await userEvent.type(await emailBox(), 'nobody@else.test')
