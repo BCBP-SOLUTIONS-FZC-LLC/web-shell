@@ -120,10 +120,13 @@ export default function LoginPage({ onContinue, notice = null }: LoginPageProps)
         {SLIDES.map((item, index) => {
           const isIncoming = index === slide && index !== settledSlide && loadedSlides.has(index)
           const isBase = index === settledSlide
+          // Fetch only the slides on screen and the next one; a loaded image keeps its src.
+          const wanted =
+            index === settledSlide || index === slide || index === (slide + 1) % SLIDES.length || loadedSlides.has(index)
           return (
             <img
               key={item.image}
-              src={item.image}
+              src={wanted ? item.image : undefined}
               alt=""
               decoding="async"
               draggable={false}
@@ -234,12 +237,12 @@ export default function LoginPage({ onContinue, notice = null }: LoginPageProps)
 
           <form className="mt-8" onSubmit={handleSubmit}>
             {notice ? (
-              <p className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+              <p role="alert" className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
                 {notice}
               </p>
             ) : null}
             {error ? (
-              <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+              <div role="alert" className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
                 <p>{error}</p>
               </div>
             ) : null}

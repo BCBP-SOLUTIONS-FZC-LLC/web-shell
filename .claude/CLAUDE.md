@@ -23,7 +23,7 @@ npm run dev               # :5001 with config/dev-platform.mjs stand-ins (Keyclo
 npm run lint              # ESLint + platform rules (CI: --max-warnings 0)
 npm run typecheck         # tsc over src/ and test/
 npm test                  # Vitest: unit, integration, e2e
-npm run test:ci           # + coverage gate 95% (100% today, 92 tests)
+npm run test:ci           # + coverage gate 95% (100% today, 105 tests)
 npm run build             # tsc + rsbuild build
 npm run test-smoke        # needs SMOKE_BASE_URL (test/smoke/README.md)
 ```

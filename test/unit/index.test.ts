@@ -26,6 +26,17 @@ describe('entry point', () => {
     expect(error).toHaveBeenCalledWith('the app could not start', expect.any(Error))
   })
 
+  it('offers Try again, which reloads the page', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const reload = vi.spyOn(window.location, 'reload').mockImplementation(() => {})
+    const { showUnavailable } = await import('../../src/index')
+    showUnavailable(new Error('x'))
+    const retry = document.querySelector<HTMLButtonElement>('[role=alert] button')!
+    expect(retry).toHaveTextContent('Try again')
+    retry.click()
+    expect(reload).toHaveBeenCalledOnce()
+  })
+
   it('tolerates a missing root element', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
     document.body.innerHTML = ''

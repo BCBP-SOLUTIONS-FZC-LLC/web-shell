@@ -40,6 +40,8 @@ describe('askForWorkspace', () => {
     await userEvent.setup().click(screen.getByRole('button', { name: /continue with email/i }))
     await waitFor(() => expect(resolve).toHaveBeenCalledTimes(2))
     expect(screen.getByText(screens.WORKSPACE_NOT_FOUND)).toBeInTheDocument()
+    // Announced to screen readers, as is the bootstrap's notice.
+    expect(screen.getAllByRole('alert').map((e) => e.textContent)).toEqual(['Your session has ended.', screens.WORKSPACE_NOT_FOUND])
   })
 
   it('uses the previous layout for ?variant=login1', async () => {
@@ -51,6 +53,11 @@ describe('askForWorkspace', () => {
 })
 
 describe('dialogs', () => {
+  it('moves focus into the dialog, so its title is announced and its action is next', () => {
+    act(() => screens.showSignedOut(async () => {}))
+    expect(document.activeElement).toBe(screen.getByRole('dialog', { name: 'You are signed out' }))
+  })
+
   it('signed out: signs in only on click', async () => {
     const signIn = vi.fn(async () => {})
     act(() => screens.showSignedOut(signIn))

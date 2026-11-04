@@ -1,6 +1,6 @@
 // The shell's session screens (SDK design doc §C1 /auth, §C2 step 7). None of them signs in on its
 // own: every login starts from the user's click.
-import type { ReactNode } from 'react'
+import { useEffect, useRef, type ReactNode } from 'react'
 import type { IdentityProvider, SessionState, Workspace } from '@bcbp-solutions-fzc-llc/frontend-sdk/auth'
 import LoginPage from '../pages/LoginPage'
 import LoginPage1 from '../pages/LoginPage1'
@@ -18,13 +18,20 @@ export interface SignInChoice {
 }
 
 function Dialog({ title, role = 'dialog', children }: { title: string; role?: 'dialog' | 'alertdialog'; children: ReactNode }) {
+  // Move keyboard and screen-reader focus into the dialog, so its title and first action are next.
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    ref.current?.focus()
+  }, [title])
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#030d1b]/90 px-6 font-sans">
       <div
+        ref={ref}
+        tabIndex={-1}
         role={role}
         aria-modal="true"
         aria-labelledby="shell-dialog-title"
-        className="w-full max-w-sm rounded-xl bg-white p-6 text-center shadow-login-card"
+        className="w-full max-w-sm rounded-xl bg-white p-6 text-center shadow-login-card outline-none"
       >
         <h1 id="shell-dialog-title" className="m-0 text-lg font-semibold text-[#1a1a2e]">
           {title}

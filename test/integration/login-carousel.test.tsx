@@ -76,6 +76,15 @@ describe('login hero carousel', () => {
     expect(images()[0]).toHaveClass('opacity-0')
   })
 
+  it('fetches only the current and the next slide, then each slide as it comes up', () => {
+    const { container } = render(<LoginPage onContinue={async () => {}} />)
+    const sources = () =>
+      [...container.querySelectorAll('section img.object-cover')].map((i) => i.getAttribute('src'))
+    expect(sources().filter(Boolean)).toEqual(['/image/image1.jpg', '/image/image2.jpg'])
+    fireEvent.click(screen.getByRole('button', { name: 'Show slide 5' }))
+    expect(sources().filter(Boolean)).toEqual(['/image/image1.jpg', '/image/image5.jpg', '/image/image6.jpg'])
+  })
+
   it('does not mark an image that failed to decode as loaded', () => {
     vi.spyOn(HTMLImageElement.prototype, 'naturalWidth', 'get').mockReturnValue(0)
     const { container } = render(<LoginPage onContinue={async () => {}} />)

@@ -244,7 +244,7 @@ describe('the shell, end to end', () => {
     expect(screen.queryByRole('button', { name: 'Invite' })).toBeNull()
   })
 
-  it('renders with deny-all permissions when the session context is unavailable', async () => {
+  it('renders with deny-all permissions when the session context is unavailable, and says so', async () => {
     net.on('GET /api/v1/me/session-context', () => Response.json({ title: 'Bad Gateway', status: 502 }, { status: 502 }))
     await load('/t/acme/dashboard')
     await until(() => assigned.length > 0, 'the redirect to Keycloak')
@@ -252,6 +252,7 @@ describe('the shell, end to end', () => {
     await screen.findByRole('heading', { name: /Dashboard for Ada Lovelace/ }, { timeout: 5_000 })
     expect(screen.queryByRole('link', { name: 'User management' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Invite' })).toBeNull()
+    expect(screen.getByRole('status')).toHaveTextContent("We couldn't load your permissions")
   })
 
   it('a remote that fails to load stays inside its boundary, and Try again recovers', async () => {

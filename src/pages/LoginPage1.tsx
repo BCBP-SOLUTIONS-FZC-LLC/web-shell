@@ -47,7 +47,7 @@ export default function LoginPage({ onContinue, notice = null }: LoginPageProps)
     useEmailSignIn(onContinue)
 
   return (
-    <div className="relative min-h-dvh overflow-hidden bg-[#030d1b] font-sans text-white">
+    <main className="relative min-h-dvh overflow-hidden bg-[#030d1b] font-sans text-white">
       {/* Full-bleed cityscape; center band stays visible between mirrored panels */}
       <div
         className="absolute inset-0 z-0 bg-[url('/image/cityscape.jpg')] bg-cover bg-center bg-no-repeat"
@@ -121,12 +121,12 @@ export default function LoginPage({ onContinue, notice = null }: LoginPageProps)
             </div>
             <form onSubmit={handleSubmit}>
               {notice ? (
-                <p className="mb-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                <p role="alert" className="mb-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
                   {notice}
                 </p>
               ) : null}
               {error ? (
-                <div className="mb-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                <div role="alert" className="mb-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
                   <p>{error}</p>
                 </div>
               ) : null}
@@ -185,6 +185,6 @@ export default function LoginPage({ onContinue, notice = null }: LoginPageProps)
           </footer>
         </div>
       </div>
-    </div>
+    </main>
   )
 }

@@ -315,11 +315,11 @@ Remotes that need storage use `storage(appId)` from `/storage`, which is namespa
 
 | Step | Dependency | Posture | On failure |
 |---|---|---|---|
-| Identity and runtime config | `/config/runtime.json` | stop | "The app is unavailable right now." Console error only |
+| Identity and runtime config | `/config/runtime.json` | stop | "The app is unavailable right now." with Try again. Console error only |
 | Silent restore | Keycloak SSO session | degrade | `anonymous`; the sign-in flow runs |
 | Resolve the email | PUB-1 | stop on that screen | One generic message. The user can retry |
 | Leave for Keycloak | Browser navigation | stop | The shell is gone until Keycloak redirects back |
-| Session context | P-35 | degrade | Warning log. Deny-all permissions, platform flags only, no `/t/<slug>/` move |
+| Session context | P-35 | degrade | Warning log. Deny-all permissions, platform flags only, no `/t/<slug>/` move. A notice with Reload tells the user some actions are hidden |
 | Remote manifest | `/remotes/manifest.json` | degrade | Error log. The app renders; `RemoteBoundary` shows its error |
 | Dashboard load or render | `app2` remote | degrade | Boundary message with "Try again". The rest of the shell keeps running |
 | Telemetry export | `/otel` | ignore | Bounded queues in the SDK. Nothing is exported without consent beyond `essential` |
@@ -343,7 +343,9 @@ Remotes that need storage use `storage(appId)` from `/storage`, which is namespa
 | `/healthz` does not depend on Keycloak, IAM or the remote | `nginx/default.conf` returns a constant |
 | Per-environment files are revalidated; hashed assets are immutable | `index.html`, `/config/runtime.json`, `/remotes/manifest.json`, `/version.json` are `no-cache`. `/assets/` is immutable |
 | Source maps are not shipped | Dockerfile and `prepare-release-asset.sh` delete them; the smoke script and suite fail on a `.map` |
-| Only extension-less paths get `index.html`; cache headers per location | `nginx/default.conf`; `test/smoke/deployment.test.ts` checks it against the built image |
+| Only extension-less paths get `index.html`; cache headers per location; dotfiles 404 | `nginx/default.conf`; `test/smoke/deployment.test.ts` checks it against the built image |
+| Every response is compressed when it can be and carries baseline security headers, without the nginx version | `nginx/default.conf` (`gzip`, `add_header_inherit merge`, `server_tokens off`); smoke image mode |
+| Every shell screen passes axe-core (contrast excepted) | `test/integration/accessibility.test.tsx` |
 | The coverage floor is 95% on statements, branches, functions, and lines | `.github/scripts/coverage-gate.mjs`. CI does not lower it |
 | Image base tags are digest-pinned | `validate-quality.yml` rejects a `FROM` line without `@sha256` |
 
@@ -388,7 +390,7 @@ Vitest 5, happy-dom at `http://localhost:5001/`, Testing Library. `vitest.config
 | Layer | Path | What it locks |
 |---|---|---|
 | Unit | `test/unit/` | PUB-1 and P-35 mappings and the port calls, the entry point's fatal path, remember-email with blocked storage, the consent stand-in, the screen host, `BrandLogo`, the login variant |
-| Integration | `test/integration/` | Both login layouts and the carousel, every session screen, `App` routes and props, and the bootstrap: the exact initialisation order, each anonymous reason, wrong workspace, missing context, manifest failure, expiry and sign-out events |
+| Integration | `test/integration/` | Both login layouts and the carousel, every session screen, `App` routes and props, and the bootstrap: the exact initialisation order, each anonymous reason, wrong workspace, missing context, manifest failure, expiry and sign-out events; axe-core over every shell screen (`accessibility.test.tsx`) |
 | End to end | `test/e2e/` | The real bootstrap and SDK (inlined by Vitest, fresh per simulated page load) against a fake Keycloak and network: PKCE sign-in, `/t/<slug>/`, the remote's SDK hooks and permissions, deny-all, a failing remote, global sign-out, the device clock |
 | Smoke | `test/smoke/`, `.github/scripts/smoke-tests.sh` | Image at most 200 MB and the startup gate, then the suite against the container: SPA rule, Cache-Control per location, script integrity, 404s, runtime config and manifest validated by the SDK. With `SMOKE_MODE=live`, a deployment's security headers too |
 

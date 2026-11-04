@@ -14,6 +14,7 @@
 
 | Date | Change |
 |---|---|
+| 2026-11-04 | Production-readiness fixes: login photo weight, nginx gzip and baseline headers, dotfile 404s, accessibility, missing-context notice, Try again |
 | 2026-11-04 | First LLD. Describes `main` after the move to the SDK on Rsbuild (#16), app2 on SDK hooks (#17), the IAM role map (#18), the audit follow-ups (#19), SDK `1.0.0-alpha.3` (#20) and the e2e and smoke suites (#21) |
 
 ### Table of Contents
@@ -290,10 +291,10 @@ Here (a remote's `useSignOut()`) or in another tab (`BroadcastChannel('platform-
 
 | Step | Posture | Result |
 |---|---|---|
-| Identity, `/config/runtime.json` | fatal | "The app is unavailable right now." + `console.error` |
+| Identity, `/config/runtime.json` | fatal | "The app is unavailable right now." with Try again (reload) + `console.error` |
 | Silent restore | degrade | Signed-out flow |
 | PUB-1 | stop on the screen | One generic message; retry |
-| P-35 | degrade | Deny-all, platform flags, no `/t/<slug>/` move, `warn` log |
+| P-35 | degrade | Deny-all, platform flags, no `/t/<slug>/` move, `warn` log; `App` shows "We couldn't load your permissions…" with Reload (`role="status"`) |
 | Manifest | degrade | `error` log; the boundary shows its error |
 | Remote load or render | degrade | Boundary message, "Try again" |
 | Telemetry export | ignore | SDK queues; nothing beyond `essential` without consent |
@@ -358,15 +359,17 @@ Validated strictly by the SDK (unknown keys rejected). Schema: SDK LLD §12.1.
 
 | Location | Behaviour |
 |---|---|
+| server | `server_tokens off`; gzip (css, js, json, svg, text, html) with `Vary`; on every response (`add_header_inherit merge`): `nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `X-Frame-Options: DENY`, `Cross-Origin-Opener-Policy: same-origin`, `Permissions-Policy` |
 | `= /healthz` | `200 ok`, no access log |
 | `= /config/runtime.json`, `= /remotes/manifest.json`, `= /version.json` | `no-cache`, 404 when absent |
 | `= /index.html` | `no-cache` |
 | `^~ /assets/` | `public, max-age=31536000, immutable`; 404 when absent |
+| `~ /\.` (dotfiles) | 404 |
 | `~ ^/(api\|otel\|csp-report\|config\|remotes\|assets)(/\|$)` | 404 when absent; never `index.html` |
 | `~ \.[^/]*$` (any path with an extension) | `no-cache`; 404 when absent |
 | `/` | `no-cache`; `try_files $uri /index.html` |
 
-This is the platform's SPA rule (`platform-reactcommon` `examples/cloudfront/spa-rewrite.js`): only extension-less paths are app routes. nginx sets no CSP; CloudFront does.
+This is the platform's SPA rule (`platform-reactcommon` `examples/cloudfront/spa-rewrite.js`): only extension-less paths are app routes. nginx sets no CSP or HSTS: CloudFront does, and a second CSP here would be enforced alongside it.
 
 ### 10.2 Image
 
@@ -407,9 +410,9 @@ Vitest 5, happy-dom at `http://localhost:5001/`, Testing Library. `vitest.config
 | Layer | Path | Real SDK | What it locks |
 |---|---|---|---|
 | Unit | `test/unit/` | partly (`createTestPlatform`, `mockApi`, `roleMapAuthorizer`) | PUB-1/P-35 mappings against the SDK's contract cases, the entry point, remember-email, consent, the role map, the screen host, `BrandLogo`, the login variant, the dev middleware (node env, real HTTP) |
-| Integration | `test/integration/` | no (`vi.mock` recording fakes) | The bootstrap's exact order and every branch, login layouts and carousel, session screens, `App` routes |
+| Integration | `test/integration/` | no (`vi.mock` recording fakes) | The bootstrap's exact order and every branch, login layouts and carousel (only current and next photo fetched), session screens (alerts, dialog focus), `App` routes and the missing-context notice, axe-core over every shell screen (`accessibility.test.tsx`, colour contrast excluded) |
 | End to end | `test/e2e/shell.test.tsx` | yes | Email → PUB-1 → PKCE → callback → `app2` under `/t/acme/dashboard`; tokens never stored; deep link; role map reaching the remote; deny-all; failing remote and Try again; global sign-out with no silent sign-in after; device clock; unknown email |
-| Smoke | `test/smoke/deployment.test.ts` | yes (config and manifest validation) | Against `SMOKE_BASE_URL`: the SPA rule, Cache-Control, entry integrity, no maps, 404s, `/healthz`; `live` mode adds the security headers |
+| Smoke | `test/smoke/deployment.test.ts` | yes (config and manifest validation) | Against `SMOKE_BASE_URL`: the SPA rule, Cache-Control, entry integrity, no maps, 404s, `/healthz`; `image` mode adds nginx's baseline headers, gzip, no version, dotfile 404s; `live` mode adds CloudFront's CSP, HSTS and nosniff |
 
 E2E seams (`test/fixtures/`): `FakeKeycloak` (authorize via `approve()`, token endpoint with PKCE check and refresh rotation), `FakeNetwork` (route table on the page origin; `/otel` → 204), `FakeBroadcastChannel`. Only the remote's entry `<script>` is stubbed: it defines `window.app2` exposing a dashboard built on SDK hooks. A page load clears `globalThis[Symbol.for('@bcbp-solutions-fzc-llc/frontend-sdk')]`, resets modules, and imports the bootstrap again; storage is kept.
 

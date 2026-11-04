@@ -81,6 +81,8 @@ A remote must be built with `@bcbp-solutions-fzc-llc/webpack-preset` (`role: 're
 | `GET /` | Shell document. `index.html` is `Cache-Control: no-cache`. Only extension-less paths fall through to `index.html` (the platform's rule, `platform-reactcommon` `examples/cloudfront/spa-rewrite.js`); a missing file under `/api/`, `/otel/`, `/config/`, `/remotes/`, `/assets/`, or any missing file with an extension, is 404 |
 | `GET /config/runtime.json`, `/remotes/manifest.json`, `/version.json` | `no-cache`, `404` when the file is absent |
 | `GET /assets/*` | Hashed files, `Cache-Control: public, max-age=31536000, immutable` |
+| Dotfile paths (`/.git/…`, `/.env`) | `404` |
+| Every response | gzip for text, `nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `X-Frame-Options: DENY`, `Cross-Origin-Opener-Policy: same-origin`, `Permissions-Policy`; no nginx version. CSP and HSTS come from CloudFront |
 
 The container listens on **8080** as uid **101**.
 
@@ -217,7 +219,7 @@ Port **8080** is Keycloak in this compose file and also the port the shell image
 | Layer | Path | What it exercises |
 |---|---|---|
 | Unit | `test/unit/` | PUB-1 and P-35 mappings and ports, the entry point, remember-email, consent, the screen host, `BrandLogo`, the login variant, the dev server's platform middleware |
-| Integration | `test/integration/` | Both login layouts and the carousel, the session screens, `App` routes, and the bootstrap's order and branches |
+| Integration | `test/integration/` | Both login layouts and the carousel, the session screens, `App` routes, and the bootstrap's order and branches; axe-core over every shell screen (`accessibility.test.tsx`) |
 | End to end | `test/e2e/` | The real bootstrap, screens, `App` and SDK against a fake Keycloak (PKCE) and network: email → PUB-1 → sign-in → the `app2` remote under `/t/<slug>/`, deep links, role-map permissions in the remote, deny-all, a failing remote, global sign-out, the device clock |
 | Smoke | `test/smoke/` | `npm run test-smoke` against the served image (CI) or a deployment: the SPA rule, Cache-Control, script integrity, 404s, and the runtime files validated by the SDK. See [test/smoke/README.md](./test/smoke/README.md) |
 

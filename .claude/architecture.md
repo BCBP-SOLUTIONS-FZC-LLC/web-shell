@@ -44,6 +44,8 @@ The preset owns: container `shell`, `var` library, strict singletons (`react`, `
 
 | Location | Cache | Missing |
 |---|---|---|
+| every response | gzip; `nosniff`, Referrer-Policy, `X-Frame-Options: DENY`, COOP, Permissions-Policy (`add_header_inherit merge`); `server_tokens off` | — |
+| `/\.` (dotfiles) | — | 404 |
 | `/healthz` | — | constant `ok` |
 | `/config/runtime.json`, `/remotes/manifest.json`, `/version.json`, `/index.html` | `no-cache` | 404 |
 | `/assets/` | `immutable`, 1 year | 404 |
@@ -51,7 +53,7 @@ The preset owns: container `shell`, `var` library, strict singletons (`react`, `
 | any path with an extension | `no-cache` | 404 |
 | `/` (extension-less) | `no-cache` | `index.html` |
 
-No CSP from nginx; CloudFront sends the platform's.
+No CSP or HSTS from nginx; CloudFront sends the platform's (a second CSP would be enforced alongside it).
 
 ## Tests
 
