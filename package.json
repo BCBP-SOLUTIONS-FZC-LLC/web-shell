@@ -23,8 +23,8 @@
     "typecheck": "tsc -p tsconfig.test.json"
   },
   "devDependencies": {
-    "@bcbp-solutions-fzc-llc/eslint-plugin": "1.0.0-alpha.2",
-    "@bcbp-solutions-fzc-llc/webpack-preset": "1.0.0-alpha.2",
+    "@bcbp-solutions-fzc-llc/eslint-plugin": "1.0.0-alpha.3",
+    "@bcbp-solutions-fzc-llc/webpack-preset": "1.0.0-alpha.3",
     "@rsbuild/core": "^2.3.0",
     "@rsbuild/plugin-react": "^2.1.1",
     "@tailwindcss/postcss": "^4.3.4",
@@ -49,7 +49,7 @@
     "vitest": "^5.1.0"
   },
   "dependencies": {
-    "@bcbp-solutions-fzc-llc/frontend-sdk": "1.0.0-alpha.2",
+    "@bcbp-solutions-fzc-llc/frontend-sdk": "1.0.0-alpha.3",
     "@opentelemetry/api": "1.10.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
