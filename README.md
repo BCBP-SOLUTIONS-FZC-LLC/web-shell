@@ -15,7 +15,7 @@ The browser shell for the BCBP micro-frontend platform. It runs the platform SDK
 | The SDK bootstrap (`src/bootstrap.tsx`) and the routes of the signed-in app: `/t/<slug>/dashboard/*` renders the dashboard remote | Dashboard pages, navigation inside the dashboard and dashboard data (`mfe-dashboard`, loaded as `app2`) |
 | The email sign-in page and the session screens. The SDK does Authorization Code + PKCE against the workspace's Keycloak realm and keeps tokens in memory | Credentials, password policy, MFA and token issuance (Keycloak). This repo ships a local realm and theme for development |
 | The IAM ports: PUB-1 (email or slug → realm) and P-35 (session context), over the SDK's `ApiClient` | The IAM APIs themselves, tenant membership, roles and audit |
-| The label (`userLabel`) and logout callback (`onLogout`) passed into the dashboard | Any other remote. Only `app2` is in the local manifest |
+| The shell value remotes read through SDK hooks: the user, workspace, session context and sign-out (`PlatformProvider`) | Any other remote. Only `app2` is in the local manifest |
 | Static hosting of `index.html`, hashed `/assets/`, `/config/runtime.json`, `/remotes/manifest.json`, `/version.json` and `GET /healthz` | Cluster deploy and each environment's runtime config and remote manifest. Publishing a tag pushes an image; it does not roll a cluster |
 
 Everything environment-specific is read at run time from `/config/runtime.json`. Only the identity environment and build version are compiled into the bundle.
@@ -68,17 +68,17 @@ Sign-out is global by default: the Keycloak session ends, every tab drops its to
 | Host | `shell` (`rsbuild.config.ts`, `pluginPlatform({ role: 'shell' })`) |
 | Remote entries | `/remotes/manifest.json`: `{ "<name>": { "entry", "version", "ownerDomain", "integrity" } }`. `integrity` is required outside `local`, `dev` and `test` |
 | Remote the shell renders | `app2`, module `./App` |
-| Props this shell passes to `app2` `./App` | `userLabel: string`, `onLogout: () => void` |
+| Props this shell passes to `app2` `./App` | None. The remote uses `useCurrentUser()` and `useSignOut()` |
 | Shared | `react`, `react-dom` (and their JSX and client entries), `@opentelemetry/api`, every SDK subpath. Strict singletons; a remote takes the SDK from the shell (`import: false`) |
 
-`userLabel` is the user's email, then their name, then `User`. A remote must be built with `@bcbp-solutions-fzc-llc/webpack-preset` (`role: 'remote'`). A Vite ES-module remote does not load through the SDK's `loadRemote`.
+A remote must be built with `@bcbp-solutions-fzc-llc/webpack-preset` (`role: 'remote'`). A Vite ES-module remote does not load through the SDK's `loadRemote`.
 
 ### nginx paths
 
 | Path | Behavior |
 |---|---|
 | `GET /healthz` | `200` and the text `ok`. No access log |
-| `GET /` | Shell document. `index.html` is `Cache-Control: no-cache`. Unknown paths fall through to `index.html` |
+| `GET /` | Shell document. `index.html` is `Cache-Control: no-cache`. Only extension-less paths fall through to `index.html` (the platform's rule, `platform-reactcommon` `examples/cloudfront/spa-rewrite.js`); a missing file under `/api/`, `/otel/`, `/config/`, `/remotes/`, `/assets/`, or any missing file with an extension, is 404 |
 | `GET /config/runtime.json`, `/remotes/manifest.json`, `/version.json` | `no-cache`, `404` when the file is absent |
 | `GET /assets/*` | Hashed files, `Cache-Control: public, max-age=31536000, immutable` |
 
@@ -351,7 +351,7 @@ Two stages, both digest-pinned: `node:26-bookworm` runs `npm ci` and `npm run bu
 
 ### Dashboard remote (`app2`)
 
-The shell loads `app2`'s entry from `/remotes/manifest.json` in the browser and renders its `./App` with `userLabel` and `onLogout`. A missing or failing remote stays inside its boundary; the shell keeps running.
+The shell loads `app2`'s entry from `/remotes/manifest.json` in the browser and renders its `./App` with no props; the remote reads the user and sign-out from the SDK. A missing or failing remote stays inside its boundary; the shell keeps running.
 
 ### Telemetry
 

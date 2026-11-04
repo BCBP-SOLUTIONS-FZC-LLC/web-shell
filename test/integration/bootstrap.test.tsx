@@ -213,12 +213,12 @@ describe('bootstrap, signed in', () => {
     await waitFor(() => expect(signInAgain).toHaveBeenCalledOnce())
   })
 
-  it('unmounts the app on sign-out and signs back in with prompt=login on click', async () => {
+  it('unmounts the app on sign-out and signs back in on click', async () => {
     await act(() => bootstrap())
     act(() => subscriber!({ status: 'anonymous', reason: 'signed-out' }))
     expect(screen.queryByRole('main')).not.toBeInTheDocument()
     await userEvent.setup().click(screen.getByRole('button', { name: 'Sign in' }))
-    expect(idp.login).toHaveBeenCalledWith({ workspace: acme, returnUrl: '/t/acme/', prompt: 'login' })
+    expect(idp.login).toHaveBeenCalledWith({ workspace: acme })
 
     const other: Workspace = { realm: 'tenant-other', trial: false }
     act(() => subscriber!({ status: 'anonymous', reason: 'signed-out', workspace: other }))
@@ -248,7 +248,7 @@ describe('bootstrap, signed out', () => {
     void bootstrap()
     await typeEmail('ada@acme.com')
     await waitFor(() =>
-      expect(idp.login).toHaveBeenCalledWith({ workspace: acme, returnUrl: '/', loginHint: 'ada@acme.com' }),
+      expect(idp.login).toHaveBeenCalledWith({ workspace: acme, loginHint: 'ada@acme.com' }),
     )
   })
 
@@ -258,7 +258,7 @@ describe('bootstrap, signed out', () => {
     localStorage.setItem('bcbp.rememberEmail', 'true')
     localStorage.setItem('bcbp.loginEmail', 'ada@acme.com')
     await bootstrap()
-    expect(idp.login).toHaveBeenCalledWith({ workspace: acme, returnUrl: '/', loginHint: 'ada@acme.com' })
+    expect(idp.login).toHaveBeenCalledWith({ workspace: acme, loginHint: 'ada@acme.com' })
   })
 
   it('retries the workspace a failed silent sign-in named, without a hint', async () => {
@@ -266,7 +266,7 @@ describe('bootstrap, signed out', () => {
     window.history.replaceState({}, '', '/t/acme/dashboard?x=1')
     await bootstrap()
     expect(chooseWorkspace).not.toHaveBeenCalled()
-    expect(idp.login).toHaveBeenCalledWith({ workspace: acme, returnUrl: '/t/acme/dashboard?x=1' })
+    expect(idp.login).toHaveBeenCalledWith({ workspace: acme })
   })
 
   it('waits for a click after a logout', async () => {
