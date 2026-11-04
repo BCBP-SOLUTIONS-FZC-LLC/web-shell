@@ -60,7 +60,8 @@ export function devPlatformMiddleware(root) {
       return send(res, 200, {
         tenant_id: 'local-tenant',
         slug: realm.replace(/^tenant-/, ''),
-        roles: ['tenant_admin'],
+        // The signup owner: tenant_owner without tenant_admin (IAM P-35). DEV_ROLES overrides it.
+        roles: (process.env.DEV_ROLES ?? 'member,tenant_owner').split(','),
         feature_flags: [],
         read_only: false,
       })

@@ -159,7 +159,7 @@ The dev server stands in for what CloudFront and the platform APIs provide (`con
 | `/config/runtime.json` | `config/runtime.local.json` (Keycloak `http://localhost:8080`, client `app1`, environment `local`) |
 | `/remotes/manifest.json` | `config/remotes.local.json` (`app2` at `http://localhost:5002/remoteEntry.js`) |
 | `GET /api/v1/public/tenants/resolve` | Any identifier → realm `tenant-bcbp` |
-| `GET /api/v1/me/session-context` | Slug `bcbp`, role `tenant_admin` (401 without a bearer token) |
+| `GET /api/v1/me/session-context` | Slug `bcbp`, roles `member`, `tenant_owner` (the signup owner; `DEV_ROLES=member,tenant_admin` overrides), 401 without a bearer token |
 | `POST /otel/*` | `204`, dropped |
 
 Set `DEV_API_URL` to proxy `/api` to a real API instead of the stubs, or `DEV_REALM` to stub a different realm.
