@@ -1,12 +1,7 @@
 // The signed-in shell. The bootstrap renders this only with an authenticated session, so there is
 // no signed-out route here: sign-in screens are mounted by the bootstrap outside this tree.
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
-import {
-  RemoteBoundary,
-  useCurrentUser,
-  useRouteTemplate,
-  useSignOut,
-} from '@bcbp-solutions-fzc-llc/frontend-sdk/react'
+import { RemoteBoundary, useRouteTemplate } from '@bcbp-solutions-fzc-llc/frontend-sdk/react'
 
 /** The remote that renders the dashboard, as named in /remotes/manifest.json. */
 export const DASHBOARD_REMOTE = 'app2'
@@ -19,22 +14,13 @@ function Loading({ children }: { children: string }) {
   )
 }
 
+/**
+ * The dashboard remote reads the signed-in user and sign-out itself (useCurrentUser, useSignOut)
+ * from the SDK this shell provides, so it gets no props.
+ */
 function Dashboard() {
   useRouteTemplate('/t/:slug/dashboard')
-  const user = useCurrentUser()
-  const signOut = useSignOut()
-  return (
-    <RemoteBoundary
-      remote={DASHBOARD_REMOTE}
-      module="./App"
-      fallback={<Loading>Loading dashboard…</Loading>}
-      props={{
-        userLabel: user?.email ?? user?.name ?? 'User',
-        // Global by default: the Keycloak session ends too, and every tab follows.
-        onLogout: () => void signOut(),
-      }}
-    />
-  )
+  return <RemoteBoundary remote={DASHBOARD_REMOTE} module="./App" fallback={<Loading>Loading dashboard…</Loading>} />
 }
 
 /**

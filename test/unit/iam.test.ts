@@ -1,99 +1,90 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+// The shell's PUB-1 and P-35 ports against the SDK's own contract cases (shipped in
+// @bcbp-solutions-fzc-llc/frontend-sdk/contracts and checked there against IAM's swagger), through
+// the real ApiClient, as platform-reactcommon's examples/shell/test/iam.test.ts does.
+import { readFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
+import { dirname, join } from 'node:path'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { createTestPlatform, mockApi } from '@bcbp-solutions-fzc-llc/frontend-sdk/testing'
+import { sessionContextSource, toSessionContext, toWorkspace, workspaceResolver } from '../../src/platform/iam'
 
-const get = vi.fn()
-const tryGetConfig = vi.fn()
-vi.mock('@bcbp-solutions-fzc-llc/frontend-sdk/http', () => ({ createApiClient: () => ({ get }) }))
-vi.mock('@bcbp-solutions-fzc-llc/frontend-sdk/config', () => ({ tryGetConfig: () => tryGetConfig() }))
+interface Cases<C> {
+  path: string
+  cases: C[]
+}
+const sdkRoot = dirname(createRequire(import.meta.url).resolve('@bcbp-solutions-fzc-llc/frontend-sdk/package.json'))
+const contract = <C>(name: string): Cases<C> =>
+  JSON.parse(readFileSync(join(sdkRoot, 'contracts', name), 'utf8')) as Cases<C>
+const RESOLVE = contract<{ name: string; identifier: string; response: unknown; expected: unknown }>('tenant-resolve-cases.json')
+const SESSION = contract<{ name: string; response: unknown; expected: unknown }>('session-context-cases.json')
 
-const { sessionContextSource, toSessionContext, toWorkspace, workspaceResolver } = await import('../../src/platform/iam')
+let platform: ReturnType<typeof createTestPlatform>
+beforeEach(() => {
+  platform = createTestPlatform()
+})
+afterEach(() => platform.reset())
 
-describe('toWorkspace (PUB-1)', () => {
-  beforeEach(() => tryGetConfig.mockReturnValue(undefined))
-
-  it('rejects a not-found or malformed response', () => {
-    expect(toWorkspace('acme', { found: false })).toBeUndefined()
-    expect(toWorkspace('acme', { found: true })).toBeUndefined()
-    expect(toWorkspace('acme', { found: true, realm: '' })).toBeUndefined()
+describe('workspaceResolver (PUB-1)', () => {
+  it('calls the contract path on the API base', () => {
+    expect(RESOLVE.path).toBe('/api/v1/public/tenants/resolve')
   })
 
-  it('maps a paid realm to its slug with the default prefix', () => {
-    expect(toWorkspace('ada@acme.com', { found: true, realm: 'tenant-acme', strategy: 'dedicated' })).toEqual({
-      realm: 'tenant-acme',
-      trial: false,
-      slug: 'acme',
+  it.each(RESOLVE.cases.map((c) => [c.name, c] as const))('%s', async (_name, c) => {
+    let seen: Request | undefined
+    mockApi({
+      'GET /v1/public/tenants/resolve': (req) => {
+        seen = req
+        return Response.json(c.response)
+      },
     })
+    expect((await workspaceResolver.resolve(c.identifier)) ?? null).toEqual(c.expected)
+    expect(new URL(seen!.url).searchParams.get('identifier')).toBe(c.identifier)
+    // A public endpoint: never a token.
+    expect(seen!.headers.get('authorization')).toBeNull()
   })
 
-  it('uses the configured prefix and leaves an unprefixed realm without a slug', () => {
-    tryGetConfig.mockReturnValue({ auth: { paidRealmPrefix: 'org-' } })
+  it('passes the caller abort signal through', async () => {
+    mockApi({ 'GET /v1/public/tenants/resolve': () => Response.json({ found: false }) })
+    const controller = new AbortController()
+    await expect(workspaceResolver.resolve('acme', controller.signal)).resolves.toBeUndefined()
+  })
+
+  it('uses the configured paid realm prefix', () => {
+    platform.reset()
+    platform = createTestPlatform({ config: { auth: { paidRealmPrefix: 'org-' } as never } })
     expect(toWorkspace('x', { found: true, realm: 'org-acme' })).toEqual({ realm: 'org-acme', trial: false, slug: 'acme' })
-    expect(toWorkspace('x', { found: true, realm: 'tenant-acme' })).toEqual({ realm: 'tenant-acme', trial: false })
-  })
-
-  it('maps a trial: slug only when the identifier was one, tenant hint when present', () => {
-    const r = { found: true, realm: 'trial', strategy: 'shared' as const, tenant_id: 't-1' }
-    expect(toWorkspace('acme', r)).toEqual({ realm: 'trial', trial: true, slug: 'acme', tenantIdHint: 't-1' })
-    expect(toWorkspace('ada@acme.com', { ...r, tenant_id: undefined })).toEqual({ realm: 'trial', trial: true })
   })
 })
 
-describe('toSessionContext (P-35)', () => {
-  it('fills defaults for absent lists and flags', () => {
-    expect(toSessionContext({ tenant_id: 't', slug: 's', roles: null, feature_flags: null })).toEqual({
-      tenantId: 't',
-      slug: 's',
-      roles: [],
-      departments: [],
-      featureFlags: [],
-      readOnly: false,
-    })
+describe('sessionContextSource (P-35)', () => {
+  it('calls the contract path on the API base', () => {
+    expect(SESSION.path).toBe('/api/v1/me/session-context')
   })
 
-  it('maps every optional field', () => {
-    expect(
-      toSessionContext({
-        tenant_id: 't',
-        slug: 's',
-        roles: ['member'],
-        departments: [{ id: 'd', level: 'l' }],
-        plan: 'pro',
-        feature_flags: ['f'],
-        read_only: true,
-        mfa_freshness_seconds: 30,
-        locale: 'ar',
-      }),
-    ).toEqual({
-      tenantId: 't',
-      slug: 's',
-      roles: ['member'],
-      departments: [{ id: 'd', level: 'l' }],
-      plan: 'pro',
-      featureFlags: ['f'],
-      readOnly: true,
-      mfaFreshnessSeconds: 30,
-      locale: 'ar',
-    })
+  it.each(SESSION.cases.map((c) => [c.name, c] as const))('%s', async (_name, c) => {
+    mockApi({ 'GET /v1/me/session-context': () => Response.json(c.response) })
+    expect(await sessionContextSource.load(new AbortController().signal)).toEqual(c.expected)
+  })
+
+  it('loads without a signal', async () => {
+    mockApi({ 'GET /v1/me/session-context': () => Response.json(SESSION.cases[0]!.response) })
+    await expect(sessionContextSource.load()).resolves.toEqual(SESSION.cases[0]!.expected)
   })
 })
 
-describe('ports', () => {
-  beforeEach(() => get.mockReset())
-
-  it('resolves through the public endpoint without a token, passing the signal', async () => {
-    get.mockResolvedValue({ data: { found: true, realm: 'tenant-acme' } })
-    const signal = new AbortController().signal
-    await expect(workspaceResolver.resolve('acme', signal)).resolves.toEqual({ realm: 'tenant-acme', trial: false, slug: 'acme' })
-    expect(get).toHaveBeenCalledWith('/v1/public/tenants/resolve', { query: { identifier: 'acme' }, auth: false, signal })
-    await workspaceResolver.resolve('acme')
-    expect(get).toHaveBeenLastCalledWith('/v1/public/tenants/resolve', { query: { identifier: 'acme' }, auth: false })
+describe('edge cases the contract does not list', () => {
+  it('uses the default tenant- prefix, and leaves an unprefixed realm without a slug', () => {
+    expect(toWorkspace('x', { found: true, realm: 'tenant-acme' })).toEqual({ realm: 'tenant-acme', trial: false, slug: 'acme' })
+    expect(toWorkspace('x', { found: true, realm: 'acme' })).toEqual({ realm: 'acme', trial: false })
   })
 
-  it('loads the session context, with and without a signal', async () => {
-    get.mockResolvedValue({ data: { tenant_id: 't', slug: 's' } })
-    const signal = new AbortController().signal
-    await expect(sessionContextSource.load(signal)).resolves.toMatchObject({ tenantId: 't', slug: 's' })
-    expect(get).toHaveBeenCalledWith('/v1/me/session-context', { signal })
-    await sessionContextSource.load()
-    expect(get).toHaveBeenLastCalledWith('/v1/me/session-context', {})
+  it('gives a trial found by email no slug, and no tenant hint when none is sent', () => {
+    expect(toWorkspace('ada@acme.com', { found: true, realm: 'trial', strategy: 'shared' })).toEqual({ realm: 'trial', trial: true })
+  })
+
+  it('maps a minimal session context with lists defaulted and optional fields absent', () => {
+    expect(toSessionContext({ tenant_id: 't', slug: 's' })).toEqual({
+      tenantId: 't', slug: 's', roles: [], departments: [], featureFlags: [], readOnly: false,
+    })
   })
 })

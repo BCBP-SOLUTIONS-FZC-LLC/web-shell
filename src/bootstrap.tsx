@@ -46,8 +46,6 @@ import {
 import { hideScreen } from './platform/screen'
 import './index.css'
 
-const returnUrl = () => window.location.pathname + window.location.search
-
 export async function bootstrap(): Promise<void> {
   installTrustedTypesPolicy()
   initializeCore({
@@ -83,11 +81,8 @@ export async function bootstrap(): Promise<void> {
         (session.reason === 'login-required' ? session.workspace : undefined) ??
         (await chooseWorkspace({ pathname: window.location.pathname, resolver: workspaceResolver, cfg: cfg.auth }))
       const choice = known ? { workspace: known, loginHint: getRememberedEmail() } : await askForWorkspace()
-      await idp.login({
-        workspace: choice.workspace,
-        returnUrl: returnUrl(),
-        ...(choice.loginHint ? { loginHint: choice.loginHint } : {}),
-      })
+      // returnUrl defaults to the current page in the SDK.
+      await idp.login({ workspace: choice.workspace, ...(choice.loginHint ? { loginHint: choice.loginHint } : {}) })
     }
     // After a logout, wait for the user: an automatic login would ride the live SSO session.
     if (session.reason === 'signed-out') showSignedOut(signIn)
@@ -117,13 +112,11 @@ export async function bootstrap(): Promise<void> {
       )
     }
     // Signed out here or in another tab: unmount so the previous user's data is not left under
-    // the dialog on a shared device. The next sign-in asks for credentials (prompt=login).
+    // the dialog on a shared device. The SDK makes the next sign-in ask for credentials.
     if (s.status === 'anonymous' && s.reason === 'signed-out') {
       app?.unmount()
       app = undefined
-      showSignedOut(() =>
-        idp.login({ workspace: s.workspace ?? session.workspace, returnUrl: returnUrl(), prompt: 'login' }),
-      )
+      showSignedOut(() => idp.login({ workspace: s.workspace ?? session.workspace }))
     }
   })
 
