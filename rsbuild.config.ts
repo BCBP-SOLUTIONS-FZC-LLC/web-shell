@@ -38,8 +38,9 @@ export default defineConfig(({ envMode }) => {
     },
     html: { template: './index.html' },
     output: {
-      // Everything hashed lives under /assets/ (nginx and CloudFront serve it immutable).
-      distPath: { js: 'assets', css: 'assets', font: 'assets', image: 'assets', svg: 'assets', media: 'assets', wasm: 'assets', assets: 'assets' },
+      // Everything hashed lives under /assets/ (nginx and CloudFront serve it immutable). The preset
+      // already names the JS that way; these cover the files Rsbuild's own rules emit.
+      distPath: { css: 'assets', font: 'assets', image: 'assets', svg: 'assets', media: 'assets', wasm: 'assets', assets: 'assets' },
       sourceMap: { css: false },
       // External script tags only: CSP script-src 'self' allows no inline script.
       inlineScripts: false,
