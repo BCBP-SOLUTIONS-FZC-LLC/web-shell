@@ -3,7 +3,7 @@ flowchart LR
     quality["validate-quality\nESLint, tsc, pin, LF, npm audit"]
     build["build-image\nHadolint then Buildx cache"]
     trivy["trivy\nCRITICAL HIGH UNKNOWN"]
-    smoke["smoke\nsize, /healthz, /, runtime.json, version.json, no .map"]
+    smoke["smoke\nsize, startup gate, no .map\nnpm run test-smoke"]
     summary["pr-summary\npull requests only"]
     push["push\nmain and master only\nGHCR and Cosign"]
 

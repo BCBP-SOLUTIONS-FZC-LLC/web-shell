@@ -26,3 +26,6 @@ docker.local.env
 *.njsproj
 *.sln
 *.sw?
+
+# Claude Code: personal settings
+.claude/settings.local.json

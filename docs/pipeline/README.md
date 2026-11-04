@@ -24,7 +24,7 @@ flowchart LR
     quality["validate-quality\nESLint, tsc, pin, LF, npm audit"]
     build["build-image\nHadolint then Buildx cache"]
     trivy["trivy\nCRITICAL HIGH UNKNOWN"]
-    smoke["smoke\nsize, /healthz, /, runtime.json, version.json, no .map"]
+    smoke["smoke\nsize, startup gate, no .map\nnpm run test-smoke"]
     summary["pr-summary\npull requests only"]
     push["push\nmain and master only\nGHCR and Cosign"]
 
@@ -53,7 +53,7 @@ Source: [`mermaid/ci-flow.mmd`](mermaid/ci-flow.mmd).
 | `validate-quality` | `npm run lint -- --max-warnings 0` and `npm run typecheck`. No HTML entities in workflows or scripts. LF in `.github/scripts`, `.github/workflows`, `Dockerfile`, and `nginx/`. Every `FROM` is `image:tag@sha256:…`. `.dockerignore` exists. `npm audit --omit=dev --audit-level=high` |
 | `build-image` | Hadolint on `Dockerfile`, then a `linux/amd64` build tagged `web-shell-ci-test` and stored in the Actions cache. Build args: `BUILD_VERSION` and `SOURCE_DATE_EPOCH`; secret `npm_token`. `PLATFORM_ENVIRONMENT` keeps its default, `prod` |
 | `trivy` | Reloads that cached image. Fails on unfixed **CRITICAL**, **HIGH**, or **UNKNOWN**. SARIF is uploaded and does not fail the job by itself. CycloneDX SBOM is an artifact named `sbom-<sha>`. Allowlist file: [`.trivyignore`](../../.trivyignore). See [the image runbook](../runbook-image-scan.md) |
-| `smoke` | Same cached image. [`.github/scripts/smoke-tests.sh`](../../.github/scripts/smoke-tests.sh): at most 200 MB, `GET /healthz` contains `ok`, `GET /` is 200 and contains `id="app"`, `GET /config/runtime.json` and `GET /version.json` are 200, and no `.map` file is in the image |
+| `smoke` | Same cached image, then Node 26 and `npm ci` (`NODE_AUTH_TOKEN`). [`.github/scripts/smoke-tests.sh`](../../.github/scripts/smoke-tests.sh): at most 200 MB, `GET /healthz` contains `ok`, `GET /` is 200 and contains `id="app"`, `GET /config/runtime.json` and `GET /version.json` are 200, no `.map` file is in the image, then `npm run test-smoke` with `SMOKE_MODE=image` against the container ([test/smoke](../../test/smoke/README.md): SPA rule, Cache-Control, integrity, 404s, SDK-validated runtime files) |
 | `pr-summary` | [`.github/scripts/pr-summary.js`](../../.github/scripts/pr-summary.js) posts one comment. The coverage cell uses the `pct` output of `validate-test` |
 | `push` | Push events on `main` or `master` only. Publishes `ghcr.io/bcbp-solutions-fzc-llc/web-shell` with the branch tag and `sha-<short>`, `provenance` and `sbom` on the build, then Cosign keyless sign and verify. The verify identity is `refs/heads/main` or `refs/heads/master` |
 
@@ -120,6 +120,6 @@ docker build --secret id=npm_token,env=NODE_AUTH_TOKEN -t web-shell:local .
 |---|---|
 | A new test | A file under `test/unit` or `test/integration`. The coverage gate already includes `src/**/*.{ts,tsx}` |
 | A new workflow file rule | A step in `validate-quality.yml`. Keep the script LF |
-| A new image startup URL | `nginx/default.conf` and `.github/scripts/smoke-tests.sh` together |
+| A new image startup URL or nginx behaviour | `nginx/default.conf` and `test/smoke/deployment.test.ts` together (`smoke-tests.sh` only for a startup check) |
 | A new build constant inside the image | A Dockerfile `ARG`, `rsbuild.config.ts` `source.define`, and the `build-args` blocks in `ci.yml` (`build-image`, `trivy`, `smoke`, `push`) and `release.yml` (`docker`). Runtime settings go in `/config/runtime.json` instead |
 | A new release asset | `prepare-release-asset.sh` or `create-github-release.sh`, and the artifact upload/download pair in `release.yml` |
