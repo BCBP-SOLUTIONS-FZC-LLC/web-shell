@@ -63,9 +63,17 @@ if [ "${map_count}" -ne 0 ]; then
 fi
 echo "::endgroup::"
 
+echo "::group::Smoke suite (test/smoke)"
+if ! SMOKE_BASE_URL="http://127.0.0.1:${PORT}" SMOKE_MODE=image npm run -s test-smoke; then
+  echo "::error file=test/smoke/deployment.test.ts,title=Smoke suite::The served image failed the smoke suite (see the log above)"
+  exit 1
+fi
+echo "::endgroup::"
+
 {
   echo "### Smoke test results"
   echo "- ✅ Startup gate: \`/healthz\`, \`/\`, \`/config/runtime.json\` and \`/version.json\` returned 200; no source maps in the image"
+  echo "- ✅ Smoke suite (\`test/smoke\`): SPA rule, Cache-Control, script integrity, 404s, and the runtime files validated by the SDK"
   echo "- 📦 Image size (linux/amd64): **${mb} MB** (limit: ${MAX_MB} MB)"
   echo "- 🔍 [Security (Trivy SARIF results)](https://github.com/${GITHUB_REPOSITORY}/security/code-scanning)"
 } >> "$GITHUB_STEP_SUMMARY"

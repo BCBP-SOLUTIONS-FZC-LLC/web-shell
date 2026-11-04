@@ -388,7 +388,8 @@ Vitest 5, happy-dom at `http://localhost:5001/`, Testing Library. `vitest.config
 |---|---|---|
 | Unit | `test/unit/` | PUB-1 and P-35 mappings and the port calls, the entry point's fatal path, remember-email with blocked storage, the consent stand-in, the screen host, `BrandLogo`, the login variant |
 | Integration | `test/integration/` | Both login layouts and the carousel, every session screen, `App` routes and props, and the bootstrap: the exact initialisation order, each anonymous reason, wrong workspace, missing context, manifest failure, expiry and sign-out events |
-| Smoke | `.github/scripts/smoke-tests.sh` | Image at most 200 MB. `/healthz`, `/`, `/config/runtime.json`, `/version.json` return 200. `/` contains `id="app"`. No `.map` file in the image |
+| End to end | `test/e2e/` | The real bootstrap and SDK (inlined by Vitest, fresh per simulated page load) against a fake Keycloak and network: PKCE sign-in, `/t/<slug>/`, the remote's SDK hooks and permissions, deny-all, a failing remote, global sign-out, the device clock |
+| Smoke | `test/smoke/`, `.github/scripts/smoke-tests.sh` | Image at most 200 MB and the startup gate, then the suite against the container: SPA rule, Cache-Control per location, script integrity, 404s, runtime config and manifest validated by the SDK. With `SMOKE_MODE=live`, a deployment's security headers too |
 
 `npm run test:ci` is the gate CI runs: coverage, then `coverage-gate.mjs`. Include is `src/**/*.{ts,tsx}`. Declaration files and CSS are excluded.
 
@@ -458,7 +459,7 @@ Platform concerns outside this repo: Keycloak credential checks, MFA, realm admi
 | Preview | `npm run preview` | `dist/` on port 5001. Uses `dist/config/runtime.json` (the production default) |
 | Keycloak | `npm run keycloak:setup` | Realm `tenant-bcbp`, client `app1`, theme `bcbp`, admin at `http://localhost:8080` |
 | Lint | `npm run lint` | ESLint, typescript-eslint, React hooks, platform rules |
-| Tests | `npm run test:ci` | Unit and integration, 95% gate |
+| Tests | `npm run test:ci` | Unit, integration and e2e, 95% gate |
 | Image | `docker build --secret id=npm_token,env=NODE_AUTH_TOKEN` then `docker run -p 18080:8080` | nginx as the browser will get it. Use 18080 when Keycloak already has 8080 |
 
 The login page's "Trouble logging in?" link is `href="#help"`. It does not open a help route.

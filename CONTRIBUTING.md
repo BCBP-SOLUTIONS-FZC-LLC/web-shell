@@ -26,7 +26,7 @@ npm run keycloak:setup    # local realm tenant-bcbp on :8080; first start can ta
 npm run dev               # shell on http://localhost:5001, with stubbed IAM endpoints
 npm run lint              # ESLint with the platform rules
 npm run typecheck         # tsc over src/ and test/
-npm run test:ci           # unit and integration, then the 95% coverage gate
+npm run test:ci           # unit, integration and e2e, then the 95% coverage gate
 npm run build             # tsc and the production bundle
 ```
 
@@ -117,9 +117,10 @@ test/
 
 | Layer | Location | Docker | Notes |
 |---|---|---|---|
-| Unit | `test/unit/` | No | IAM mappings and ports, entry point, remember-email, consent, screen host, `BrandLogo`, login variant |
+| Unit | `test/unit/` | No | IAM mappings and ports, entry point, remember-email, consent, screen host, `BrandLogo`, login variant, dev platform middleware |
 | Integration | `test/integration/` | No | Login layouts and carousel, session screens, `App`, bootstrap order and branches. SDK subpaths are `vi.mock` fakes where needed |
-| Smoke | CI `smoke` job | Image only | `.github/scripts/smoke-tests.sh`: image ≤ 200 MB, `GET /healthz` returns `ok`, `GET /` contains `id="app"`, `/config/runtime.json` and `/version.json` return 200, no `.map` file in the image |
+| End to end | `test/e2e/` | No | The real shell and SDK against `test/fixtures/` fakes (Keycloak, network, BroadcastChannel); only the remote's entry script is stubbed |
+| Smoke | `test/smoke/`, CI `smoke` job | Image or deployment | `.github/scripts/smoke-tests.sh`: image ≤ 200 MB and the startup gate, then `npm run test-smoke` against the container (SPA rule, Cache-Control, integrity, 404s, SDK-validated runtime files). [test/smoke/README.md](./test/smoke/README.md) |
 
 Run one file:
 
@@ -136,6 +137,8 @@ These tests pin behavior other repos and the login flow depend on. Change them o
 - **`test/unit/iam.test.ts`** — the PUB-1 → `Workspace` and P-35 → `SessionContext` ports, through the real `ApiClient` (`createTestPlatform`, `mockApi`), against the SDK's contract cases in `@bcbp-solutions-fzc-llc/frontend-sdk/contracts`; PUB-1 is called without a token.
 - **`test/integration/session-screens.test.tsx`** — "not found" and "unreachable" show the same message.
 - **`test/integration/app.test.tsx`** — `/dashboard/*` renders `app2` `./App` with no props, under the workspace basename.
+- **`test/e2e/shell.test.tsx`** — the whole sign-in with the real SDK: PKCE to the realm PUB-1 names, tokens never stored, the URL under `/t/<slug>/`, the remote reading the user and permissions through SDK hooks, and no silent sign-in after a global sign-out.
+- **`test/smoke/deployment.test.ts`** — what nginx (and CloudFront, live) must serve: only extension-less paths get `index.html`, the runtime files are uncached and pass the SDK's validation, hashed assets are immutable and match their integrity.
 
 ### Coverage gate
 
@@ -191,7 +194,7 @@ Base new branches on the latest `main`.
 `.github/pull_request_template.md` is the checklist GitHub shows. Match it:
 
 - [ ] `npm run lint` and `npm run typecheck` pass
-- [ ] `npm run test:ci` passes (unit, integration, coverage at least 95%)
+- [ ] `npm run test:ci` passes (unit, integration, e2e, coverage at least 95%)
 - [ ] `npm run build` passes (typecheck and production bundle)
 - [ ] Manual check when the change is visible: login, remote load, navigation
 - [ ] No debug logs, commented-out code, secrets, or `.env` values

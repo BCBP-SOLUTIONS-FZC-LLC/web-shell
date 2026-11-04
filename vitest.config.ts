@@ -15,7 +15,12 @@ export default defineConfig({
       },
     },
     setupFiles: ['./test/setup.ts'],
+    // The SDK is evaluated by Vitest rather than Node, so vi.resetModules() gives the e2e suite a
+    // fresh SDK on each simulated page load (test/e2e/shell.test.tsx).
+    server: { deps: { inline: [/@bcbp-solutions-fzc-llc\/frontend-sdk/] } },
     include: ['test/**/*.test.ts', 'test/**/*.test.tsx'],
+    // test/smoke runs against a served image or deployment: `npm run test-smoke` (vitest.smoke.config.ts).
+    exclude: ['test/smoke/**', 'node_modules/**'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json-summary'],

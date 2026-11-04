@@ -175,7 +175,9 @@ The dashboard is a second process. Start `mfe-dashboard` so it serves `remoteEnt
 | `npm run preview` | Serve `dist/` on port 5001 |
 | `npm run lint` | ESLint, including the `@bcbp-solutions-fzc-llc` platform rules |
 | `npm run typecheck` | `tsc` over `src/` and `test/` (`tsconfig.test.json`) |
-| `npm test` | Vitest once (unit, integration) |
+| `npm test` | Vitest once (unit, integration, e2e) |
+| `npm run test-unit` / `test-int` / `test-e2e` | One layer |
+| `npm run test-smoke` | The smoke suite against `SMOKE_BASE_URL` ([test/smoke/README.md](./test/smoke/README.md)) |
 | `npm run test:coverage` | Same, with the v8 coverage report |
 | `npm run test:ci` | Coverage plus the 95% gate (`.github/scripts/coverage-gate.mjs`) |
 | `npm run hooks:install` | Copy `.githooks/pre-commit` into `.git/hooks` |
@@ -207,10 +209,12 @@ Port **8080** is Keycloak in this compose file and also the port the shell image
 
 | Layer | Path | What it exercises |
 |---|---|---|
-| Unit | `test/unit/` | PUB-1 and P-35 mappings and ports, the entry point, remember-email, consent, the screen host, `BrandLogo`, the login variant |
+| Unit | `test/unit/` | PUB-1 and P-35 mappings and ports, the entry point, remember-email, consent, the screen host, `BrandLogo`, the login variant, the dev server's platform middleware |
 | Integration | `test/integration/` | Both login layouts and the carousel, the session screens, `App` routes, and the bootstrap's order and branches |
+| End to end | `test/e2e/` | The real bootstrap, screens, `App` and SDK against a fake Keycloak (PKCE) and network: email → PUB-1 → sign-in → the `app2` remote under `/t/<slug>/`, deep links, role-map permissions in the remote, deny-all, a failing remote, global sign-out, the device clock |
+| Smoke | `test/smoke/` | `npm run test-smoke` against the served image (CI) or a deployment: the SPA rule, Cache-Control, script integrity, 404s, and the runtime files validated by the SDK. See [test/smoke/README.md](./test/smoke/README.md) |
 
-Vitest uses happy-dom and Testing Library. `vitest.config.ts` defines `__ENVIRONMENT__` and `__BUILD_VERSION__` as `test`. The bootstrap test replaces every SDK subpath with a recording fake, so the suite never calls Keycloak, the IAM APIs or port 5002.
+Vitest uses happy-dom and Testing Library. `vitest.config.ts` defines `__ENVIRONMENT__` and `__BUILD_VERSION__` as `test`. The bootstrap test replaces every SDK subpath with a recording fake. The e2e suite runs the real SDK (Vitest inlines it, so each simulated page load gets a fresh one) against `test/fixtures/` fakes, modelled on platform-reactcommon's. No suite calls Keycloak, the IAM APIs or port 5002.
 
 ### Coverage
 
