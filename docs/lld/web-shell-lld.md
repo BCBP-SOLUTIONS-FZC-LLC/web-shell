@@ -6,7 +6,7 @@
 |---|---|
 | **Repository** | `github.com/BCBP-SOLUTIONS-FZC-LLC/web-shell` (private) |
 | **Artifact** | Static bundle served by nginx (`ghcr.io/bcbp-solutions-fzc-llc/web-shell`), never installed as a package (`app1`, `"private": true`, `0.0.0`) |
-| **Platform SDK** | `@bcbp-solutions-fzc-llc/frontend-sdk`, `webpack-preset`, `eslint-plugin` `1.0.0-alpha.3`, pinned exactly, all three on one version |
+| **Platform SDK** | `@bcbp-solutions-fzc-llc/frontend-sdk`, `webpack-preset`, `eslint-plugin` `1.0.0-alpha.4`, pinned exactly, all three on one version |
 | **Status** | Not tagged or deployed. Everything is `[Unreleased]` in [CHANGELOG.md](../../CHANGELOG.md) |
 | **Owners** | `@BCBP-SOLUTIONS-FZC-LLC/web-shell` (CODEOWNERS) |
 
@@ -14,6 +14,7 @@
 
 | Date | Change |
 |---|---|
+| 2026-11-05 | SDK `1.0.0-alpha.4`: container global `__platform_mfe_app2`, global sign-out as a form POST (CSP `form-action` needs the IdP), `no-raw-storage` exemption for remember-email |
 | 2026-11-04 | Launch decisions: self-hosted fonts, Forgot password → Keycloak reset, links shown only with official URLs, essential-only consent for v1, update banner |
 | 2026-11-04 | Production-readiness fixes: login photo weight, nginx gzip and baseline headers, dotfile 404s, accessibility, missing-context notice, Try again |
 | 2026-11-04 | First LLD. Describes `main` after the move to the SDK on Rsbuild (#16), app2 on SDK hooks (#17), the IAM role map (#18), the audit follow-ups (#19), SDK `1.0.0-alpha.3` (#20) and the e2e and smoke suites (#21) |
@@ -211,6 +212,7 @@ Keys are IAM's closed role set: `member`, `tenant_owner`, `tenant_admin`, `tende
 | Item | Value |
 |---|---|
 | Remote | `app2`, module `./App`, default export a component |
+| Container global | `window.__platform_mfe_app2` (preset `containerName`, SDK alpha.4); a remote built with an older preset defines `app2` and fails as `incompatible` |
 | Props | None |
 | Entry | `/remotes/manifest.json` `{ "app2": { entry, version, ownerDomain, integrity? } }`; `integrity` required outside `local`, `dev`, `test` |
 | Build | `@bcbp-solutions-fzc-llc/webpack-preset` remote (`pluginPlatform({ role: 'remote', name: 'app2', exposes: { './App': … } })` or the webpack/Rspack equivalents), SDK `import: false` |
@@ -282,7 +284,7 @@ A reload or a new tab: `idp.init()` may redirect once with `prompt=none`. A live
 
 ### 6.5 Sign-out
 
-Here (a remote's `useSignOut()`) or in another tab (`BroadcastChannel('platform-auth')`): `anonymous`/`signed-out` → the app root is unmounted (so the previous user's data is not left under the dialog), then `showSignedOut(() => idp.login({ workspace }))`. A global sign-out navigates to the realm's end-session endpoint, which returns to `/`; that load shows the signed-out dialog (§6.1). The SDK clears per-workspace storage.
+Here (a remote's `useSignOut()`) or in another tab (`BroadcastChannel('platform-auth')`): `anonymous`/`signed-out` → the app root is unmounted (so the previous user's data is not left under the dialog), then `showSignedOut(() => idp.login({ workspace }))`. A global sign-out POSTs a hidden form to the realm's end-session endpoint (`id_token_hint`, `client_id`, `post_logout_redirect_uri`; the ID token stays out of URLs and history), which returns to `/`. The CSP `form-action` must allow the IdP origin, or the browser blocks the POST and the SSO session stays alive; that load shows the signed-out dialog (§6.1). The SDK clears per-workspace storage.
 
 ### 6.6 Workspace switch
 
@@ -294,7 +296,7 @@ Here (a remote's `useSignOut()`) or in another tab (`BroadcastChannel('platform-
 
 ### 6.7 Dashboard load
 
-`/dashboard/*` → `useRouteTemplate('/t/:slug/dashboard')`, `<RemoteBoundary remote="app2" module="./App" fallback="Loading dashboard…">`. The SDK's `loadRemote`: kill switch (`remotes.killSwitch`, flag `remote.app2.disabled`), entry origin (page or `remotes.allowedOrigins`), classic `<script>` with `integrity`, timeout `remotes.loadTimeoutMs`, `retries`, container from `window.app2`, share-scope init. Any failure stays inside the boundary ("Something went wrong." / "Try again"); "Try again" asks the container again without a reload.
+`/dashboard/*` → `useRouteTemplate('/t/:slug/dashboard')`, `<RemoteBoundary remote="app2" module="./App" fallback="Loading dashboard…">`. The SDK's `loadRemote`: kill switch (`remotes.killSwitch`, flag `remote.app2.disabled`), entry origin (page or `remotes.allowedOrigins`), classic `<script>` with `integrity`, timeout `remotes.loadTimeoutMs`, `retries`, container from `window.__platform_mfe_app2`, share-scope init. Any failure stays inside the boundary ("Something went wrong." / "Try again"); "Try again" asks the container again without a reload.
 
 ---
 
@@ -327,6 +329,7 @@ Here (a remote's `useSignOut()`) or in another tab (`BroadcastChannel('platform-
 | Remote code | Runs in this origin; manifest-only entries, allowed origins, integrity outside local/dev/test | SDK `/mfe` |
 | Script integrity | sha384 on the entry and every lazy chunk | Preset `ChunkIntegrityPlugin`; smoke checks the entry |
 | CSP | Bundle is `script-src 'self'` and Trusted Types safe; fonts and styles are same-origin (`font-src 'self'`, `style-src 'self'`); headers come from CloudFront | Preset output, `inlineScripts: false`, self-hosted fonts; smoke `live` mode checks headers |
+| Sign-out POST | CSP `form-action 'self' <idpOrigin>`: the SDK's global sign-out is a form POST to Keycloak | CloudFront; smoke `live` mode checks `form-action` contains the runtime config's `auth.idpOrigin` |
 | Outbound links | Help and legal links open in a new tab with `rel="noopener noreferrer"`; unset links are not rendered | `PageLinks.tsx` |
 | Generic errors | The email screen never says which input failed | `WORKSPACE_NOT_FOUND` |
 | Image | uid 101, digest-pinned bases, registry token as BuildKit secret, no source maps | `Dockerfile`; smoke checks `.map` |
@@ -360,8 +363,8 @@ Validated strictly by the SDK (unknown keys rejected). Schema: SDK LLD §12.1.
 | Key | Store | Written by |
 |---|---|---|
 | `@bcbp-solutions-fzc-llc/frontend-sdk:*` (workspace cache, session id, last activity, last user, signed-out mark) | `localStorage` | SDK. No tokens |
-| `<namespace>:<appId>:<key>` | `localStorage` | Remotes through `storage(appId)`; cleared on sign-out |
-| `bcbp.rememberEmail`, `bcbp.loginEmail` | `localStorage` | `pages/rememberEmail.ts`, only when "Remember Email" is checked; every access in `try` |
+| `@bcbp-solutions-fzc-llc/frontend-sdk:storage:<namespace>:<appId>:<key>` | `localStorage` | Remotes through `storage(appId)`; cleared on sign-out. Values under the pre-alpha.4 keys are not read |
+| `bcbp.rememberEmail`, `bcbp.loginEmail` | `localStorage` | `pages/rememberEmail.ts`, only when "Remember Email" is checked; every access in `try`. The one file exempt from `no-raw-storage` (`eslint.config.js`) |
 
 ---
 
@@ -423,10 +426,10 @@ Vitest 5, happy-dom at `http://localhost:5001/`, Testing Library. `vitest.config
 |---|---|---|---|
 | Unit | `test/unit/` | partly (`createTestPlatform`, `mockApi`, `roleMapAuthorizer`) | PUB-1/P-35 mappings against the SDK's contract cases, the entry point, remember-email, consent, the role map, the screen host, `BrandLogo`, the login variant, the dev middleware (node env, real HTTP) |
 | Integration | `test/integration/` | no (`vi.mock` recording fakes) | The bootstrap's exact order and every branch, login layouts and carousel (only current and next photo fetched), session screens (alerts, dialog focus), `App` routes and the missing-context notice, axe-core over every shell screen (`accessibility.test.tsx`, colour contrast excluded) |
-| End to end | `test/e2e/shell.test.tsx` | yes | Email → PUB-1 → PKCE → callback → `app2` under `/t/acme/dashboard`; tokens never stored; deep link; role map reaching the remote; deny-all; failing remote and Try again; global sign-out with no silent sign-in after; device clock; unknown email |
-| Smoke | `test/smoke/deployment.test.ts` | yes (config and manifest validation) | Against `SMOKE_BASE_URL`: the SPA rule, Cache-Control, entry integrity, no maps, 404s, `/healthz`; `image` mode adds nginx's baseline headers, gzip, no version, dotfile 404s; `live` mode adds CloudFront's CSP, HSTS and nosniff |
+| End to end | `test/e2e/shell.test.tsx` | yes | Email → PUB-1 → PKCE → callback → `app2` under `/t/acme/dashboard`; tokens never stored; deep link; role map reaching the remote; deny-all; failing remote and Try again; global sign-out (form POST to Keycloak) with no silent sign-in after; device clock; unknown email |
+| Smoke | `test/smoke/deployment.test.ts` | yes (config and manifest validation) | Against `SMOKE_BASE_URL`: the SPA rule, Cache-Control, entry integrity, no maps, 404s, `/healthz`; `image` mode adds nginx's baseline headers, gzip, no version, dotfile 404s; `live` mode adds CloudFront's CSP (including `form-action` allowing the IdP), HSTS and nosniff |
 
-E2E seams (`test/fixtures/`): `FakeKeycloak` (authorize via `approve()`, token endpoint with PKCE check and refresh rotation), `FakeNetwork` (route table on the page origin; `/otel` → 204), `FakeBroadcastChannel`. Only the remote's entry `<script>` is stubbed: it defines `window.app2` exposing a dashboard built on SDK hooks. A page load clears `globalThis[Symbol.for('@bcbp-solutions-fzc-llc/frontend-sdk')]`, resets modules, and imports the bootstrap again; storage is kept.
+E2E seams (`test/fixtures/`): `FakeKeycloak` (authorize via `approve()`, token endpoint with PKCE check and refresh rotation), `FakeNetwork` (route table on the page origin; `/otel` → 204), `FakeBroadcastChannel`. Only the remote's entry `<script>` is stubbed: it defines `window.__platform_mfe_app2` exposing a dashboard built on SDK hooks. A page load clears `globalThis[Symbol.for('@bcbp-solutions-fzc-llc/frontend-sdk')]`, resets modules, and imports the bootstrap again; storage is kept.
 
 Not covered here: real browser engines under the production CSP (the SDK's `test/browser` suite does that for the SDK; §15).
 
@@ -453,10 +456,10 @@ Every `npm ci` reads `@bcbp-solutions-fzc-llc/*` from GitHub Packages with `GITH
 
 | Peer | Rule |
 |---|---|
-| SDK | Pinned exactly; the shell shares it as `1.0.0-alpha.3` under the preset's range `^1.0.0-0` |
-| Remotes | A remote built with the preset requires `^<its SDK version>`: it must not be newer than the shell's. **Upgrade the shell first**, then remotes |
+| SDK | Pinned exactly; the shell shares it as `1.0.0-alpha.4` under the preset's range `^1.0.0-0` |
+| Remotes | A remote built with the preset requires `^<its SDK version>`: it must not be newer than the shell's. **Upgrade the shell first**, then remotes. alpha.4 is the exception: the container global changed, so the shell and every remote deploy together |
 | React | Strict singleton `^19.0.0` from the preset; the shell ships 19.3 |
-| `mfe-dashboard` (`app2`) | Rsbuild remote with `pluginPlatform({ role: 'remote', name: 'app2' })`, async-only chunk splitting, reads the user and sign-out through SDK hooks, takes no props. Verified end to end on 2026-11-04 (owner sees Invite; member does not; logout asks for the password again) |
+| `mfe-dashboard` (`app2`) | Rsbuild remote with `pluginPlatform({ role: 'remote', name: 'app2' })`, async-only chunk splitting, reads the user and sign-out through SDK hooks, takes no props. Verified end to end on alpha.3 on 2026-11-04 (owner sees Invite; member does not; logout asks for the password again). Must be rebuilt with the alpha.4 preset to load in this shell |
 | Keycloak | Each workspace realm registers `{origin}/auth/callback` and the origin as post-logout redirect for the client |
 
 Details: [VERSIONING.md](../../VERSIONING.md).
@@ -471,7 +474,7 @@ Details: [VERSIONING.md](../../VERSIONING.md).
 | 2 | No real-browser suite under the production CSP (the SDK's `test/browser` pattern) | this repo |
 | 3 | Consent is essential only in v1 (decision). A consent manager would call `cmp.accept()` | product |
 | 4 | SDK features not used yet: `registerNavigator` (a remote's `navigate()` does a full load), i18n `detect` from P-35 `locale` | this repo |
-| 5 | `no-raw-storage` catches `window.localStorage` but not bare `localStorage` | `platform-reactcommon` |
+| 5 | `mfe-dashboard` is on alpha.3: until it is rebuilt with the alpha.4 preset, this shell cannot load it (`__platform_mfe_app2` undefined) | `mfe-dashboard` |
 | 6 | PUB-1 and P-35 must exist behind `/api` in every environment; they are stubbed only in dev | IAM |
 | 7 | No cluster deploy; each environment serves its own runtime config and manifest | operators |
 | 8 | Tender permissions in the role map are provisional | Tender Service |

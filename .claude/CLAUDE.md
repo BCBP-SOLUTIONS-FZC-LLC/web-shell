@@ -6,7 +6,7 @@ This file provides guidance to Claude Code when working with **web-shell**, the 
 
 A **private Rsbuild application** (npm name `app1`, `"private": true`, `0.0.0`) that ships as a static bundle in an nginx image (`ghcr.io/bcbp-solutions-fzc-llc/web-shell`, port 8080, uid 101). It runs the platform SDK's start-up sequence once per page, owns the sign-in and session screens and the IAM ports, and hosts the dashboard remote `app2` (`mfe-dashboard`) through Module Federation. It exposes nothing.
 
-Node 26, TypeScript `~6.0.3` (typescript-eslint has no TS 7 support), React 19.3, Rsbuild 2 (Rspack), Tailwind 4 + daisyUI. Platform packages from **GitHub Packages** (`.npmrc`, `NODE_AUTH_TOKEN` with `read:packages`): `@bcbp-solutions-fzc-llc/frontend-sdk`, `webpack-preset`, `eslint-plugin`, all **`1.0.0-alpha.3`, pinned exactly, on one version**.
+Node 26, TypeScript `~6.0.3` (typescript-eslint has no TS 7 support), React 19.3, Rsbuild 2 (Rspack), Tailwind 4 + daisyUI. Platform packages from **GitHub Packages** (`.npmrc`, `NODE_AUTH_TOKEN` with `read:packages`): `@bcbp-solutions-fzc-llc/frontend-sdk`, `webpack-preset`, `eslint-plugin`, all **`1.0.0-alpha.4`, pinned exactly, on one version**.
 
 **Status:** never tagged or deployed; everything is `[Unreleased]` in `CHANGELOG.md`. Open items: [LLD §15](../docs/lld/web-shell-lld.md#15-open-items) (official legal/help URLs for `src/pages/links.ts`, no real-browser suite, unused SDK navigator/i18n-detect). v1 decisions: essential-only consent; fonts self-hosted; Forgot password → Keycloak reset.
 
@@ -38,10 +38,11 @@ Run one test: `npx vitest run test/e2e/shell.test.tsx -t "sign-out"`. Full list:
 
 - **Never reimplement SDK behaviour.** PKCE, token handling, refresh, idle timeout, cross-tab sign-out, `prompt=login` after logout, return URLs, workspace caching, the `/t/<slug>/` move, telemetry, `loadRemote`, integrity, the shared map: use the SDK; change it in `platform-reactcommon`. Before adding a helper, check the SDK's exports (`node_modules/@bcbp-solutions-fzc-llc/frontend-sdk/dist/<subpath>/index.d.ts`).
 - **SDK imports through public subpaths only** (`@bcbp-solutions-fzc-llc/frontend-sdk/<subpath>`); never the root, never `dist/` internals. The ESLint plugin enforces it in `src/`.
-- **No token in storage, logs or the channel.** The only raw `localStorage` use is `bcbp.rememberEmail` / `bcbp.loginEmail` in `src/pages/rememberEmail.ts`.
+- **No token in storage, logs or the channel.** The only raw `localStorage` use is `bcbp.rememberEmail` / `bcbp.loginEmail` in `src/pages/rememberEmail.ts`, the one file `eslint.config.js` exempts from `no-raw-storage`.
 - **No login without a click** after a logout, a device-clock refusal or an expiry. The app is **unmounted** before "You are signed out". A wrong-workspace login never renders.
 - **Remotes get no props.** Data a remote needs goes into the `PlatformProvider` shell value and is read through SDK hooks.
 - **Role map keys are IAM's closed set** (`member`, `tenant_owner`, `tenant_admin`, `tender_admin`); department levels are never roles. UI hints only.
+- **CSP `form-action` must allow the IdP origin** (SDK alpha.4 signs out globally with a form POST to Keycloak); CloudFront owns the CSP, smoke `live` checks it.
 - **CSP-safe:** no inline script or style (`inlineScripts`/`inlineStyles: false`), no `eval`, no runtime CSS-in-JS. Never add a third-party origin to `index.html`; fonts are self-hosted (`@fontsource-variable/*`).
 - **No dead or invented links.** Help and legal URLs live only in `src/pages/links.ts` and render only when set; never guess an official URL.
 - **nginx SPA rule:** only extension-less paths get `index.html`; `/api`, `/otel`, `/csp-report`, `/config`, `/remotes`, `/assets` and any missing file with an extension stay 404. Unhashed files are `no-cache`, `/assets/` immutable. Change `test/smoke/deployment.test.ts` with it.

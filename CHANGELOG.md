@@ -42,6 +42,13 @@ Pull requests that change the shell, its dependencies, or the image add an entry
 
 ### Changed
 
+- **Platform SDK `1.0.0-alpha.4` (`2026-11-05`).** `@bcbp-solutions-fzc-llc/frontend-sdk`, `webpack-preset`, and `eslint-plugin` move from `1.0.0-alpha.3` to `1.0.0-alpha.4`, pinned exactly; the preset's new `SdkVersionPlugin` fails the build if they drift. What changes for the shell:
+  - **The dashboard must be rebuilt with it, and both must deploy together.** The SDK reads a remote's container from `window.__platform_mfe_<name>` (`__platform_mfe_app2`), not `window.app2`. An `mfe-dashboard` built with the alpha.3 preset defines the old global, and this shell shows "Something went wrong." in its slot.
+  - **Global sign-out is a form POST** to the realm's end-session endpoint, so the ID token stays out of the URL, history and access logs. The CSP `form-action` must allow the IdP origin (for example `form-action 'self' https://auth.bcbpsolutions.com`), or the browser blocks it and the Keycloak session stays alive. CloudFront owns the CSP; the smoke suite's `live` mode now checks it.
+  - **`no-raw-storage` now flags bare `localStorage`.** `src/pages/rememberEmail.ts` is exempt in `eslint.config.js` (it is needed before a workspace exists and must survive sign-out, which the SDK's `storage()` does not offer). Nothing else changed in `src/`.
+  - SDK `storage()` keys gained the `@bcbp-solutions-fzc-llc/frontend-sdk:storage:` prefix; old values are not migrated. The shell writes none.
+  - The e2e suite defines `__platform_mfe_app2` and asserts the sign-out POST (URL, `client_id`, `id_token_hint`, `post_logout_redirect_uri`).
+
 - **Launch decisions applied (`2026-11-04`).**
   - Fonts are self-hosted: Geist and Inter from Fontsource (`@fontsource-variable/geist`, `@fontsource-variable/inter` 5.3.0, SIL OFL 1.1), bundled into `/assets/` with hashed names. `index.html` no longer loads `fonts.googleapis.com`, so the platform CSP (`font-src 'self'; style-src 'self'`) holds. `rsbuild.config.ts` now bundles relative CSS `url()`s and keeps root-relative ones as written. Tailwind's `sans` is `Geist Variable`, `Inter Variable`, system fonts.
   - "Forgot your password?" is a button: it resolves the typed email through PUB-1 and opens Keycloak's reset page for that realm (`{idpOrigin}/realms/{realm}/login-actions/reset-credentials?client_id={clientId}`, `src/platform/passwordReset.ts`). Without an email it asks for one; an unknown email shows the generic message.
@@ -90,7 +97,9 @@ Pull requests that change the shell, its dependencies, or the image add an entry
 
 - **The shipped runtime config is a default.** `public/config/runtime.json` uses the SDK defaults (`https://auth.bcbpsolutions.com`, client `tender-web`). Each environment serves its own `/config/runtime.json` and `/remotes/manifest.json` (CloudFront, or a file mounted over the image's). The image's manifest is `{}`, so the dashboard slot is empty until one is provided.
 
-- **No CSP headers yet.** The bundle is CSP-safe (Trusted Types policy, no `eval`, no inline script), but `nginx/default.conf` sets no `Content-Security-Policy`. The platform's headers come from CloudFront (`platform-reactcommon/examples/cloudfront`).
+- **No CSP headers yet.** The bundle is CSP-safe (Trusted Types policy, no `eval`, no inline script), but `nginx/default.conf` sets no `Content-Security-Policy`. The platform's headers come from CloudFront (`platform-reactcommon/examples/cloudfront`), whose `form-action` must include the IdP origin for the global sign-out.
+
+- **`mfe-dashboard` is still on alpha.3.** Until it is rebuilt with the alpha.4 preset, this shell cannot load it, locally or deployed.
 
 - **Essential telemetry only (v1 decision).** `src/platform/consent.ts` grants `essential` only: errors and essential warnings are exported; traces, metrics and info logs are not, until a consent manager is added.
 
