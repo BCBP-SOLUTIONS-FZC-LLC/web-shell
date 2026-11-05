@@ -5,7 +5,6 @@ graph LR
     screens(["platform/SessionScreens.tsx"])
     screen(["platform/screen.tsx"])
     iam(["platform/iam.ts"])
-    consent(["platform/consent.ts"])
     perms(["platform/permissions.ts"])
     ctx(["platform/sessionContext.ts\nplatform/ShellRoot.tsx"])
     nav(["platform/navigator.ts"])
@@ -22,7 +21,6 @@ graph LR
     boot --> screens
     boot --> screen
     boot --> iam
-    boot --> consent
     boot --> perms
     boot --> ctx
     boot --> nav
@@ -40,4 +38,3 @@ graph LR
     login --> links
     hook --> remember
     iam --> sdk
-    consent --> sdk

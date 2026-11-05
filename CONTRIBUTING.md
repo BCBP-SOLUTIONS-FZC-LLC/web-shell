@@ -51,7 +51,6 @@ src/
     iam.ts               ← PUB-1 resolver and P-35 session context (the SDK's /auth ports)
     SessionScreens.tsx   ← Email sign-in, signed out, session ended, device clock, wrong workspace
     screen.tsx           ← Full-screen host for those screens
-    consent.ts           ← Consent stand-in
     permissions.ts       ← Role → UI permission map
   pages/                 ← Login layouts, useEmailSignIn, rememberEmail
   components/            ← Shell-owned UI (BrandLogo)
@@ -112,6 +111,10 @@ docs/lld/web-shell-lld.md ← Low-level design (the contract)
 2. A build-time constant goes in `rsbuild.config.ts` `source.define`, `src/globals.d.ts`, and `vitest.config.ts` `define`. If the image needs it, add a Dockerfile `ARG` and pass it from the workflows' `build-args`.
 3. Add a row to the configuration tables in `README.md`.
 4. Runtime config is served to every browser. Do not put secrets in it.
+
+### Adding a metric
+
+Follow [docs/observability.md § Adding a metric](docs/observability.md#adding-a-metric): pick the tier with its decision tree, create it with the SDK's `getServiceMeter` (Tier 3, `portal_web_shell_*`) or `getDomainMeter` (a ratified Tier 2 name), add it to the Inventory, and run `npm run metrics-check`. Never create `platform_*` metrics or use the OpenTelemetry metrics API directly.
 
 ### Adding an nginx location
 

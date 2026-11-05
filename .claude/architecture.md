@@ -11,7 +11,6 @@ Condensed from [ARCHITECTURE.md](../ARCHITECTURE.md) and the [LLD](../docs/lld/w
 | `src/App.tsx` | `BrowserRouter` (basename `/t/<slug>` when the URL has one, keyed by it); `/dashboard/*` → `RemoteBoundary remote="dashboard" module="./App"`; `*` → `/dashboard`; `onRouter` hands `navigate` to the bootstrap; update banner and missing-context notice |
 | `src/platform/iam.ts` | `toWorkspace` (PUB-1), `toSessionContext` (P-35), `workspaceResolver`, `sessionContextSource` over a lazy `createApiClient()` |
 | `src/platform/permissions.ts` | `IAM_ROLES`, `permissions` (role → `action:resource`) |
-| `src/platform/consent.ts` | `cmp`: `essential` only (v1 decision); `accept()` unused |
 | `src/platform/SessionScreens.tsx` | `askForWorkspace`, `showSignedOut`, `showDeviceClock`, `showSessionEnded`, `showWrongWorkspace`, `showWorkspaceNotFound`, `WORKSPACE_NOT_FOUND` |
 | `src/platform/screen.tsx` | `#shell-screen` fixed overlay host: `showScreen`, `hideScreen`, `resetScreen` |
 | `src/platform/sessionContext.ts` | `isTransient`, `retrySessionContext` (1 s, 2 s, 4 s; abortable), `createStore` |
@@ -35,7 +34,7 @@ Condensed from [ARCHITECTURE.md](../ARCHITECTURE.md) and the [LLD](../docs/lld/w
 
 | Module | May import |
 |---|---|
-| `platform/iam.ts`, `consent.ts`, `permissions.ts`, `passwordReset.ts`, `sessionContext.ts`, `navigator.ts` | SDK subpaths only (`navigator.ts` none) |
+| `platform/iam.ts`, `permissions.ts`, `passwordReset.ts`, `sessionContext.ts`, `navigator.ts` | SDK subpaths only (`navigator.ts` none) |
 | `platform/ShellRoot.tsx` | React, SDK `/react` and `/auth` types |
 | `platform/screen.tsx` | `react-dom/client` |
 | `platform/SessionScreens.tsx` | `pages/*`, `iam`, `screen`, SDK types |

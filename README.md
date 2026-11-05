@@ -5,7 +5,7 @@ The browser shell for the BCBP micro-frontend platform. It runs the platform SDK
 **Repository:** `github.com/BCBP-SOLUTIONS-FZC-LLC/web-shell`
 **Runtime:** Node.js 26 · Rsbuild 2 (Rspack) · React 19.3 · `@bcbp-solutions-fzc-llc/frontend-sdk` `1.0.0-alpha.5` · private npm package `web-shell` (`"private": true`) · production image is nginx on port **8080**
 **Contract:** Module Federation host `shell`, built with `@bcbp-solutions-fzc-llc/webpack-preset`. It provides React, React DOM, the OTel API and every SDK subpath to remotes, and exposes nothing. Versioning of the image and that contract is in [VERSIONING.md](./VERSIONING.md).
-**Status:** not tagged or deployed. `main` passes every CI job; the release workflow has never run. Compatible with mfe-dashboard `v0.1.0`+ (alpha.4, checked by the contract suite). Until CloudFront exists (next month) environments follow [docs/hosting-without-cloudfront.md](./docs/hosting-without-cloudfront.md). What is still open: [LLD §15](./docs/lld/web-shell-lld.md#15-open-items).
+**Status:** Released: **`v0.2.0`** (remote `dashboard`, pairs with mfe-dashboard `v0.3.0`) is current and `latest`; **`v0.1.0`** (remote `app2`, pairs with mfe-dashboard `v0.2.0`) is kept as its rollback. Both were published by `release.yml` (signed, SBOM, SLSA provenance, tags added after signing). Not deployed yet. Deploy them in pairs: web-shell `0.2.0` + mfe-dashboard `0.3.0` (or `0.1.0` + `0.2.0`). Until CloudFront exists (next month) environments follow [docs/hosting-without-cloudfront.md](./docs/hosting-without-cloudfront.md). What is still open: [LLD §15](./docs/lld/web-shell-lld.md#15-open-items).
 
 ---
 
@@ -103,7 +103,6 @@ web-shell/
 │   │   ├── iam.ts               # PUB-1 resolver and P-35 session context over the ApiClient
 │   │   ├── SessionScreens.tsx   # Email sign-in, signed out, session ended, device clock, wrong workspace
 │   │   ├── screen.tsx           # Full-screen host for those screens, outside the app root
-│   │   ├── consent.ts           # Consent: essential only in v1
 │   │   ├── passwordReset.ts     # Keycloak reset page for the workspace's realm
 │   │   └── permissions.ts       # Role → UI permission map
 │   ├── pages/                   # Login layouts, the shared email form hook, remember-email
@@ -191,6 +190,7 @@ The dashboard is a second process. Start `mfe-dashboard` (`npm run dev` there) s
 | `npm test` | Vitest once (unit, integration, e2e) |
 | `npm run test-unit` / `test-int` / `test-e2e` | One layer |
 | `npm run budget` | Bundle size budget over `dist/` (run after `npm run build`; CI does) |
+| `npm run metrics-check` | Every metric `src/` creates follows the Enterprise Platform Observability Standard and is listed in [docs/observability.md](./docs/observability.md) (CI does) |
 | `npm run test-browser` | The real-browser suite (Playwright, Chromium, Firefox, WebKit) against `dist/` under the production CSP ([test/browser/README.md](./test/browser/README.md)) |
 | `npm run test-contract` | The browser suite against a real mfe-dashboard build: `REMOTE_DIST=../mfe-dashboard/dist npm run test-contract` after building both ([test/browser/README.md](./test/browser/README.md)) |
 | `npm run test-smoke` | The smoke suite against `SMOKE_BASE_URL` ([test/smoke/README.md](./test/smoke/README.md)) |
@@ -299,7 +299,7 @@ Every `npm ci` reads `@bcbp-solutions-fzc-llc/*` from GitHub Packages with `GITH
 - **`validate-test.yml`** — `npm ci`, `npm run test:coverage`, the 95% coverage gate, `npm run build`, then the bundle budget (`npm run budget`).
 - **`validate-quality.yml`** — ESLint (`--max-warnings 0`) and `npm run typecheck`. Workflow files must use literal operators and LF line endings, `Dockerfile` `FROM` lines must be digest-pinned, `.dockerignore` must exist, and `npm audit --omit=dev --audit-level=high` must pass.
 - **`changelog-check.yml`** — a pull request that touches `src/`, `package.json`, `package-lock.json`, `Dockerfile`, `nginx/`, `rsbuild.config.ts`, `config/**`, `public/config/**`, or `index.html` must also update `CHANGELOG.md`.
-- **`release.yml`** — tag `vX.Y.Z` or `vX.Y.Z-*`, or a manual run with a tag input. Re-validates, requires a matching changelog section, packs `web-shell_<tag>_dist.tar.gz` (source maps removed; kept as the workflow artifact `sourcemaps-<tag>`), pushes the image by digest only, scans it, attaches the SBOM and SLSA provenance, signs with Cosign, and only then adds the semver tags and `latest` (`tag-signed-image.sh`), so a failed step leaves an untagged digest and moves no tag; then it opens the GitHub Release. It has not run yet. Tagging does not deploy a cluster.
+- **`release.yml`** — tag `vX.Y.Z` or `vX.Y.Z-*`, or a manual run with a tag input. Re-validates, requires a matching changelog section, packs `web-shell_<tag>_dist.tar.gz` (source maps removed; kept as the workflow artifact `sourcemaps-<tag>`), pushes the image by digest only, scans it, attaches the SBOM and SLSA provenance, signs with Cosign, and only then adds the semver tags and `latest` (`tag-signed-image.sh`), so a failed step leaves an untagged digest and moves no tag; then it opens the GitHub Release. Tagging does not deploy a cluster.
 
 Image tag rules, the Cosign identity, and the maintainer steps are in [VERSIONING.md](./VERSIONING.md).
 
@@ -372,7 +372,7 @@ Two stages, both digest-pinned: `node:26-bookworm` runs `npm ci` and `npm run bu
 | Call | When |
 |---|---|
 | `GET /api/v1/public/tenants/resolve?identifier=` (PUB-1) | The email sign-in screen, and workspace switching. No token |
-| `GET /api/v1/me/session-context` (P-35) | Once after sign-in; on a network error, timeout, 429 or 5xx again after 1 s, 2 s, 4 s. Until it answers the app renders with deny-all permissions |
+| `GET /api/v1/me/session-context` (P-35) | Once after sign-in (with the SDK's own retries); after a network failure while online, a timeout, 429, 502, 503 or 504 (the SDK ApiClient's own rule), again after 1 s, 2 s, 4 s, one request each. Until it answers the app renders with deny-all permissions |
 
 ### Dashboard remote (`dashboard`)
 

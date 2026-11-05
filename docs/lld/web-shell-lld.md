@@ -5,15 +5,17 @@
 | | |
 |---|---|
 | **Repository** | `github.com/BCBP-SOLUTIONS-FZC-LLC/web-shell` (private) |
-| **Artifact** | Static bundle served by nginx (`ghcr.io/bcbp-solutions-fzc-llc/web-shell`), never installed as a package (`web-shell`, `"private": true`, `0.0.0`) |
+| **Artifact** | Static bundle served by nginx (`ghcr.io/bcbp-solutions-fzc-llc/web-shell`), never installed as a package (`web-shell`, `"private": true`; `version` = the latest tag) |
 | **Platform SDK** | `@bcbp-solutions-fzc-llc/frontend-sdk`, `webpack-preset`, `eslint-plugin` `1.0.0-alpha.5`, pinned exactly, all three on one version |
-| **Status** | Not tagged or deployed; everything is `[Unreleased]` in [CHANGELOG.md](../../CHANGELOG.md). `main` passes every CI job; the release workflow has not run (its provenance step fixed in #27). Compatible with mfe-dashboard `v0.1.0`+ (contract suite). Hosting until CloudFront (next month): [hosting-without-cloudfront.md](../hosting-without-cloudfront.md). Open: §15 |
+| **Status** | Released: **`v0.2.0`** (remote `dashboard`, pairs with mfe-dashboard `v0.3.0`) is current and `latest`; **`v0.1.0`** (remote `app2`, pairs with mfe-dashboard `v0.2.0`) is kept as its rollback. Both were published by `release.yml` (signed, SBOM, SLSA provenance, tags added after signing). Not deployed yet ([CHANGELOG.md](../../CHANGELOG.md)). Pairs: web-shell `0.2.0` + mfe-dashboard `0.3.0`; `0.1.0` + `0.2.0`. Hosting until CloudFront (next month): [hosting-without-cloudfront.md](../hosting-without-cloudfront.md). Open: §15 |
 | **Owners** | `@BCBP-SOLUTIONS-FZC-LLC/web-shell` (CODEOWNERS) |
 
 ### Revision history
 
 | Date | Change |
 |---|---|
+| 2026-11-05 | Observability standard: inventory (`docs/observability.md`), `metrics-check` in CI |
+| 2026-11-05 | Released `v0.1.0` and `v0.2.0`; status and open items updated |
 | 2026-11-05 | Remote renamed `app2` → `dashboard` (breaking; pairs with mfe-dashboard `v0.3.0`) |
 | 2026-11-05 | SDK `1.0.0-alpha.5` (optional `auth.signInUrl` for standalone remotes; host-page docs). Checked against mfe-dashboard `v0.1.1` (alpha.4) |
 | 2026-11-05 | Docs aligned with `main` after #25–#27: status, layout, hosting until CloudFront, release workflow, compatibility, open items |
@@ -61,7 +63,20 @@ This LLD is the contract for the shell: what it owns, what the SDK owns for it, 
 
 ### 1.2 Rule: no copies of SDK behaviour
 
-The shell implements only what the SDK leaves to a shell: the screens, the two IAM ports, consent, the role map, and the routes. PKCE, tokens, refresh, idle timeout, cross-tab sign-out, workspace caching, the `/t/<slug>/` URL, telemetry, remote loading, chunk integrity and the shared map are the SDK's and the preset's. A change to any of those is made in `platform-reactcommon`.
+The shell implements only what the SDK leaves to a shell: the screens, the two IAM ports, the role map, and the routes (consent is the SDK's essential-only default in v1). PKCE, tokens, refresh, idle timeout, cross-tab sign-out, workspace caching, the `/t/<slug>/` URL, telemetry, remote loading, chunk integrity and the shared map are the SDK's and the preset's. A change to any of those is made in `platform-reactcommon`.
+
+Audit (2026-11-05) of `src/`, the tests and the CI scripts against platform-reactcommon. Nothing re-implements a published SDK, preset or lint-plugin behaviour. What the shell takes from platform-reactcommon's **unpublished** parts:
+
+| In this repository | Taken from platform-reactcommon | Why it is here | To remove the copy |
+|---|---|---|---|
+| `platform/iam.ts`, `permissions.ts`, `SessionScreens.tsx`, `screen.tsx` | `examples/shell/src/*` (pattern) | The ports and screens every shell must own (design doc §C1); adapted (§2.3) | Not a copy to remove |
+| `platform/sessionContext.ts` (`isTransient`, `retrySessionContext`, `createStore`), `platform/ShellRoot.tsx` | `examples/shell/src/session-context.ts`, `ShellRoot.tsx`, nearly verbatim; `isTransient` is now the SDK ApiClient's rule (429, 502–504, online network error, timeout), and background attempts send one request each (`loadSessionContextOnce`, `retry: false`) | The SDK exports no session-context retry and no `PlatformProvider` that reads a live context | SDK export requested (`platform-reactcommon-shell-helpers-export.md`) |
+| `platform/passwordReset.ts` (`/realms/<realm>/login-actions/reset-credentials`) | The SDK's realm URL scheme (internal to `/auth`) | The SDK exports no realm-URL or password-reset builder | Same request |
+| `nginx/security.d/csp.conf.example` (read by `test/browser/server.ts`) | `examples/cloudfront/csp.mjs` `buildCsp` | The CSP builder is not in any package; one copy here, enforced in three engines by the browser suite | Same request (publish `buildCsp`) |
+| `test/fixtures/keycloak.ts`, `network.ts` | `test/fixtures/` (pattern) | The SDK's `/testing` `mockApi` answers only `api.baseUrl` routes; the e2e suite also needs `/config`, `/remotes` and `/otel` | Not a copy to remove |
+| `.github/scripts/metrics-check.mjs` | — | Uses the SDK's own `getServiceMeter` / `getDomainMeter` as the verdict; restates no rule | — |
+
+Removed as duplicates of the SDK (2026-11-05): `platform/consent.ts` (the runtime's default `ESSENTIAL_ONLY_CONSENT`), a second retry layer around the ApiClient's own GET retry, the restated `tenant-` default in `iam.ts`, and hand-built problem responses in the tests and the dev server (now the SDK's `/testing` `mockProblem`).
 
 ---
 
@@ -79,7 +94,7 @@ The shell implements only what the SDK leaves to a shell: the screens, the two I
 | Login layouts, email form, remember-email, help and legal links (`links.ts`, `PageLinks.tsx`) | `src/pages/*` |
 | Password reset hand-off to Keycloak | `src/platform/passwordReset.ts` |
 | Update and missing-permissions notices | `src/App.tsx` (`useAppUpdate`, `useSessionContext`) |
-| Consent (v1: essential only) | `src/platform/consent.ts` |
+| Consent (v1: essential only) | The SDK's default consent provider; the shell sets none |
 | Role → UI permission map | `src/platform/permissions.ts` |
 | Build (`shell` host), `/version.json` | `rsbuild.config.ts` |
 | Dev-only platform stand-ins | `config/dev-platform.mjs` |
@@ -117,7 +132,6 @@ src/
   platform/
     iam.ts                  toWorkspace, toSessionContext, workspaceResolver, sessionContextSource
     permissions.ts          IAM_ROLES, permissions (role → action:resource)
-    consent.ts              cmp: essential only until accept()
     SessionScreens.tsx      askForWorkspace and the dialogs
     sessionContext.ts       P-35 retry (isTransient, retrySessionContext) and the store the provider reads
     ShellRoot.tsx           PlatformProvider with the live context and locale
@@ -138,7 +152,7 @@ test/                       unit, integration, e2e, fixtures, smoke, browser (§
 
 | Module | May import |
 |---|---|
-| `platform/iam.ts`, `consent.ts`, `permissions.ts` | SDK subpaths only |
+| `platform/iam.ts`, `permissions.ts` | SDK subpaths only |
 | `platform/screen.tsx` | `react-dom/client` |
 | `platform/SessionScreens.tsx` | `pages/*`, `iam`, `screen`, SDK types |
 | `pages/*`, `components/*` | Each other. Never `platform/` or the SDK |
@@ -240,7 +254,7 @@ Keys are IAM's closed role set: `member`, `tenant_owner`, `tenant_admin`, `tende
 | 1 | `installTrustedTypesPolicy()` | No-op without Trusted Types |
 | 2 | `initializeCore({ serviceName: 'web-shell', domain: 'portal', environment: __ENVIRONMENT__, buildVersion: __BUILD_VERSION__ })` | Registry-validated identity |
 | 3 | `loadRuntimeConfig()` → `setRuntimeConfig(cfg)` | Strict schema. Any throw from here on is fatal (§7): after `initializeCore` it is first logged as `error 'the app could not start'` (to `telemetry.otlpBaseUrl` once the config is read, else the default `/otel`) |
-| 4 | `setConsentProvider(cmp)` | |
+| 4 | (consent) | The SDK's default: essential only (v1). A consent manager would call `setConsentProvider` here |
 | 5 | `initializeTracing`, `initializeLogging`, `initializeMetrics` (`cfg.telemetry`), `installGlobalErrorHandlers()`, `startWebVitals()` | |
 | 6 | `setFlagProvider(runtimeConfigFlagProvider())` | Platform flags only, until P-35 |
 | 7 | `idp = createOidcProvider(cfg.auth, workspaceResolver)`, `setTokenSource(initializeAuth(idp))`, `session = await idp.init()` | May redirect once with `prompt=none` and never settle |
@@ -254,7 +268,7 @@ Keys are IAM's closed role set: `member`, `tenant_owner`, `tenant_admin`, `tende
 | 15 | `loadManifest()` | Failure → `error 'manifest load failed'`; the app still renders |
 | 16 | `startVersionPolling()` | `/version.json` every `appUpdate.pollIntervalMs` |
 | 17 | `hideScreen()`, `createRoot(#app).render(<StrictMode><ShellRoot context={store} shell={…}><App basename? onRouter/></ShellRoot></StrictMode>)` | `basename = workspacePathPrefix + slugFromPath(...)` when the URL has a slug. `onRouter` → `registerNavigator(shellNavigator(navigate, basename))` |
-| 18 | Without a context, and only when the first failure was transient (network, timeout, 429, 5xx): `retrySessionContext` (1 s, 2 s, 4 s) → `store.set`, step 12–13 again. A final answer (401, 403, 404) is not asked again | Stopped by a sign-out. The provider re-renders with the context; no reload. When `rememberWorkspace` moved the URL under `/t/<slug>/`, `App` is rendered again keyed by the new basename (and the navigator with it) |
+| 18 | Without a context, and only when the first failure was transient (a network failure while online, a timeout, 429, 502, 503 or 504 (the SDK ApiClient's own rule); `isTransient`): `retrySessionContext` (1 s, 2 s, 4 s) over `loadSessionContextOnce` (`retry: false`: one request per attempt, the SDK's retries already ran on the first load) → `store.set`, step 12–13 again. A final answer (401, 403, 404) is not asked again | Stopped by a sign-out. The provider re-renders with the context; no reload. When `rememberWorkspace` moved the URL under `/t/<slug>/`, `App` is rendered again keyed by the new basename (and the navigator with it) |
 
 `test/integration/bootstrap.test.tsx` asserts this order with every SDK subpath replaced by a recording fake.
 
@@ -427,7 +441,7 @@ Identity: `service.name` `web-shell`, domain `portal`, environment `__ENVIRONMEN
 | `manifest load failed` | `error` | `loadManifest` rejected (§5 step 15) |
 | `the app could not start` | `console.error` only | Fatal start-up error (telemetry may not exist yet) |
 
-Everything else (API spans, remote load logs and metrics, web vitals, global errors) is emitted by the SDK. Route grouping: `useRouteTemplate('/t/:slug/dashboard')`.
+Everything else (API spans, remote load logs and metrics, web vitals, global errors) is emitted by the SDK. Metrics follow the Enterprise Platform Observability Standard ([observability.md](../observability.md)): the shell creates none of its own today; the SDK injects `domain` `portal`, `service` `web-shell` and `environment`; Tier 1 `platform_web_*` is SDK-bound and pending ratification; a shell metric would be Tier 3 `portal_web_shell_*`, checked in CI by `metrics-check`. Route grouping: `useRouteTemplate('/t/:slug/dashboard')`.
 
 ---
 
@@ -437,7 +451,7 @@ Vitest 5, happy-dom at `http://localhost:5001/`, Testing Library. `vitest.config
 
 | Layer | Path | Real SDK | What it locks |
 |---|---|---|---|
-| Unit | `test/unit/` | partly (`createTestPlatform`, `mockApi`, `roleMapAuthorizer`) | PUB-1/P-35 mappings against the SDK's contract cases, the entry point, remember-email, consent, the role map, the screen host, `BrandLogo`, the login variant, the dev middleware (node env, real HTTP) |
+| Unit | `test/unit/` | partly (`createTestPlatform`, `mockApi`, `roleMapAuthorizer`) | PUB-1/P-35 mappings against the SDK's contract cases, the entry point, remember-email, the role map, the screen host, `BrandLogo`, the login variant, the dev middleware (node env, real HTTP) |
 | Integration | `test/integration/` | no (`vi.mock` recording fakes) | The bootstrap's exact order and every branch, login layouts and carousel (only current and next photo fetched), session screens (alerts, dialog focus), `App` routes and the missing-context notice, axe-core over every shell screen (`accessibility.test.tsx`, colour contrast excluded) |
 | End to end | `test/e2e/shell.test.tsx` | yes | Email → PUB-1 → PKCE → callback → `dashboard` under `/t/acme/dashboard`; tokens never stored; deep link; role map reaching the remote; deny-all; failing remote and Try again; global sign-out (form POST to Keycloak) with no silent sign-in after; device clock; unknown email |
 | Smoke | `test/smoke/deployment.test.ts` | yes (config and manifest validation) | Against `SMOKE_BASE_URL`: the SPA rule, Cache-Control, entry integrity, no maps, 404s, `/healthz`; `image` mode adds nginx's baseline headers, gzip, no version, dotfile 404s; `live` mode adds CloudFront's CSP (including `form-action` allowing the IdP), HSTS and nosniff |
@@ -487,12 +501,11 @@ Details: [VERSIONING.md](../../VERSIONING.md).
 | # | Item | Owner |
 |---|---|---|
 | 1 | Official Privacy, Terms, Trust & Security and Help URLs: set them in `src/pages/links.ts` (hidden until then; none exists on bcbpsolutions.com) | product / legal |
-| 3 | Consent is essential only in v1 (decision). A consent manager would call `cmp.accept()` | product |
-| 5 | mfe-dashboard `v0.1.1` (alpha.4) is published (its `v0.1.0` never was) and loads in this alpha.5 shell (contract suite, 2026-11-05). Order for alpha.5 (platform): this shell first, then mfe-dashboard (its standalone `main.tsx` loads the runtime config), and only then do deployed `runtime.json` files set `auth.signInUrl` (older SDKs refuse the key) | `mfe-dashboard`, operators |
+| 3 | Consent is essential only in v1 (decision; the SDK's default). A consent manager would be installed with `setConsentProvider` in the bootstrap | product |
+| 5 | Deploy in pairs: web-shell `0.2.0` + mfe-dashboard `0.3.0` (manifest key `dashboard`, `/remotes/dashboard/0.3.0/`), or `0.1.0` + `0.2.0` (`app2`). After a pair is deployed, environments may set `auth.signInUrl` (older SDKs refuse the key), then `SMOKE_MODE=live` | operators |
 | 6 | PUB-1 and P-35 must exist behind `/api` in every environment; they are stubbed only in dev | IAM |
 | 7 | No cluster deploy; each environment serves its own runtime config and manifest (with the remote's integrity) and registers its redirect URIs in each realm | operators |
 | 8 | Tender permissions in the role map are provisional | Tender Service |
 | 9 | No CloudFront until next month: environments route `/api`, `/otel`, `/csp-report`, `/remotes/dashboard/` at the ingress and mount the CSP (IdP in `form-action`) and HSTS ([hosting-without-cloudfront.md](../hosting-without-cloudfront.md)); remove the mounts when CloudFront arrives | operators |
 | 10 | Keycloak realms need SMTP and "Forgot password" enabled for the reset flow (§6.1a); unconfirmed | Keycloak ops |
 | 11 | The `WebShellStartupFailures` alert ([runbook](../runbook-startup-failure.md)) is an example; it must be deployed to the Loki ruler | operators |
-| 12 | First release: add `## [0.1.0]` to the CHANGELOG, set `package.json` `version`, tag `v0.1.0` (release workflow never run), then `SMOKE_MODE=live` against the environment | this repo |
