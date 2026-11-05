@@ -5,15 +5,17 @@
 | | |
 |---|---|
 | **Repository** | `github.com/BCBP-SOLUTIONS-FZC-LLC/web-shell` (private) |
-| **Artifact** | Static bundle served by nginx (`ghcr.io/bcbp-solutions-fzc-llc/web-shell`), never installed as a package (`web-shell`, `"private": true`, `0.0.0`) |
+| **Artifact** | Static bundle served by nginx (`ghcr.io/bcbp-solutions-fzc-llc/web-shell`), never installed as a package (`web-shell`, `"private": true`; `version` = the latest tag) |
 | **Platform SDK** | `@bcbp-solutions-fzc-llc/frontend-sdk`, `webpack-preset`, `eslint-plugin` `1.0.0-alpha.5`, pinned exactly, all three on one version |
-| **Status** | Not tagged or deployed; everything is `[Unreleased]` in [CHANGELOG.md](../../CHANGELOG.md). `main` passes every CI job; the release workflow has not run (its provenance step fixed in #27). Compatible with mfe-dashboard `v0.1.0`+ (contract suite). Hosting until CloudFront (next month): [hosting-without-cloudfront.md](../hosting-without-cloudfront.md). Open: §15 |
+| **Status** | Released: **`v0.2.0`** (remote `dashboard`, pairs with mfe-dashboard `v0.3.0`) is current and `latest`; **`v0.1.0`** (remote `app2`, pairs with mfe-dashboard `v0.2.0`) is kept as its rollback. Both were published by `release.yml` (signed, SBOM, SLSA provenance, tags added after signing). Not deployed yet ([CHANGELOG.md](../../CHANGELOG.md)). Pairs: web-shell `0.2.0` + mfe-dashboard `0.3.0`; `0.1.0` + `0.2.0`. Hosting until CloudFront (next month): [hosting-without-cloudfront.md](../hosting-without-cloudfront.md). Open: §15 |
 | **Owners** | `@BCBP-SOLUTIONS-FZC-LLC/web-shell` (CODEOWNERS) |
 
 ### Revision history
 
 | Date | Change |
 |---|---|
+| 2026-11-05 | Observability standard: inventory (`docs/observability.md`), `metrics-check` in CI |
+| 2026-11-05 | Released `v0.1.0` and `v0.2.0`; status and open items updated |
 | 2026-11-05 | Remote renamed `app2` → `dashboard` (breaking; pairs with mfe-dashboard `v0.3.0`) |
 | 2026-11-05 | SDK `1.0.0-alpha.5` (optional `auth.signInUrl` for standalone remotes; host-page docs). Checked against mfe-dashboard `v0.1.1` (alpha.4) |
 | 2026-11-05 | Docs aligned with `main` after #25–#27: status, layout, hosting until CloudFront, release workflow, compatibility, open items |
@@ -438,7 +440,7 @@ Identity: `service.name` `web-shell`, domain `portal`, environment `__ENVIRONMEN
 | `manifest load failed` | `error` | `loadManifest` rejected (§5 step 15) |
 | `the app could not start` | `console.error` only | Fatal start-up error (telemetry may not exist yet) |
 
-Everything else (API spans, remote load logs and metrics, web vitals, global errors) is emitted by the SDK. Route grouping: `useRouteTemplate('/t/:slug/dashboard')`.
+Everything else (API spans, remote load logs and metrics, web vitals, global errors) is emitted by the SDK. Metrics follow the Enterprise Platform Observability Standard ([observability.md](../observability.md)): the shell creates none of its own today; the SDK injects `domain` `portal`, `service` `web-shell` and `environment`; Tier 1 `platform_web_*` is SDK-bound and pending ratification; a shell metric would be Tier 3 `portal_web_shell_*`, checked in CI by `metrics-check`. Route grouping: `useRouteTemplate('/t/:slug/dashboard')`.
 
 ---
 
@@ -499,11 +501,10 @@ Details: [VERSIONING.md](../../VERSIONING.md).
 |---|---|---|
 | 1 | Official Privacy, Terms, Trust & Security and Help URLs: set them in `src/pages/links.ts` (hidden until then; none exists on bcbpsolutions.com) | product / legal |
 | 3 | Consent is essential only in v1 (decision). A consent manager would call `cmp.accept()` | product |
-| 5 | mfe-dashboard `v0.1.1` (alpha.4) is published (its `v0.1.0` never was) and loads in this alpha.5 shell (contract suite, 2026-11-05). Order for alpha.5 (platform): this shell first, then mfe-dashboard (its standalone `main.tsx` loads the runtime config), and only then do deployed `runtime.json` files set `auth.signInUrl` (older SDKs refuse the key) | `mfe-dashboard`, operators |
+| 5 | Deploy in pairs: web-shell `0.2.0` + mfe-dashboard `0.3.0` (manifest key `dashboard`, `/remotes/dashboard/0.3.0/`), or `0.1.0` + `0.2.0` (`app2`). After a pair is deployed, environments may set `auth.signInUrl` (older SDKs refuse the key), then `SMOKE_MODE=live` | operators |
 | 6 | PUB-1 and P-35 must exist behind `/api` in every environment; they are stubbed only in dev | IAM |
 | 7 | No cluster deploy; each environment serves its own runtime config and manifest (with the remote's integrity) and registers its redirect URIs in each realm | operators |
 | 8 | Tender permissions in the role map are provisional | Tender Service |
 | 9 | No CloudFront until next month: environments route `/api`, `/otel`, `/csp-report`, `/remotes/dashboard/` at the ingress and mount the CSP (IdP in `form-action`) and HSTS ([hosting-without-cloudfront.md](../hosting-without-cloudfront.md)); remove the mounts when CloudFront arrives | operators |
 | 10 | Keycloak realms need SMTP and "Forgot password" enabled for the reset flow (§6.1a); unconfirmed | Keycloak ops |
 | 11 | The `WebShellStartupFailures` alert ([runbook](../runbook-startup-failure.md)) is an example; it must be deployed to the Loki ruler | operators |
-| 12 | First release: add `## [0.1.0]` to the CHANGELOG, set `package.json` `version`, tag `v0.1.0` (release workflow never run), then `SMOKE_MODE=live` against the environment | this repo |

@@ -10,6 +10,7 @@
 | `npm run lint` / `typecheck` / `build` | ESLint (platform rules) / `tsc -p tsconfig.test.json` / `tsc && rsbuild build` |
 | `npm test`, `test-unit`, `test-int`, `test-e2e` | Vitest (all, or one layer) |
 | `npm run test:ci` | Coverage + `.github/scripts/coverage-gate.mjs` (95%) |
+| `npm run metrics-check` | `.github/scripts/metrics-check.mjs`: creates every metric `src/` defines once more with the SDK's own `getServiceMeter` / `getDomainMeter` (identity from `src/bootstrap.tsx`), so the SDK's `InvalidMetricError` is the verdict; adds only what the SDK cannot see: metrics created outside the SDK, non-literal names or labels, and the `docs/observability.md` Inventory. No rule is restated here |
 | `npm run budget` | `.github/scripts/bundle-budget.mjs` over `dist/`: entry 12 KB, JS+CSS 300 KB, largest 85 KB (gzip), images 2.7 MB. Raise a limit only on purpose, with a CHANGELOG line |
 | `npm run test-browser` | Playwright over `dist/` (build first): Chromium, Firefox, WebKit, production CSP, HTTPS (openssl self-signed cert in `test/browser/.build/`), fake Keycloak on a second origin. `-- --project=webkit` for one engine |
 | `npm run test-contract` | `REMOTE_DIST=<mfe-dashboard>/dist` (built, with `remote-manifest-entry.json`): `dashboard.spec.ts` with the real remote. Build mfe-dashboard in a copy, never in the sibling checkout |
@@ -23,7 +24,7 @@ Image locally: `docker build --secret id=npm_token,env=NODE_AUTH_TOKEN -t web-sh
 | Job | Gate |
 |---|---|
 | `Validate / Test / test` | `npm ci`, coverage, gate 95%, build, size budget |
-| `Validate / Quality / quality` | ESLint `--max-warnings 0`, typecheck, workflow LF and literal operators, digest pins, `.dockerignore`, `npm audit --omit=dev --audit-level=high` |
+| `Validate / Quality / quality` | ESLint `--max-warnings 0`, `metrics-check`, typecheck, workflow LF and literal operators, digest pins, `.dockerignore`, `npm audit --omit=dev --audit-level=high` |
 | `Build image (cache)` | Hadolint, Buildx `web-shell-ci-test` (secret `npm_token`) |
 | `Trivy CVE scan` | Unfixed CRITICAL/HIGH/UNKNOWN fail; `.trivyignore` with reason and expiry |
 | `Smoke tests` | Node 26 + `npm ci`, then `smoke-tests.sh`: ≤ 200 MB, `/healthz`, startup gate, `npm run test-smoke` (`SMOKE_MODE=image`) |
@@ -40,7 +41,7 @@ Runbooks: `docs/runbook-coverage-gate.md`, `docs/runbook-image-scan.md`, `docs/r
 
 `vX.Y.Z[-*]` tag → `release.yml`: re-validate, `## [X.Y.Z]` changelog section, `web-shell_<tag>_dist.tar.gz` (`BUILD_VERSION` without the `v`), source maps as workflow artifact `sourcemaps-<tag>`, image pushed by digest, scan, SBOM, SLSA provenance (BuildKit attestation, read with `docker buildx imagetools inspect`), Cosign, then the semver tags and `latest` on the signed digest (`tag-signed-image.sh`), GitHub Release. Tagging never deploys. See `VERSIONING.md` and `docs/runbook-release.md`.
 
-The workflow has never run. Its provenance step was the one that failed mfe-dashboard's `v0.1.0`; fixed here before the first tag (#27). Tags are added last (#30), so a failed run leaves only an untagged digest in GHCR and moves no version tag or `latest`: fix the cause, then delete and push the Git tag again (`docs/runbook-release.md`).
+It has run for `v0.1.0` and `v0.2.0` (2026-11-05), both green end to end. Its provenance step was the one that failed mfe-dashboard's `v0.1.0`; fixed here before the first tag (#27). Tags are added last (#30), so a failed run leaves only an untagged digest in GHCR and moves no version tag or `latest`: fix the cause, then delete and push the Git tag again (`docs/runbook-release.md`).
 
 ## SDK upgrade checklist
 
