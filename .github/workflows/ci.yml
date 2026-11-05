@@ -250,6 +250,12 @@ jobs:
     name: Browser tests
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # Playwright's image for the exact @playwright/test version: browsers, their system libraries
+    # and Node 26 preinstalled, so nothing comes from apt (the Ubuntu mirror once took 22 min for
+    # `install --with-deps`). Bump the tag and digest with @playwright/test (the first step checks).
+    container:
+      image: mcr.microsoft.com/playwright:v1.64.1-noble@sha256:2f05f8a734509a7b3f26a912639488ee08f58a7b292d14d62271bcff9038768f
+      options: --user 1001
     steps:
       - name: Checkout
         uses: actions/checkout@v7.0.1
@@ -257,19 +263,20 @@ jobs:
           persist-credentials: false
           token: ${{ secrets.CI_REPO_READ_TOKEN || github.token }}
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v7.1.0
-        with:
-          node-version: 26
-          cache: npm
-
       - name: Install dependencies
         run: npm ci
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Install browsers (Chromium, Firefox, WebKit)
-        run: npx playwright install --with-deps chromium firefox webkit
+      - name: Check the image has this @playwright/test's browsers
+        run: |
+          missing=$(npx --no-install playwright install --dry-run chromium firefox webkit \
+            | awk '/Install location:/ {print $3}' | while read -r dir; do [ -d "${dir}" ] || echo "${dir}"; done)
+          if [ -n "${missing}" ]; then
+            echo "::error file=.github/workflows/ci.yml,title=Playwright image::The job container lacks ${missing//$'\n'/, } for @playwright/test $(npx --no-install playwright --version); bump the image tag and digest with it"
+            exit 1
+          fi
+          echo "  ✔  $(npx --no-install playwright --version): every browser is in the image"
 
       - name: Production build
         run: npm run build
@@ -292,6 +299,12 @@ jobs:
     name: Dashboard contract
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    # Playwright's image for the exact @playwright/test version: browsers, their system libraries
+    # and Node 26 preinstalled, so nothing comes from apt (the Ubuntu mirror once took 22 min for
+    # `install --with-deps`). Bump the tag and digest with @playwright/test (the first step checks).
+    container:
+      image: mcr.microsoft.com/playwright:v1.64.1-noble@sha256:2f05f8a734509a7b3f26a912639488ee08f58a7b292d14d62271bcff9038768f
+      options: --user 1001
     steps:
       - name: Checkout
         uses: actions/checkout@v7.0.1
@@ -308,15 +321,6 @@ jobs:
           path: .remote/mfe-dashboard
           persist-credentials: false
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v7.1.0
-        with:
-          node-version: 26
-          cache: npm
-          cache-dependency-path: |
-            package-lock.json
-            .remote/mfe-dashboard/package-lock.json
-
       - name: Install dependencies (shell and dashboard)
         run: |
           npm ci
@@ -329,8 +333,15 @@ jobs:
         env:
           BUILD_VERSION: contract-${{ github.sha }}
 
-      - name: Install browsers (Chromium, Firefox, WebKit)
-        run: npx playwright install --with-deps chromium firefox webkit
+      - name: Check the image has this @playwright/test's browsers
+        run: |
+          missing=$(npx --no-install playwright install --dry-run chromium firefox webkit \
+            | awk '/Install location:/ {print $3}' | while read -r dir; do [ -d "${dir}" ] || echo "${dir}"; done)
+          if [ -n "${missing}" ]; then
+            echo "::error file=.github/workflows/ci.yml,title=Playwright image::The job container lacks ${missing//$'\n'/, } for @playwright/test $(npx --no-install playwright --version); bump the image tag and digest with it"
+            exit 1
+          fi
+          echo "  ✔  $(npx --no-install playwright --version): every browser is in the image"
 
       - name: Production build
         run: npm run build
