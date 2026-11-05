@@ -12,7 +12,7 @@ Five workflow files. Markdown-only pushes and pull requests skip `ci.yml` (`path
 | [`changelog-check.yml`](../../.github/workflows/changelog-check.yml) | Pull request touching the shell, the lockfile, the Dockerfile, nginx, the Rsbuild config, the runtime config, or `index.html` | `CHANGELOG.md` is in the diff |
 | [`release.yml`](../../.github/workflows/release.yml) | Tag `vX.Y.Z` or `vX.Y.Z-*`, or a manual run with a tag input | Changelog section, image, SBOM, provenance, GitHub Release |
 
-Dependabot opens pull requests for npm, Docker, and GitHub Actions (`.github/dependabot.yml`).
+Dependabot opens pull requests for npm, Docker, and GitHub Actions (`.github/dependabot.yml`). The npm job uses the `github-packages` registry with the Dependabot secret `PACKAGES_READ_TOKEN` (without it every npm update fails with a 401 on `npm.pkg.github.com`) and ignores `@bcbp-solutions-fzc-llc/*`, which are upgraded by hand, all three together. A `@playwright/test` update also needs the browser jobs' container tag and digest bumped in the same PR.
 
 Node on every job is **26**. Every `npm ci` reads `@bcbp-solutions-fzc-llc/*` from GitHub Packages with `GITHUB_TOKEN` (`packages: read`), and the image builds pass it as the BuildKit secret `npm_token`. The repository needs read access on each package's page (Package settings → Manage Actions access); without it `npm ci` fails with 403. `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24` is set so JavaScript actions run on the runner's current Node.
 

@@ -303,7 +303,7 @@ Every `npm ci` reads `@bcbp-solutions-fzc-llc/*` from GitHub Packages with `GITH
 
 Image tag rules, the Cosign identity, and the maintainer steps are in [VERSIONING.md](./VERSIONING.md).
 
-Dependabot is enabled for npm, Docker, and GitHub Actions.
+Dependabot is enabled for npm, Docker, and GitHub Actions. Its npm job reads GitHub Packages through the Dependabot secret `PACKAGES_READ_TOKEN` (`read:packages`) and leaves the three `@bcbp-solutions-fzc-llc/*` packages alone: they move by hand, together.
 
 ---
 
