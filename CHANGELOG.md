@@ -8,7 +8,9 @@ Pull requests that change the shell, its dependencies, or the image add an entry
 
 ## [Unreleased]
 
-Nothing yet.
+### Changed
+
+- **Audit against platform-reactcommon: no re-implemented SDK behaviour (`2026-11-05`).** `src/`, the tests and the CI scripts were checked against the SDK's public exports and platform-reactcommon's examples and test tooling (LLD §1.2 lists what the shell takes from unpublished parts and why). One duplicate removed here: the browser suite's server read its own copy of the platform CSP; it now reads `nginx/security.d/csp.conf.example`, so the repository holds the policy once, and that file is enforced in Chromium, Firefox and WebKit on every run (18/18). platform-reactcommon is asked to export the pieces every shell copies (session-context retry and live provider, realm URLs, `buildCsp`): `platform-reactcommon-shell-helpers-export.md`.
 
 ## [0.2.0] - 2026-11-05
 
