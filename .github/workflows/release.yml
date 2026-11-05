@@ -134,17 +134,19 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4.4.1
 
-      - name: Build and push
+      # Push by digest only. The version tags and latest are added by the last step, after the
+      # scan, the provenance export and the signature, so a tag never points at an image that
+      # failed one of them (mfe-dashboard's v0.1.0 left latest on an unsigned image).
+      - name: Build and push (digest only)
         id: pushed
         uses: docker/build-push-action@v7.4.0
         with:
           context: .
           file: ./Dockerfile
           platforms: linux/amd64
-          push: true
           provenance: mode=max
           sbom: true
-          tags: ${{ steps.meta.outputs.tags }}
+          outputs: type=image,name=${{ env.IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=true
           labels: ${{ steps.meta.outputs.labels }}
           secrets: |
             npm_token=${{ secrets.GITHUB_TOKEN }}
@@ -165,7 +167,7 @@ jobs:
       - name: Scan image for CVEs
         uses: aquasecurity/trivy-action@v0.36.0
         with:
-          image-ref: ${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }}
+          image-ref: ${{ env.IMAGE_NAME }}@${{ steps.pushed.outputs.digest }}
           format: sarif
           output: trivy-results.sarif
           ignore-unfixed: true
@@ -185,7 +187,7 @@ jobs:
       - name: Generate SBOM
         uses: aquasecurity/trivy-action@v0.36.0
         with:
-          image-ref: ${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }}
+          image-ref: ${{ env.IMAGE_NAME }}@${{ steps.pushed.outputs.digest }}
           format: cyclonedx
           output: sbom.cyclonedx.json
           exit-code: '0'
@@ -225,6 +227,12 @@ jobs:
             --certificate-identity-regexp "^https://github\.com/${{ github.repository }}/.github/workflows/.*@refs/tags/.*$" \
             --certificate-oidc-issuer https://token.actions.githubusercontent.com \
             "${{ env.IMAGE_NAME }}@${{ steps.pushed.outputs.digest }}"
+
+      # Last: only a scanned, attested and signed digest gets X.Y.Z, X.Y, X and latest.
+      - name: Tag the signed image
+        env:
+          IMAGE_DIGEST: ${{ steps.pushed.outputs.digest }}
+        run: bash .github/scripts/tag-signed-image.sh
 
   publish:
     name: GitHub Release
