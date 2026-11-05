@@ -1,27 +1,36 @@
 // The P-35 retry: which failures are retried, the backoff, the abort, and the store React reads.
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { NetworkError, ProblemError, TimeoutError } from '@bcbp-solutions-fzc-llc/frontend-sdk/problem'
+import { NetworkError, TimeoutError, parseProblemResponse, typeForStatus } from '@bcbp-solutions-fzc-llc/frontend-sdk/problem'
+import { mockProblem } from '@bcbp-solutions-fzc-llc/frontend-sdk/testing'
 import type { SessionContext } from '@bcbp-solutions-fzc-llc/frontend-sdk/auth'
 import { createStore, isTransient, retrySessionContext } from '../../src/platform/sessionContext'
 
 const ctx = { tenantId: 't-1', slug: 'acme', roles: ['member'] } as unknown as SessionContext
-const problem = (status: number) => new ProblemError({ type: 'about:blank', title: 'x', status, extensions: {} })
+/**
+ * The ProblemError the SDK's ApiClient would produce for `status`: the platform's response for it
+ * (mockProblem), or, for a status with no platform type (502), the synthetic problem the SDK builds
+ * from a bare response, as it does in production.
+ */
+const problem = (status: number) => {
+  const type = typeForStatus(status)
+  return parseProblemResponse(type ? mockProblem(type) : new Response(null, { status }))
+}
 
 afterEach(() => vi.useRealTimers())
 
 describe('isTransient', () => {
-  it("retries what the SDK ApiClient retries: online network failures, timeouts, 429, 502, 503, 504", () => {
+  it("retries what the SDK ApiClient retries: online network failures, timeouts, 429, 502, 503, 504", async () => {
     expect(isTransient(new NetworkError(false, 'req-1'))).toBe(true)
     expect(isTransient(new TimeoutError(1000, 'req-1'))).toBe(true)
-    expect(isTransient(problem(429))).toBe(true)
-    expect(isTransient(problem(503))).toBe(true)
-    expect(isTransient(problem(502))).toBe(true)
-    expect(isTransient(problem(504))).toBe(true)
+    expect(isTransient(await problem(429))).toBe(true)
+    expect(isTransient(await problem(503))).toBe(true)
+    expect(isTransient(await problem(502))).toBe(true)
+    expect(isTransient(await problem(504))).toBe(true)
     // The ApiClient's own rule: offline, 500 and 501 are not worth another try.
     expect(isTransient(new NetworkError(true, 'req-1'))).toBe(false)
-    expect(isTransient(problem(500))).toBe(false)
-    expect(isTransient(problem(501))).toBe(false)
-    expect(isTransient(problem(401))).toBe(false)
+    expect(isTransient(await problem(500))).toBe(false)
+    expect(isTransient(await problem(501))).toBe(false)
+    expect(isTransient(await problem(401))).toBe(false)
     expect(isTransient(new Error('bug'))).toBe(false)
   })
 })
@@ -47,14 +56,14 @@ describe('retrySessionContext', () => {
   })
 
   it('answers the context once a try succeeds', async () => {
-    const load = vi.fn<() => Promise<SessionContext>>().mockRejectedValueOnce(problem(502)).mockResolvedValue(ctx)
+    const load = vi.fn<() => Promise<SessionContext>>().mockRejectedValueOnce(await problem(502)).mockResolvedValue(ctx)
     await expect(retrySessionContext(load, { baseDelayMs: 1 })).resolves.toBe(ctx)
     expect(load).toHaveBeenCalledTimes(2)
   })
 
   it('stops at a final answer', async () => {
     const load = vi.fn(async () => {
-      throw problem(403)
+      throw await problem(403)
     })
     await expect(retrySessionContext(load, { baseDelayMs: 1 })).resolves.toBeUndefined()
     expect(load).toHaveBeenCalledOnce()

@@ -170,6 +170,7 @@ The text report prints uncovered lines. Cover the branch you changed. The gate i
 
 ## Guardrails
 
+- Do not re-implement what the platform SDK exports. `test/unit/no-sdk-duplicates.test.ts` fails on a module-level name that is an SDK export and on hand-built problem responses in tests (use `mockProblem`). The shell's remaining copies of unpublished platform code are listed in LLD §1.2.
 - Leave `.env` and `docker.local.env` untracked. Both are gitignored. Never commit `NODE_AUTH_TOKEN`; the image takes it as the BuildKit secret `npm_token` only.
 - Never write a token to storage. Use the SDK's `storage(appId)` for anything per workspace. `bcbp.loginEmail` (the typed email) is the one raw `localStorage` value, because it is needed before a workspace is known.
 - Take remote entries from the manifest only. Do not take a remote URL from the query string or any other untrusted input. The remote executes in this origin.

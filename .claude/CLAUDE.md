@@ -41,6 +41,7 @@ Run one test: `npx vitest run test/e2e/shell.test.tsx -t "sign-out"`. Full list:
 ## Critical Rules (do not break)
 
 - **Never reimplement SDK behaviour.** PKCE, token handling, refresh, idle timeout, cross-tab sign-out, `prompt=login` after logout, return URLs, workspace caching, the `/t/<slug>/` move, telemetry, `loadRemote`, integrity, the shared map: use the SDK; change it in `platform-reactcommon`. Before adding a helper, check the SDK's exports (`node_modules/@bcbp-solutions-fzc-llc/frontend-sdk/dist/<subpath>/index.d.ts`).
+- **`test/unit/no-sdk-duplicates.test.ts` stays green.** It fails when a module-level name in `src/`, `config/` or `test/browser/server.ts` is an SDK export (import it instead; when the SDK publishes one of the copies in LLD §1.2, delete the copy) or a test hand-builds a problem body (use `mockProblem`). Never silence it with a rename.
 - **SDK imports through public subpaths only** (`@bcbp-solutions-fzc-llc/frontend-sdk/<subpath>`); never the root, never `dist/` internals. The ESLint plugin enforces it in `src/`.
 - **No token in storage, logs or the channel.** The only raw `localStorage` use is `bcbp.rememberEmail` / `bcbp.loginEmail` in `src/pages/rememberEmail.ts`, the one file `eslint.config.js` exempts from `no-raw-storage`.
 - **No login without a click** after a logout, a device-clock refusal or an expiry. The app is **unmounted** before "You are signed out". A wrong-workspace login never renders.
