@@ -8,7 +8,7 @@ import type {
   Workspace,
   WorkspaceResolver,
 } from '@bcbp-solutions-fzc-llc/frontend-sdk/auth'
-import { tryGetConfig } from '@bcbp-solutions-fzc-llc/frontend-sdk/config'
+import { getConfig } from '@bcbp-solutions-fzc-llc/frontend-sdk/config'
 import { createApiClient } from '@bcbp-solutions-fzc-llc/frontend-sdk/http'
 
 export interface ResolveResponse {
@@ -34,7 +34,7 @@ export interface SessionContextResponse {
 export function toWorkspace(identifier: string, r: ResolveResponse): Workspace | undefined {
   if (r.found !== true || typeof r.realm !== 'string' || r.realm === '') return undefined
   const trial = r.strategy === 'shared'
-  const prefix = tryGetConfig()?.auth.paidRealmPrefix ?? 'tenant-'
+  const prefix = getConfig().auth.paidRealmPrefix
   // An email never names the slug; a trial result has one only when the identifier was the slug.
   const slug = trial
     ? identifier.includes('@')
@@ -87,4 +87,14 @@ export const sessionContextSource: SessionContextSource = {
     const res = await client().get<SessionContextResponse>('/v1/me/session-context', signal ? { signal } : {})
     return toSessionContext(res.data)
   },
+}
+
+/**
+ * One P-35 request without the ApiClient's own retries, for the bootstrap's background retry, which
+ * spaces its attempts itself: the SDK retries the first load (honouring Retry-After); a retry of a
+ * retry would multiply requests during an outage.
+ */
+export async function loadSessionContextOnce(signal?: AbortSignal): Promise<SessionContext> {
+  const res = await client().get<SessionContextResponse>('/v1/me/session-context', { retry: false, ...(signal ? { signal } : {}) })
+  return toSessionContext(res.data)
 }

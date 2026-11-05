@@ -5,8 +5,9 @@ import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { createTestPlatform, mockApi } from '@bcbp-solutions-fzc-llc/frontend-sdk/testing'
-import { sessionContextSource, toSessionContext, toWorkspace, workspaceResolver } from '../../src/platform/iam'
+import { createTestPlatform, mockApi, mockProblem } from '@bcbp-solutions-fzc-llc/frontend-sdk/testing'
+import { PlatformProblemTypes } from '@bcbp-solutions-fzc-llc/frontend-sdk/problem'
+import { loadSessionContextOnce, sessionContextSource, toSessionContext, toWorkspace, workspaceResolver } from '../../src/platform/iam'
 
 interface Cases<C> {
   path: string
@@ -88,3 +89,34 @@ describe('edge cases the contract does not list', () => {
     })
   })
 })
+
+describe('P-35 retries: the SDK ApiClient once, never a retry of a retry', () => {
+  const outage = () => {
+    let calls = 0
+    mockApi({
+      'GET /v1/me/session-context': () => {
+        calls++
+        return mockProblem(PlatformProblemTypes.ServiceUnavailable)
+      },
+    })
+    return () => calls
+  }
+
+  it("the first load keeps the ApiClient's own retries (503 is in its retry set)", async () => {
+    const calls = outage()
+    await expect(sessionContextSource.load()).rejects.toMatchObject({ status: 503 })
+    expect(calls()).toBeGreaterThan(1)
+  })
+
+  it('a background attempt (loadSessionContextOnce) sends exactly one request; the bootstrap spaces them', async () => {
+    const calls = outage()
+    await expect(loadSessionContextOnce()).rejects.toMatchObject({ status: 503 })
+    expect(calls()).toBe(1)
+  })
+
+  it('and maps a 200 like the port does', async () => {
+    mockApi({ 'GET /v1/me/session-context': () => Response.json(SESSION.cases[0]!.response) })
+    expect(await loadSessionContextOnce()).toEqual(SESSION.cases[0]!.expected)
+  })
+})
+

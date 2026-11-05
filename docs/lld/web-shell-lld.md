@@ -79,7 +79,7 @@ The shell implements only what the SDK leaves to a shell: the screens, the two I
 | Login layouts, email form, remember-email, help and legal links (`links.ts`, `PageLinks.tsx`) | `src/pages/*` |
 | Password reset hand-off to Keycloak | `src/platform/passwordReset.ts` |
 | Update and missing-permissions notices | `src/App.tsx` (`useAppUpdate`, `useSessionContext`) |
-| Consent (v1: essential only) | `src/platform/consent.ts` |
+| Consent (v1: essential only) | The SDK's default consent provider; the shell sets none |
 | Role → UI permission map | `src/platform/permissions.ts` |
 | Build (`shell` host), `/version.json` | `rsbuild.config.ts` |
 | Dev-only platform stand-ins | `config/dev-platform.mjs` |
@@ -117,7 +117,6 @@ src/
   platform/
     iam.ts                  toWorkspace, toSessionContext, workspaceResolver, sessionContextSource
     permissions.ts          IAM_ROLES, permissions (role → action:resource)
-    consent.ts              cmp: essential only until accept()
     SessionScreens.tsx      askForWorkspace and the dialogs
     sessionContext.ts       P-35 retry (isTransient, retrySessionContext) and the store the provider reads
     ShellRoot.tsx           PlatformProvider with the live context and locale
@@ -138,7 +137,7 @@ test/                       unit, integration, e2e, fixtures, smoke, browser (§
 
 | Module | May import |
 |---|---|
-| `platform/iam.ts`, `consent.ts`, `permissions.ts` | SDK subpaths only |
+| `platform/iam.ts`, `permissions.ts` | SDK subpaths only |
 | `platform/screen.tsx` | `react-dom/client` |
 | `platform/SessionScreens.tsx` | `pages/*`, `iam`, `screen`, SDK types |
 | `pages/*`, `components/*` | Each other. Never `platform/` or the SDK |
@@ -240,7 +239,7 @@ Keys are IAM's closed role set: `member`, `tenant_owner`, `tenant_admin`, `tende
 | 1 | `installTrustedTypesPolicy()` | No-op without Trusted Types |
 | 2 | `initializeCore({ serviceName: 'web-shell', domain: 'portal', environment: __ENVIRONMENT__, buildVersion: __BUILD_VERSION__ })` | Registry-validated identity |
 | 3 | `loadRuntimeConfig()` → `setRuntimeConfig(cfg)` | Strict schema. Any throw from here on is fatal (§7): after `initializeCore` it is first logged as `error 'the app could not start'` (to `telemetry.otlpBaseUrl` once the config is read, else the default `/otel`) |
-| 4 | `setConsentProvider(cmp)` | |
+| 4 | (consent) | The SDK's default: essential only (v1). A consent manager would call `setConsentProvider` here |
 | 5 | `initializeTracing`, `initializeLogging`, `initializeMetrics` (`cfg.telemetry`), `installGlobalErrorHandlers()`, `startWebVitals()` | |
 | 6 | `setFlagProvider(runtimeConfigFlagProvider())` | Platform flags only, until P-35 |
 | 7 | `idp = createOidcProvider(cfg.auth, workspaceResolver)`, `setTokenSource(initializeAuth(idp))`, `session = await idp.init()` | May redirect once with `prompt=none` and never settle |
@@ -254,7 +253,7 @@ Keys are IAM's closed role set: `member`, `tenant_owner`, `tenant_admin`, `tende
 | 15 | `loadManifest()` | Failure → `error 'manifest load failed'`; the app still renders |
 | 16 | `startVersionPolling()` | `/version.json` every `appUpdate.pollIntervalMs` |
 | 17 | `hideScreen()`, `createRoot(#app).render(<StrictMode><ShellRoot context={store} shell={…}><App basename? onRouter/></ShellRoot></StrictMode>)` | `basename = workspacePathPrefix + slugFromPath(...)` when the URL has a slug. `onRouter` → `registerNavigator(shellNavigator(navigate, basename))` |
-| 18 | Without a context, and only when the first failure was transient (network, timeout, 429, 5xx): `retrySessionContext` (1 s, 2 s, 4 s) → `store.set`, step 12–13 again. A final answer (401, 403, 404) is not asked again | Stopped by a sign-out. The provider re-renders with the context; no reload. When `rememberWorkspace` moved the URL under `/t/<slug>/`, `App` is rendered again keyed by the new basename (and the navigator with it) |
+| 18 | Without a context, and only when the first failure was transient (a network failure while online, a timeout, 429, 502, 503 or 504 (the SDK ApiClient's own rule); `isTransient`): `retrySessionContext` (1 s, 2 s, 4 s) over `loadSessionContextOnce` (`retry: false`: one request per attempt, the SDK's retries already ran on the first load) → `store.set`, step 12–13 again. A final answer (401, 403, 404) is not asked again | Stopped by a sign-out. The provider re-renders with the context; no reload. When `rememberWorkspace` moved the URL under `/t/<slug>/`, `App` is rendered again keyed by the new basename (and the navigator with it) |
 
 `test/integration/bootstrap.test.tsx` asserts this order with every SDK subpath replaced by a recording fake.
 

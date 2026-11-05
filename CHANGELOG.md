@@ -8,7 +8,13 @@ Pull requests that change the shell, its dependencies, or the image add an entry
 
 ## [Unreleased]
 
-Nothing yet.
+### Changed
+
+- **No logic duplicated from the platform SDK (`2026-11-05`).** An independent review of `src/` against the SDK's public exports and dist (and platform-reactcommon's source) found two real duplicates, both removed:
+  - **Consent.** `src/platform/consent.ts` (`cmp`, granting `essential` only) did exactly what the SDK's runtime already does by default (`ESSENTIAL_ONLY_CONSENT`), and nothing called its `accept()`. It is deleted and the bootstrap no longer calls `setConsentProvider`; v1 stays essential-only through the SDK's default.
+  - **A second retry layer.** The bootstrap's background P-35 retry wrapped the ApiClient, which already retries GETs (2 times, jitter, `Retry-After`, statuses 429 / 502 / 503 / 504, online network errors, timeouts): one outage could cost up to 12 requests, and the shell's "transient" rule (any 5xx, offline included) disagreed with the SDK's. Background attempts now go through `loadSessionContextOnce` (`retry: false`: one request each, the SDK's retries having run on the first load), and `isTransient` is the ApiClient's rule. A 500, 501 or offline answer is now final, as it is for the SDK.
+  - Also: `iam.ts` reads the paid-realm prefix from the runtime config only (it restated the schema's `tenant-` default).
+  - Still copied, with no SDK export to use instead (requested upstream, `platform-reactcommon-shell-helpers-export.md`): the session-context retry and store and `ShellRoot` (from `examples/shell`), the realm URL in `passwordReset.ts`, the CSP example.
 
 ## [0.2.0] - 2026-11-05
 

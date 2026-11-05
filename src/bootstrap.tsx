@@ -1,11 +1,11 @@
 // The shell bootstrap, in the SDK's order (design doc §C2; platform-reactcommon
-// examples/shell/src/bootstrap.tsx): core → runtime config → consent → tracing, logging, metrics →
+// examples/shell/src/bootstrap.tsx): core → runtime config → (consent: the SDK's default) → tracing, logging, metrics →
 // auth → session context → i18n → remote manifest → render inside <PlatformProvider>, then a
 // background retry of a session context that failed. Remotes initialise nothing; they read this
 // state through the SDK's hooks.
 import { StrictMode } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
-import { initializeCore, setConsentProvider } from '@bcbp-solutions-fzc-llc/frontend-sdk/core'
+import { initializeCore } from '@bcbp-solutions-fzc-llc/frontend-sdk/core'
 import { loadRuntimeConfig, setRuntimeConfig } from '@bcbp-solutions-fzc-llc/frontend-sdk/config'
 import { initializeTracing } from '@bcbp-solutions-fzc-llc/frontend-sdk/tracing'
 import { getLogger, initializeLogging } from '@bcbp-solutions-fzc-llc/frontend-sdk/logging'
@@ -34,8 +34,7 @@ import { installTrustedTypesPolicy } from '@bcbp-solutions-fzc-llc/frontend-sdk/
 import { installGlobalErrorHandlers } from '@bcbp-solutions-fzc-llc/frontend-sdk/react'
 import App from './App'
 import { getRememberedEmail } from './pages/rememberEmail'
-import { cmp } from './platform/consent'
-import { sessionContextSource, workspaceResolver } from './platform/iam'
+import { loadSessionContextOnce, sessionContextSource, workspaceResolver } from './platform/iam'
 import { shellNavigator } from './platform/navigator'
 import { permissions } from './platform/permissions'
 import {
@@ -96,7 +95,8 @@ async function start(report: { otlpBaseUrl: string }): Promise<void> {
   const cfg = await loadRuntimeConfig()
   setRuntimeConfig(cfg)
   report.otlpBaseUrl = cfg.telemetry.otlpBaseUrl
-  setConsentProvider(cmp)
+  // Consent: the SDK's default grants `essential` only (errors and essential warnings), which is the
+  // v1 decision (no analytics consent manager). A consent manager would call setConsentProvider here.
 
   const { otlpBaseUrl, sampleRatio, logLevel } = cfg.telemetry
   initializeTracing({ otlpBaseUrl, sampleRatio, propagationAllowlist: cfg.api.propagationAllowlist })
@@ -232,11 +232,12 @@ async function start(report: { otlpBaseUrl: string }): Promise<void> {
   app = createRoot(document.getElementById('app')!)
   render()
 
-  // A transient failure (network, timeout, 429, 5xx) is retried 3 times (1 s, 2 s, 4 s); on success
+  // A transient failure (the ApiClient's own rule: online network error, timeout, 429, 502-504) is
+  // retried 3 times (1 s, 2 s, 4 s), one request each (loadSessionContextOnce); on success
   // the subject, flags and provider get the context. A sign-out stops the retries. A final answer
   // (401, 403, 404: P-35 missing in this environment) is not asked again.
   if (!context.get() && isTransient(firstError)) {
-    const retried = await retrySessionContext((signal) => sessionContextSource.load(signal), {
+    const retried = await retrySessionContext(loadSessionContextOnce, {
       signal: signedOutDuringBoot.signal,
       onError: (error, attempt) => getLogger().warn('session context unavailable', { error, attempt }),
     })

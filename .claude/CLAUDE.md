@@ -10,7 +10,7 @@ Node 26, TypeScript `~6.0.3` (typescript-eslint has no TS 7 support), React 19.3
 
 **Status:** code on `main` is release-ready; never tagged or deployed (everything is `[Unreleased]`). The release workflow has never run (its provenance step was fixed in #27). mfe-dashboard `main`/`v0.1.0`+ is on alpha.4 and passes the contract suite; its own release is pending (`v0.1.1`). CloudFront arrives next month; until then environments follow `docs/hosting-without-cloudfront.md`. Open items: [LLD §15](../docs/lld/web-shell-lld.md#15-open-items). v1 decisions: essential-only consent; fonts self-hosted; Forgot password → Keycloak reset.
 
-**The shell owns:** `src/bootstrap.tsx` (SDK order, session branches, render), `src/App.tsx` (routes under `/t/<slug>/`, `RemoteBoundary` for `dashboard` `./App`), `src/platform/` (PUB-1 and P-35 ports, role map, consent stand-in, session screens and their host), `src/pages/` (login layouts, remember-email), `rsbuild.config.ts`, `config/dev-platform.mjs` (dev stand-ins), `nginx/default.conf`, `Dockerfile`.
+**The shell owns:** `src/bootstrap.tsx` (SDK order, session branches, render), `src/App.tsx` (routes under `/t/<slug>/`, `RemoteBoundary` for `dashboard` `./App`), `src/platform/` (PUB-1 and P-35 ports, role map, session screens and their host; consent is the SDK's essential-only default), `src/pages/` (login layouts, remember-email), `rsbuild.config.ts`, `config/dev-platform.mjs` (dev stand-ins), `nginx/default.conf`, `Dockerfile`.
 
 **Does NOT own:** PKCE, tokens, refresh, idle timeout, cross-tab sign-out, workspace cache, telemetry, remote loading, chunk integrity, the shared map (all SDK / preset, in `platform-reactcommon`); Keycloak; IAM APIs and roles; dashboard screens (`mfe-dashboard`); each environment's runtime config, manifest and CSP (deploy pipeline, CloudFront).
 
@@ -35,7 +35,7 @@ Run one test: `npx vitest run test/e2e/shell.test.tsx -t "sign-out"`. Full list:
 
 ## Architecture
 
-`index.ts` (async boundary) → `bootstrap.tsx` (the only module that wires `platform/` and renders `#app`) → `App.tsx` (SDK `/react` only). `platform/iam.ts`, `consent.ts`, `permissions.ts` import SDK subpaths only; `pages/*` never import `platform/` or the SDK. Layout: **[`architecture.md`](architecture.md)**; flows: **[`request-flows.md`](request-flows.md)**; the narrative with diagrams is [`ARCHITECTURE.md`](../ARCHITECTURE.md); the contract is the [LLD](../docs/lld/web-shell-lld.md).
+`index.ts` (async boundary) → `bootstrap.tsx` (the only module that wires `platform/` and renders `#app`) → `App.tsx` (SDK `/react` only). `platform/iam.ts`, `permissions.ts` import SDK subpaths only; `pages/*` never import `platform/` or the SDK. Layout: **[`architecture.md`](architecture.md)**; flows: **[`request-flows.md`](request-flows.md)**; the narrative with diagrams is [`ARCHITECTURE.md`](../ARCHITECTURE.md); the contract is the [LLD](../docs/lld/web-shell-lld.md).
 
 ## Critical Rules (do not break)
 

@@ -10,11 +10,17 @@ const problem = (status: number) => new ProblemError({ type: 'about:blank', titl
 afterEach(() => vi.useRealTimers())
 
 describe('isTransient', () => {
-  it('retries network failures, timeouts, 429 and 5xx; nothing else', () => {
-    expect(isTransient(new NetworkError(true, 'req-1'))).toBe(true)
+  it("retries what the SDK ApiClient retries: online network failures, timeouts, 429, 502, 503, 504", () => {
+    expect(isTransient(new NetworkError(false, 'req-1'))).toBe(true)
     expect(isTransient(new TimeoutError(1000, 'req-1'))).toBe(true)
     expect(isTransient(problem(429))).toBe(true)
     expect(isTransient(problem(503))).toBe(true)
+    expect(isTransient(problem(502))).toBe(true)
+    expect(isTransient(problem(504))).toBe(true)
+    // The ApiClient's own rule: offline, 500 and 501 are not worth another try.
+    expect(isTransient(new NetworkError(true, 'req-1'))).toBe(false)
+    expect(isTransient(problem(500))).toBe(false)
+    expect(isTransient(problem(501))).toBe(false)
     expect(isTransient(problem(401))).toBe(false)
     expect(isTransient(new Error('bug'))).toBe(false)
   })
@@ -24,7 +30,7 @@ describe('retrySessionContext', () => {
   it('waits 1 s, 2 s, 4 s between tries and stops after 3', async () => {
     vi.useFakeTimers()
     const load = vi.fn(async () => {
-      throw new NetworkError(true, 'req-1')
+      throw new NetworkError(false, 'req-1')
     })
     const errors: number[] = []
     const done = retrySessionContext(load, { onError: (_e, n) => errors.push(n) })
@@ -79,7 +85,7 @@ describe('retrySessionContext', () => {
       retrySessionContext(
         async () => {
           failing.abort()
-          throw new NetworkError(true, 'req-1')
+          throw new NetworkError(false, 'req-1')
         },
         { signal: failing.signal, baseDelayMs: 1, onError },
       ),
