@@ -175,10 +175,11 @@ Keycloak itself is not a library dependency of the image. The shell talks to the
 | [CHANGELOG.md](./CHANGELOG.md) | User-facing history per version. Currently entirely `[Unreleased]` |
 | [README.md](./README.md) | What the shell is |
 | [ARCHITECTURE.md](./ARCHITECTURE.md) | Module layout, bootstrap, sign-in flow, storage, threat model |
+| [docs/lld/web-shell-lld.md](./docs/lld/web-shell-lld.md) | Low-level design; §14 compatibility |
 | [docs/pipeline/README.md](./docs/pipeline/README.md) | Job order for CI and release, and links to the runbooks |
 | [.github/workflows/ci.yml](./.github/workflows/ci.yml) | Pull-request and `main` pipeline: test, image build, Trivy, smoke, Cosign on push |
 | [.github/workflows/release.yml](./.github/workflows/release.yml) | Tag-triggered release: validate → build → docker → publish |
-| [.github/workflows/validate-test.yml](./.github/workflows/validate-test.yml) | Unit, integration, 95% coverage gate, production build |
+| [.github/workflows/validate-test.yml](./.github/workflows/validate-test.yml) | Unit, integration, e2e, 95% coverage gate, production build |
 | [.github/scripts/coverage-gate.mjs](./.github/scripts/coverage-gate.mjs) | Fails the build when coverage is under 95% |
 | [rsbuild.config.ts](./rsbuild.config.ts) | Platform plugin (shared singletons, chunk integrity), build constants |
 | [public/config/runtime.json](./public/config/runtime.json) | Runtime config the image ships by default |

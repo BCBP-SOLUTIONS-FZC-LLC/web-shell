@@ -26,7 +26,7 @@ npm run keycloak:setup    # local realm tenant-bcbp on :8080; first start can ta
 npm run dev               # shell on http://localhost:5001, with stubbed IAM endpoints
 npm run lint              # ESLint with the platform rules
 npm run typecheck         # tsc over src/ and test/
-npm run test:ci           # unit and integration, then the 95% coverage gate
+npm run test:ci           # unit, integration and e2e, then the 95% coverage gate
 npm run build             # tsc and the production bundle
 ```
 
@@ -34,7 +34,7 @@ npm run build             # tsc and the production bundle
 
 The dev server serves `/config/runtime.json` and `/remotes/manifest.json` from `config/`, and stubs PUB-1 and P-35 so sign-in works with only Keycloak running (`config/dev-platform.mjs`). `DEV_API_URL=https://… npm run dev` proxies `/api` to a real API instead.
 
-The dashboard remote is a separate repo. Start `mfe-dashboard` so `http://localhost:5002/remoteEntry.js` is served, built with `@bcbp-solutions-fzc-llc/webpack-preset` as remote `app2`; otherwise `/t/bcbp/dashboard` shows the remote boundary's error. Tests replace `RemoteBoundary` and do not fetch that port.
+The dashboard remote is a separate repo. Start `mfe-dashboard` so `http://localhost:5002/remoteEntry.js` is served (it builds as remote `app2` with the preset's Rsbuild plugin); otherwise `/t/bcbp/dashboard` shows the remote boundary's error. Tests never fetch that port: the integration tests replace `RemoteBoundary`, and the e2e suite stubs the remote's entry script.
 
 Local ports: shell **5001**, Keycloak **8080**, dashboard **5002**. The production image also listens on **8080**. Map it to another host port when Keycloak is already running (`docker run -p 18080:8080`).
 
@@ -68,8 +68,13 @@ keycloak/                ← Local realm import (tenant-bcbp) and the bcbp login
 scripts/                 ← Local Keycloak compose, health check, user seed, hook install
 .githooks/pre-commit     ← Local commit gate; install with npm run hooks:install
 test/
-  unit/                  ← IAM mappings, entry point, small helpers
-  integration/           ← Login pages, session screens, App, bootstrap
+  unit/                  ← IAM mappings, entry point, small helpers, dev middleware
+  integration/           ← Login pages, session screens, App, bootstrap (SDK faked)
+  e2e/                   ← The real shell and SDK against test/fixtures fakes
+  fixtures/              ← FakeKeycloak, FakeNetwork, FakeBroadcastChannel
+  smoke/                 ← GET-only checks against the image or a deployment (npm run test-smoke)
+docs/lld/web-shell-lld.md ← Low-level design (the contract)
+.claude/                 ← Claude Code guidance, hook scripts, reviewer agent
 .github/workflows/       ← ci, test, quality, changelog, release
 ```
 
@@ -90,7 +95,8 @@ test/
 1. PKCE, tokens, refresh, idle timeout and cross-tab sign-out belong to the SDK (`@bcbp-solutions-fzc-llc/frontend-sdk/auth`). Change them in `platform-reactcommon`, not here.
 2. The shell's part is `src/bootstrap.tsx` (which screen, when to call `idp.login`), the screens in `src/platform/SessionScreens.tsx`, and the IAM ports in `src/platform/iam.ts`.
 3. No screen may sign in without a click after a logout, an expiry or a device-clock refusal.
-4. Cover a new branch in `test/integration/bootstrap.test.tsx` (SDK subpaths are fakes there) or `test/integration/session-screens.test.tsx`.
+4. Cover a new branch in `test/integration/bootstrap.test.tsx` (SDK subpaths are fakes there) or `test/integration/session-screens.test.tsx`. A change the user sees in the sign-in or sign-out flow also gets a case in `test/e2e/shell.test.tsx`, which runs the real SDK.
+5. Update LLD §5–§6 and `.claude/request-flows.md`.
 
 ### Adding a remote or changing what the shell passes to one
 
@@ -110,16 +116,17 @@ test/
 
 1. Edit `nginx/default.conf`. The server listens on 8080.
 2. `index.html`, `/config/runtime.json`, `/remotes/manifest.json` and `/version.json` stay `Cache-Control: no-cache`. Hashed files under `/assets/` stay immutable.
-3. Extend `.github/scripts/smoke-tests.sh` when the new path is part of the startup contract.
+3. Add the behaviour to `test/smoke/deployment.test.ts` (and `smoke-tests.sh` only for a startup check), and update LLD §10.1.
 4. Note the path in the pull request deployment notes. Publishing a tag does not deploy a cluster.
 
 ## Testing requirements
 
 | Layer | Location | Docker | Notes |
 |---|---|---|---|
-| Unit | `test/unit/` | No | IAM mappings and ports, entry point, remember-email, consent, screen host, `BrandLogo`, login variant |
+| Unit | `test/unit/` | No | IAM mappings and ports, entry point, remember-email, consent, screen host, `BrandLogo`, login variant, dev platform middleware |
 | Integration | `test/integration/` | No | Login layouts and carousel, session screens, `App`, bootstrap order and branches. SDK subpaths are `vi.mock` fakes where needed |
-| Smoke | CI `smoke` job | Image only | `.github/scripts/smoke-tests.sh`: image ≤ 200 MB, `GET /healthz` returns `ok`, `GET /` contains `id="app"`, `/config/runtime.json` and `/version.json` return 200, no `.map` file in the image |
+| End to end | `test/e2e/` | No | The real shell and SDK against `test/fixtures/` fakes (Keycloak, network, BroadcastChannel); only the remote's entry script is stubbed |
+| Smoke | `test/smoke/`, CI `smoke` job | Image or deployment | `.github/scripts/smoke-tests.sh`: image ≤ 200 MB and the startup gate, then `npm run test-smoke` against the container (SPA rule, Cache-Control, integrity, 404s, SDK-validated runtime files). [test/smoke/README.md](./test/smoke/README.md) |
 
 Run one file:
 
@@ -136,6 +143,8 @@ These tests pin behavior other repos and the login flow depend on. Change them o
 - **`test/unit/iam.test.ts`** — the PUB-1 → `Workspace` and P-35 → `SessionContext` ports, through the real `ApiClient` (`createTestPlatform`, `mockApi`), against the SDK's contract cases in `@bcbp-solutions-fzc-llc/frontend-sdk/contracts`; PUB-1 is called without a token.
 - **`test/integration/session-screens.test.tsx`** — "not found" and "unreachable" show the same message.
 - **`test/integration/app.test.tsx`** — `/dashboard/*` renders `app2` `./App` with no props, under the workspace basename.
+- **`test/e2e/shell.test.tsx`** — the whole sign-in with the real SDK: PKCE to the realm PUB-1 names, tokens never stored, the URL under `/t/<slug>/`, the remote reading the user and permissions through SDK hooks, and no silent sign-in after a global sign-out.
+- **`test/smoke/deployment.test.ts`** — what nginx (and CloudFront, live) must serve: only extension-less paths get `index.html`, the runtime files are uncached and pass the SDK's validation, hashed assets are immutable and match their integrity.
 
 ### Coverage gate
 
@@ -168,10 +177,12 @@ The text report prints uncovered lines. Cover the branch you changed. The gate i
 
 | What changed | Documents to update |
 |---|---|
-| Route, sign-in step, or storage key | `README.md` (routes, sign-in, storage table) |
+| Route, sign-in step, or storage key | `README.md` (routes, sign-in, storage table), `docs/lld/web-shell-lld.md` (§5, §6, §9.3), `.claude/request-flows.md` |
 | Remote, `app2` props, or SDK version | `src/App.tsx`, `config/remotes.local.json`, `README.md` federation table, `VERSIONING.md` when the bump class changes |
 | Runtime config key or build constant | `public/config/runtime.json`, `config/runtime.local.json`, `src/globals.d.ts`, `README.md` configuration tables, Dockerfile `ARG` and the workflow build-args when the image must bake it |
-| nginx path or listen port | `nginx/default.conf`, smoke script when it is a startup check, `README.md` nginx table, PR deployment notes |
+| nginx path or listen port | `nginx/default.conf`, `test/smoke/deployment.test.ts`, `README.md` nginx table, LLD §10.1, `.claude/architecture.md`, PR deployment notes |
+| SDK version | `package.json` (all three, exact), README, ARCHITECTURE, VERSIONING, LLD header, `.claude/CLAUDE.md`, CHANGELOG (`.claude/operations.md` checklist) |
+| A diagram | `docs/architecture/mermaid/*.mmd` and the identical block in `ARCHITECTURE.md` (`node .claude/hooks/check-diagrams.mjs`) |
 | Release, tag, or image-signing behavior | `VERSIONING.md` and `.github/workflows/release.yml` |
 | User-visible shell, dependency, image, or nginx change | `CHANGELOG.md` under `[Unreleased]` |
 
@@ -191,7 +202,7 @@ Base new branches on the latest `main`.
 `.github/pull_request_template.md` is the checklist GitHub shows. Match it:
 
 - [ ] `npm run lint` and `npm run typecheck` pass
-- [ ] `npm run test:ci` passes (unit, integration, coverage at least 95%)
+- [ ] `npm run test:ci` passes (unit, integration, e2e, coverage at least 95%)
 - [ ] `npm run build` passes (typecheck and production bundle)
 - [ ] Manual check when the change is visible: login, remote load, navigation
 - [ ] No debug logs, commented-out code, secrets, or `.env` values
@@ -229,7 +240,7 @@ Releases go through GitHub Actions. Details and the Cosign verify commands are i
 
 1. `validate-test` (tests, 95% gate, `npm run build`) and `validate-quality` (ESLint, typecheck, workflow hygiene, digest pin, production npm audit) run in parallel with the image build.
 2. Hadolint runs before the image build.
-3. Trivy (CRITICAL and HIGH, unfixed) and the smoke script run after the image exists.
+3. Trivy (CRITICAL and HIGH, unfixed) and the smoke job (startup gate, then `npm run test-smoke` against the container) run after the image exists.
 4. The image `ghcr.io/bcbp-solutions-fzc-llc/web-shell` is pushed with the branch tag and `sha-<short>`, then Cosign-signed.
 
 **On a `vX.Y.Z` or `vX.Y.Z-*` tag:** validate, require a matching `## [X.Y.Z]` changelog section, pack `web-shell_<tag>_dist.tar.gz`, push the image, scan, attach the SBOM and SLSA provenance, sign, and open the GitHub Release. The Git tag keeps the `v`. The image tags are `X.Y.Z`, `X.Y`, `X`, and `latest` for a stable release. A pre-release tag publishes `X.Y.Z-rc.N` only.

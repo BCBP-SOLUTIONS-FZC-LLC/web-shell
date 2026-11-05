@@ -144,7 +144,7 @@ graph LR
 | `bootstrap.tsx` | Everything above, every SDK subpath it initialises, `index.css` |
 | `index.ts` | `bootstrap.tsx`, dynamically |
 | `rsbuild.config.ts` | The platform plugin, React, Tailwind, `/version.json`, `config/dev-platform.mjs`. `src/` does not import it |
-| Tests | Production modules, with SDK subpaths replaced by `vi.mock` where the test needs it |
+| Tests | Production modules. `test/integration` replaces SDK subpaths with `vi.mock` fakes; `test/e2e` uses the real SDK with `test/fixtures/` fakes around it |
 
 ---
 
@@ -209,7 +209,7 @@ After render the subscription does two things:
 | Session event | What the shell does |
 |---|---|
 | `expired` | "Session ended" dialog over the app. Sign in calls `signInAgain`, which re-resolves the workspace when the server ended the session and reuses the cache otherwise |
-| `anonymous`, `signed-out` (here or in another tab) | Unmount the app, so the previous user's data is not left under the dialog. "You are signed out"; Sign in calls `idp.login` with `prompt: 'login'` |
+| `anonymous`, `signed-out` (here or in another tab) | Unmount the app, so the previous user's data is not left under the dialog. "You are signed out"; Sign in calls `idp.login({ workspace })`, and the SDK adds `prompt=login` because it recorded the sign-out |
 
 Routes inside the app:
 
@@ -342,7 +342,8 @@ Remotes that need storage use `storage(appId)` from `/storage`, which is namespa
 | The bundle needs no `eval` and no inline script | Preset output, Rsbuild `inlineScripts: false` (external scripts only) |
 | `/healthz` does not depend on Keycloak, IAM or the remote | `nginx/default.conf` returns a constant |
 | Per-environment files are revalidated; hashed assets are immutable | `index.html`, `/config/runtime.json`, `/remotes/manifest.json`, `/version.json` are `no-cache`. `/assets/` is immutable |
-| Source maps are not shipped | Dockerfile and `prepare-release-asset.sh` delete them; the smoke test fails on a `.map` |
+| Source maps are not shipped | Dockerfile and `prepare-release-asset.sh` delete them; the smoke script and suite fail on a `.map` |
+| Only extension-less paths get `index.html`; cache headers per location | `nginx/default.conf`; `test/smoke/deployment.test.ts` checks it against the built image |
 | The coverage floor is 95% on statements, branches, functions, and lines | `.github/scripts/coverage-gate.mjs`. CI does not lower it |
 | Image base tags are digest-pinned | `validate-quality.yml` rejects a `FROM` line without `@sha256` |
 
@@ -388,11 +389,12 @@ Vitest 5, happy-dom at `http://localhost:5001/`, Testing Library. `vitest.config
 |---|---|---|
 | Unit | `test/unit/` | PUB-1 and P-35 mappings and the port calls, the entry point's fatal path, remember-email with blocked storage, the consent stand-in, the screen host, `BrandLogo`, the login variant |
 | Integration | `test/integration/` | Both login layouts and the carousel, every session screen, `App` routes and props, and the bootstrap: the exact initialisation order, each anonymous reason, wrong workspace, missing context, manifest failure, expiry and sign-out events |
-| Smoke | `.github/scripts/smoke-tests.sh` | Image at most 200 MB. `/healthz`, `/`, `/config/runtime.json`, `/version.json` return 200. `/` contains `id="app"`. No `.map` file in the image |
+| End to end | `test/e2e/` | The real bootstrap and SDK (inlined by Vitest, fresh per simulated page load) against a fake Keycloak and network: PKCE sign-in, `/t/<slug>/`, the remote's SDK hooks and permissions, deny-all, a failing remote, global sign-out, the device clock |
+| Smoke | `test/smoke/`, `.github/scripts/smoke-tests.sh` | Image at most 200 MB and the startup gate, then the suite against the container: SPA rule, Cache-Control per location, script integrity, 404s, runtime config and manifest validated by the SDK. With `SMOKE_MODE=live`, a deployment's security headers too |
 
-`npm run test:ci` is the gate CI runs: coverage, then `coverage-gate.mjs`. Include is `src/**/*.{ts,tsx}`. Declaration files and CSS are excluded.
+`npm run test:ci` is the gate CI runs: coverage, then `coverage-gate.mjs` (95%; 100% today). Include is `src/**/*.{ts,tsx}`. Declaration files and CSS are excluded. `test/smoke` is excluded from `npm test` and runs with `vitest.smoke.config.ts` against `SMOKE_BASE_URL`.
 
-The bootstrap test replaces every SDK subpath with a fake that records its call, so the order is asserted directly. Tests that need SDK behaviour, rather than the shell's wiring, belong in the SDK repository.
+The bootstrap test replaces every SDK subpath with a fake that records its call, so the order is asserted directly. The e2e suite then runs the same bootstrap with the real SDK, so the wiring is also checked against the SDK's actual behaviour (PKCE, the `/t/<slug>/` move, hooks, sign-out). Tests of SDK behaviour itself belong in the SDK repository. The full test contract is in [LLD §12](docs/lld/web-shell-lld.md#12-testing).
 
 ---
 
@@ -458,7 +460,7 @@ Platform concerns outside this repo: Keycloak credential checks, MFA, realm admi
 | Preview | `npm run preview` | `dist/` on port 5001. Uses `dist/config/runtime.json` (the production default) |
 | Keycloak | `npm run keycloak:setup` | Realm `tenant-bcbp`, client `app1`, theme `bcbp`, admin at `http://localhost:8080` |
 | Lint | `npm run lint` | ESLint, typescript-eslint, React hooks, platform rules |
-| Tests | `npm run test:ci` | Unit and integration, 95% gate |
+| Tests | `npm run test:ci` | Unit, integration and e2e, 95% gate |
 | Image | `docker build --secret id=npm_token,env=NODE_AUTH_TOKEN` then `docker run -p 18080:8080` | nginx as the browser will get it. Use 18080 when Keycloak already has 8080 |
 
 The login page's "Trouble logging in?" link is `href="#help"`. It does not open a help route.
@@ -487,6 +489,10 @@ The login page's "Trouble logging in?" link is `href="#help"`. It does not open 
 
 10. **Numeric nginx user.** The unprivileged image's account is uid 101. `USER nginx` fails Hadolint DL3066, so the Dockerfile and the `chown` use `101`.
 
+11. **The e2e suite runs the real SDK in-process.** Following `platform-reactcommon` `test/e2e`, the shell boots under happy-dom against a fake Keycloak and network, with only the remote's entry script stubbed. Vitest inlines the SDK and the suite clears the SDK's runtime global and resets modules on each simulated page load, using only the SDK's public behaviour, no test internals.
+
+12. **Smoke runs against the image, not a stand-in.** The SDK's smoke suite serves its examples through a CloudFront stand-in; here the production server is nginx, so CI runs the same kind of suite against the built container (`SMOKE_MODE=image`), and the same file checks a deployment with `SMOKE_MODE=live`.
+
 ---
 
 ## Documentation assets
@@ -495,7 +501,9 @@ Diagrams in this file match the `.mmd` sources under [`docs/architecture/mermaid
 
 | Document | What it answers |
 |---|---|
+| [docs/lld/web-shell-lld.md](docs/lld/web-shell-lld.md) | The contract: responsibilities, mappings, start-up order, flows, hosting, tests, open items |
 | [docs/README.md](docs/README.md) | Diagrams, the pipeline, and the runbooks |
+| [.claude/CLAUDE.md](.claude/CLAUDE.md) | Critical rules and reference for Claude Code; `.claude/hooks/check-diagrams.mjs` checks this file's diagrams against their sources |
 | [README.md](./README.md) | How to run the shell, the routes, the image, and CI |
 | [VERSIONING.md](./VERSIONING.md) | What a version number means, and how a tag is cut |
 | [CONTRIBUTING.md](./CONTRIBUTING.md) | How to add a route, a config key, or a test |

@@ -71,7 +71,7 @@ Sign-out is global by default: the Keycloak session ends, every tab drops its to
 | Props this shell passes to `app2` `./App` | None. The remote uses `useCurrentUser()` and `useSignOut()` |
 | Shared | `react`, `react-dom` (and their JSX and client entries), `@opentelemetry/api`, every SDK subpath. Strict singletons; a remote takes the SDK from the shell (`import: false`) |
 
-A remote must be built with `@bcbp-solutions-fzc-llc/webpack-preset` (`role: 'remote'`). A Vite ES-module remote does not load through the SDK's `loadRemote`.
+A remote must be built with `@bcbp-solutions-fzc-llc/webpack-preset` (`role: 'remote'`); a Vite ES-module remote does not load through the SDK's `loadRemote`. `mfe-dashboard` is built that way (Rsbuild, `pluginPlatform({ role: 'remote', name: 'app2' })`), and it must not be built against a newer SDK than this shell's: upgrade the shell first.
 
 ### nginx paths
 
@@ -111,8 +111,15 @@ web-shell/
 ├── keycloak/                    # Local realm import (tenant-bcbp) and bcbp login theme
 ├── scripts/                     # Local Keycloak compose, health check, user seed
 ├── test/
-│   ├── unit/                    # IAM mappings, entry point, small helpers
-│   └── integration/             # Login pages, session screens, App, bootstrap
+│   ├── unit/                    # IAM mappings, entry point, small helpers, dev middleware
+│   ├── integration/             # Login pages, session screens, App, bootstrap (SDK faked)
+│   ├── e2e/                     # The real shell and SDK, end to end
+│   ├── fixtures/                # FakeKeycloak, FakeNetwork, FakeBroadcastChannel
+│   └── smoke/                   # GET-only checks against the served image or a deployment
+├── vitest.config.ts             # happy-dom, build constants, SDK inlined; excludes test/smoke
+├── vitest.smoke.config.ts       # test/smoke only, node environment
+├── docs/                        # LLD, architecture diagrams, pipeline, runbooks
+├── .claude/                     # Claude Code guidance, hooks, reviewer agent
 ├── .github/workflows/           # ci, test, quality, changelog, release
 └── VERSIONING.md                # Image tags and how to cut a release
 ```
@@ -164,7 +171,7 @@ The dev server stands in for what CloudFront and the platform APIs provide (`con
 
 Set `DEV_API_URL` to proxy `/api` to a real API instead of the stubs, or `DEV_REALM` to stub a different realm.
 
-The dashboard is a second process. Start `mfe-dashboard` so it serves `remoteEntry.js` at `http://localhost:5002`. It has to be built with `@bcbp-solutions-fzc-llc/webpack-preset` as remote `app2`. Until then `/t/bcbp/dashboard` shows the remote boundary's error.
+The dashboard is a second process. Start `mfe-dashboard` (`npm run dev` there) so it serves `remoteEntry.js` at `http://localhost:5002`. While it is not running, `/t/bcbp/dashboard` shows the remote boundary's error and the rest of the shell keeps working.
 
 ### Common commands
 
@@ -175,7 +182,9 @@ The dashboard is a second process. Start `mfe-dashboard` so it serves `remoteEnt
 | `npm run preview` | Serve `dist/` on port 5001 |
 | `npm run lint` | ESLint, including the `@bcbp-solutions-fzc-llc` platform rules |
 | `npm run typecheck` | `tsc` over `src/` and `test/` (`tsconfig.test.json`) |
-| `npm test` | Vitest once (unit, integration) |
+| `npm test` | Vitest once (unit, integration, e2e) |
+| `npm run test-unit` / `test-int` / `test-e2e` | One layer |
+| `npm run test-smoke` | The smoke suite against `SMOKE_BASE_URL` ([test/smoke/README.md](./test/smoke/README.md)) |
 | `npm run test:coverage` | Same, with the v8 coverage report |
 | `npm run test:ci` | Coverage plus the 95% gate (`.github/scripts/coverage-gate.mjs`) |
 | `npm run hooks:install` | Copy `.githooks/pre-commit` into `.git/hooks` |
@@ -207,10 +216,12 @@ Port **8080** is Keycloak in this compose file and also the port the shell image
 
 | Layer | Path | What it exercises |
 |---|---|---|
-| Unit | `test/unit/` | PUB-1 and P-35 mappings and ports, the entry point, remember-email, consent, the screen host, `BrandLogo`, the login variant |
+| Unit | `test/unit/` | PUB-1 and P-35 mappings and ports, the entry point, remember-email, consent, the screen host, `BrandLogo`, the login variant, the dev server's platform middleware |
 | Integration | `test/integration/` | Both login layouts and the carousel, the session screens, `App` routes, and the bootstrap's order and branches |
+| End to end | `test/e2e/` | The real bootstrap, screens, `App` and SDK against a fake Keycloak (PKCE) and network: email → PUB-1 → sign-in → the `app2` remote under `/t/<slug>/`, deep links, role-map permissions in the remote, deny-all, a failing remote, global sign-out, the device clock |
+| Smoke | `test/smoke/` | `npm run test-smoke` against the served image (CI) or a deployment: the SPA rule, Cache-Control, script integrity, 404s, and the runtime files validated by the SDK. See [test/smoke/README.md](./test/smoke/README.md) |
 
-Vitest uses happy-dom and Testing Library. `vitest.config.ts` defines `__ENVIRONMENT__` and `__BUILD_VERSION__` as `test`. The bootstrap test replaces every SDK subpath with a recording fake, so the suite never calls Keycloak, the IAM APIs or port 5002.
+Vitest uses happy-dom and Testing Library. `vitest.config.ts` defines `__ENVIRONMENT__` and `__BUILD_VERSION__` as `test`. The bootstrap test replaces every SDK subpath with a recording fake. The e2e suite runs the real SDK (Vitest inlines it, so each simulated page load gets a fresh one) against `test/fixtures/` fakes, modelled on platform-reactcommon's. No suite calls Keycloak, the IAM APIs or port 5002.
 
 ### Coverage
 
@@ -261,7 +272,7 @@ The image takes `PLATFORM_ENVIRONMENT`, `BUILD_VERSION` and `SOURCE_DATE_EPOCH` 
 | **Redirect** | The SDK checks `state` before the code is exchanged. The redirect URI is `{origin}{auth.redirectPath}` |
 | **API calls** | The SDK's `ApiClient` sends the token to the page's own origin only and never sends identity headers. The ESLint plugin enforces subpath imports, no identity headers, no raw `window.*Storage`, no unsafe HTML |
 | **Remote code** | Remotes execute in this origin. Entries load only from the page's origin or `remotes.allowedOrigins`, pinned by `integrity` outside local, dev and test |
-| **CSP** | The bundle is Trusted-Types and `script-src 'self'` safe (preset output, `installTrustedTypesPolicy`). nginx sets no CSP header; the platform's CloudFront distribution does |
+| **CSP** | The bundle is Trusted-Types and `script-src 'self'` safe (preset output, `installTrustedTypesPolicy`). nginx sets no CSP header; the platform's CloudFront distribution does. Open item: `index.html` still loads Google Fonts, which the platform CSP blocks (LLD §15) |
 | **Image** | nginx runs as uid 101. `.env` is not copied into the build context. The registry token is a BuildKit secret and never lands in a layer. Source maps are deleted from the image |
 | **Reporting** | [SECURITY.md](./.github/SECURITY.md). Email vijay@bcbpsolutions.com with subject `[web-shell]` |
 
@@ -273,7 +284,7 @@ Five workflow files. Markdown-only pushes do not run `ci.yml`. Job order and the
 
 Every `npm ci` reads `@bcbp-solutions-fzc-llc/*` from GitHub Packages with `GITHUB_TOKEN` (`packages: read`). This repository needs read access on each package's page: Package settings → Manage Actions access → Add repository.
 
-- **`ci.yml`** — orchestrator. `validate-test.yml` and `validate-quality.yml` run in parallel with `build-image` (Hadolint, then a Buildx cache build). Trivy and the smoke script follow the image build. Pull requests get a status comment. A push to `main` or `master` also pushes `ghcr.io/bcbp-solutions-fzc-llc/web-shell`, tagged with the branch name and `sha-<short>`, and Cosign-signs that digest.
+- **`ci.yml`** — orchestrator. `validate-test.yml` and `validate-quality.yml` run in parallel with `build-image` (Hadolint, then a Buildx cache build). Trivy and the smoke job follow the image build; the smoke job sets up Node, runs `npm ci`, then `smoke-tests.sh` (size, startup gate, the smoke suite). Pull requests get a status comment. A push to `main` or `master` also pushes `ghcr.io/bcbp-solutions-fzc-llc/web-shell`, tagged with the branch name and `sha-<short>`, and Cosign-signs that digest.
 - **`validate-test.yml`** — `npm ci`, `npm run test:coverage`, the 95% coverage gate, then `npm run build`.
 - **`validate-quality.yml`** — ESLint (`--max-warnings 0`) and `npm run typecheck`. Workflow files must use literal operators and LF line endings, `Dockerfile` `FROM` lines must be digest-pinned, `.dockerignore` must exist, and `npm audit --omit=dev --audit-level=high` must pass.
 - **`changelog-check.yml`** — a pull request that touches `src/`, `package.json`, `package-lock.json`, `Dockerfile`, `nginx/`, `rsbuild.config.ts`, `config/**`, `public/config/**`, or `index.html` must also update `CHANGELOG.md`.
@@ -312,7 +323,7 @@ docker run --rm -p 18080:8080 \
   web-shell:local
 ```
 
-Two stages, both digest-pinned: `node:26-bookworm` runs `npm ci` and `npm run build`, then deletes the source maps; `nginxinc/nginx-unprivileged:1.31-alpine` serves `/usr/share/nginx/html` as uid 101. The CI smoke test fails the image above 200 MB, requires `/healthz`, `/` (a document that contains `id="app"`), `/config/runtime.json` and `/version.json` to return 200, and fails when the image contains a `.map` file.
+Two stages, both digest-pinned: `node:26-bookworm` runs `npm ci` and `npm run build`, then deletes the source maps; `nginxinc/nginx-unprivileged:1.31-alpine` serves `/usr/share/nginx/html` as uid 101. The CI smoke job fails the image above 200 MB, requires `/healthz`, `/` (a document that contains `id="app"`), `/config/runtime.json` and `/version.json` to return 200, fails when the image contains a `.map` file, and then runs the smoke suite against the container (`npm run test-smoke`, [test/smoke/README.md](./test/smoke/README.md)). To run it locally: `docker run -d --rm -p 127.0.0.1:18080:8080 web-shell:local`, then `SMOKE_BASE_URL=http://127.0.0.1:18080 npm run test-smoke`.
 
 ### Local Keycloak compose
 
@@ -379,14 +390,16 @@ Setup, how to extend the shell, the test gate, and the pull request checklist ar
 
 | Document | Description |
 |---|---|
-| [docs/README.md](./docs/README.md) | Pipeline map, architecture diagrams, and runbooks |
+| [docs/lld/web-shell-lld.md](./docs/lld/web-shell-lld.md) | Low-level design: responsibilities, contracts, start-up order, flows, hosting, tests, open items |
+| [docs/README.md](./docs/README.md) | LLD, pipeline map, architecture diagrams, and runbooks |
 | [ARCHITECTURE.md](./ARCHITECTURE.md) | Module layout, bootstrap, sign-in and dashboard flows, storage, and the threat model |
 | [CONTRIBUTING.md](./CONTRIBUTING.md) | Local setup, extension rules, tests, and the pull request checklist |
 | [VERSIONING.md](./VERSIONING.md) | SemVer rules, image tags, Cosign verify, how to cut a release |
 | [CHANGELOG.md](./CHANGELOG.md) | User-facing history. Releases are still `[Unreleased]` |
 | [SECURITY.md](./.github/SECURITY.md) | How to report a vulnerability |
 | [.github/pull_request_template.md](./.github/pull_request_template.md) | What a pull request needs, including `npm run test:ci` |
-| `platform-reactcommon` README | The SDK: API overview, integration guide, runtime config reference |
+| [.claude/CLAUDE.md](./.claude/CLAUDE.md) | Guidance for Claude Code: critical rules, commands, reference files |
+| `platform-reactcommon` README and LLD | The SDK: API overview, integration guide, runtime config reference |
 
 ---
 

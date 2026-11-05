@@ -1,6 +1,6 @@
 # Architecture diagrams
 
-Standalone Mermaid source. [ARCHITECTURE.md](../../ARCHITECTURE.md) embeds each `.mmd` file as a fenced code block under a `Source:` line. Keep the embedded block identical to the file when either changes.
+Standalone Mermaid source. [ARCHITECTURE.md](../../ARCHITECTURE.md) embeds each `.mmd` file as a fenced code block under a `Source:` line. Keep the embedded block identical to the file when either changes; `node .claude/hooks/check-diagrams.mjs` reports any difference (Claude Code runs it after each edit).
 
 | File | Diagram | Section |
 |---|---|---|

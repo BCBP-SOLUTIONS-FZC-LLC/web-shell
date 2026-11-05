@@ -8,7 +8,12 @@ Object.defineProperty(globalThis, 'crypto', {
   value: webcrypto,
 })
 
+// A file under `@vitest-environment node` (test/unit/dev-platform.test.ts) has no DOM and uses the
+// real fetch against a local server.
+const dom = typeof window !== 'undefined'
+
 beforeEach(() => {
+  if (!dom) return
   sessionStorage.clear()
   localStorage.clear()
   window.history.replaceState({}, '', '/')
@@ -21,7 +26,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
-  cleanup()
+  if (dom) cleanup()
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
   vi.unstubAllEnvs()
