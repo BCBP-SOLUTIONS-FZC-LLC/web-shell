@@ -495,4 +495,3 @@ Details: [VERSIONING.md](../../VERSIONING.md).
 | 10 | Keycloak realms need SMTP and "Forgot password" enabled for the reset flow (§6.1a); unconfirmed | Keycloak ops |
 | 11 | The `WebShellStartupFailures` alert ([runbook](../runbook-startup-failure.md)) is an example; it must be deployed to the Loki ruler | operators |
 | 12 | First release: add `## [0.1.0]` to the CHANGELOG, set `package.json` `version`, tag `v0.1.0` (release workflow never run), then `SMOKE_MODE=live` against the environment | this repo |
-| 13 | mfe-dashboard's `BrandLogo` uses root-relative `/image/logo-main-*.png` and `/image/logo.png`, which resolve on the shell's origin: inside the shell the sidebar logo is broken (contract case "every image" fails). Fix there: import the images so they ship under `/remotes/app2/<version>/` | `mfe-dashboard` |
