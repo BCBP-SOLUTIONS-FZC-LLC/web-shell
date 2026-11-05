@@ -4,11 +4,11 @@ This file provides guidance to Claude Code when working with **web-shell**, the 
 
 ## What This Repo Is
 
-A **private Rsbuild application** (npm name `web-shell`, `"private": true`, `0.0.0`) that ships as a static bundle in an nginx image (`ghcr.io/bcbp-solutions-fzc-llc/web-shell`, port 8080, uid 101). It runs the platform SDK's start-up sequence once per page, owns the sign-in and session screens and the IAM ports, and hosts the dashboard remote `dashboard` (`mfe-dashboard`) through Module Federation. It exposes nothing.
+A **private Rsbuild application** (npm name `web-shell`, `"private": true`, `version` = the latest tag) that ships as a static bundle in an nginx image (`ghcr.io/bcbp-solutions-fzc-llc/web-shell`, port 8080, uid 101). It runs the platform SDK's start-up sequence once per page, owns the sign-in and session screens and the IAM ports, and hosts the dashboard remote `dashboard` (`mfe-dashboard`) through Module Federation. It exposes nothing.
 
 Node 26, TypeScript `~6.0.3` (typescript-eslint has no TS 7 support), React 19.3, Rsbuild 2 (Rspack), Tailwind 4 + daisyUI. Platform packages from **GitHub Packages** (`.npmrc`, `NODE_AUTH_TOKEN` with `read:packages`): `@bcbp-solutions-fzc-llc/frontend-sdk`, `webpack-preset`, `eslint-plugin`, all **`1.0.0-alpha.5`, pinned exactly, on one version**.
 
-**Status:** code on `main` is release-ready; never tagged or deployed (everything is `[Unreleased]`). The release workflow has never run (its provenance step was fixed in #27). mfe-dashboard `main`/`v0.1.0`+ is on alpha.4 and passes the contract suite; its own release is pending (`v0.1.1`). CloudFront arrives next month; until then environments follow `docs/hosting-without-cloudfront.md`. Open items: [LLD §15](../docs/lld/web-shell-lld.md#15-open-items). v1 decisions: essential-only consent; fonts self-hosted; Forgot password → Keycloak reset.
+**Status:** Released: **`v0.2.0`** (remote `dashboard`, pairs with mfe-dashboard `v0.3.0`) is current and `latest`; **`v0.1.0`** (remote `app2`, pairs with mfe-dashboard `v0.2.0`) is kept as its rollback. Both were published by `release.yml` (signed, SBOM, SLSA provenance, tags added after signing). Not deployed yet. A release changes the shell–remote contract only together with mfe-dashboard (check with `npm run test-contract`). CloudFront arrives next month; until then environments follow `docs/hosting-without-cloudfront.md`. Open items: [LLD §15](../docs/lld/web-shell-lld.md#15-open-items). v1 decisions: essential-only consent; fonts self-hosted; Forgot password → Keycloak reset.
 
 **The shell owns:** `src/bootstrap.tsx` (SDK order, session branches, render), `src/App.tsx` (routes under `/t/<slug>/`, `RemoteBoundary` for `dashboard` `./App`), `src/platform/` (PUB-1 and P-35 ports, role map, session screens and their host; consent is the SDK's essential-only default), `src/pages/` (login layouts, remember-email), `rsbuild.config.ts`, `config/dev-platform.mjs` (dev stand-ins), `nginx/default.conf`, `Dockerfile`.
 
@@ -26,6 +26,7 @@ npm test                  # Vitest: unit, integration, e2e
 npm run test:ci           # + coverage gate 95% (100% today)
 npm run build             # tsc + rsbuild build
 npm run budget            # bundle size budget, after a build
+npm run metrics-check     # observability standard for metrics in src/ (docs/observability.md)
 npm run test-browser      # Playwright, Chromium/Firefox/WebKit under the production CSP, after a build
 npm run test-contract     # same, against a real mfe-dashboard build: REMOTE_DIST=../mfe-dashboard/dist
 npm run test-smoke        # needs SMOKE_BASE_URL (test/smoke/README.md)
@@ -53,6 +54,7 @@ Run one test: `npx vitest run test/e2e/shell.test.tsx -t "sign-out"`. Full list:
 - **Registry token never in an image layer** (BuildKit secret `npm_token`). Dockerfile `FROM` lines stay digest-pinned.
 - **Sibling repos are read-only from here:** `../mfe-dashboard` (another session/team owns it) and `../../../XPertSharedLib/react/platform-reactcommon`. Read them; change them in their own PRs.
 - **Diagrams:** edit `docs/architecture/mermaid/*.mmd` and keep the block under its `> Source:` line in `ARCHITECTURE.md` identical (the post-edit hook checks).
+- **Metrics follow the Enterprise Platform Observability Standard** (`docs/observability.md`): only through the SDK meters (`getServiceMeter` for Tier 3 `portal_web_shell_*`, `getDomainMeter` for registry Tier 2); never `platform_*` (SDK-bound after ratification), never a label the SDK injects (`domain`, `service`, `environment`) or an unbounded one; every metric listed in the Inventory. `metrics-check` enforces it in CI.
 - **Coverage gate stays at 95%.** Required checks keep their names: `Validate / Test / test`, `Validate / Quality / quality`, `changelog`, `Smoke tests`.
 
 ## Conventions

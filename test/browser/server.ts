@@ -33,28 +33,19 @@ export const EMAIL = 'ada@acme.test'
 /** The remote this shell loads (src/App.tsx DASHBOARD_REMOTE): manifest key, container `__platform_mfe_<name>`, path. */
 export const REMOTE = 'dashboard'
 const REALM = 'tenant-acme'
+/** The Keycloak origin nginx/security.d/csp.conf.example names; replaced with this run's. */
+const EXAMPLE_IDP = 'https://auth.bcbpsolutions.com'
 
-/** The platform CSP (platform-reactcommon examples/cloudfront/csp.mjs buildCsp, alpha.4). */
+/**
+ * The platform CSP, read from nginx/security.d/csp.conf.example: the one copy in this repository of
+ * platform-reactcommon examples/cloudfront/csp.mjs (which is not published in a package), with this
+ * run's Keycloak origin in place of the example's.
+ */
 export function buildCsp(idpOrigin: string): string {
-  return [
-    "default-src 'none'",
-    "script-src 'self'",
-    "style-src 'self'",
-    "img-src 'self' data:",
-    "font-src 'self'",
-    `connect-src 'self' ${idpOrigin}`,
-    "manifest-src 'self'",
-    "worker-src 'self'",
-    "base-uri 'none'",
-    `form-action 'self' ${idpOrigin}`,
-    "frame-ancestors 'none'",
-    "object-src 'none'",
-    'upgrade-insecure-requests',
-    "require-trusted-types-for 'script'",
-    "trusted-types platform-sdk platform-webpack dompurify 'allow-duplicates'",
-    'report-uri /csp-report',
-    'report-to csp',
-  ].join('; ')
+  const conf = readFileSync(join(ROOT, 'nginx/security.d/csp.conf.example'), 'utf8')
+  const csp = /add_header\s+Content-Security-Policy\s+"([^"]+)"/.exec(conf)?.[1]
+  if (!csp?.includes(EXAMPLE_IDP)) throw new Error(`test/browser: no CSP naming ${EXAMPLE_IDP} in nginx/security.d/csp.conf.example`)
+  return csp.replaceAll(EXAMPLE_IDP, idpOrigin)
 }
 
 /** A self-signed certificate for 127.0.0.1 in .build/ (made once with openssl; valid 30 days). */

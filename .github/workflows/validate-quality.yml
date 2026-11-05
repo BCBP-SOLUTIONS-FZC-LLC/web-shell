@@ -48,6 +48,11 @@ jobs:
       - name: Lint (ESLint + platform rules)
         run: npm run lint -- --max-warnings 0
 
+      # Enterprise Platform Observability Standard (docs/observability.md): tiers, names, suffixes,
+      # labels, registry compliance and the inventory, for every metric src/ creates.
+      - name: Metrics follow the observability standard
+        run: npm run -s metrics-check
+
       - name: Typecheck (sources and tests)
         run: npm run typecheck
 

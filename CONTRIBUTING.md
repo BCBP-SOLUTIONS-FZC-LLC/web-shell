@@ -112,6 +112,10 @@ docs/lld/web-shell-lld.md ← Low-level design (the contract)
 3. Add a row to the configuration tables in `README.md`.
 4. Runtime config is served to every browser. Do not put secrets in it.
 
+### Adding a metric
+
+Follow [docs/observability.md § Adding a metric](docs/observability.md#adding-a-metric): pick the tier with its decision tree, create it with the SDK's `getServiceMeter` (Tier 3, `portal_web_shell_*`) or `getDomainMeter` (a ratified Tier 2 name), add it to the Inventory, and run `npm run metrics-check`. Never create `platform_*` metrics or use the OpenTelemetry metrics API directly.
+
 ### Adding an nginx location
 
 1. Edit `nginx/default.conf`. The server listens on 8080.
