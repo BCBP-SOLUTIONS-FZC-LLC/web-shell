@@ -10,7 +10,7 @@ When `bootstrap()` throws after `initializeCore`, the shell logs one **essential
 |---|---|
 | Body | `the app could not start` |
 | Severity | `ERROR` (essential: sent without consent) |
-| Resource | `service.name=web-shell`, `service.namespace=portal`, `service.version=<BUILD_VERSION>`, `deployment.environment.name=<env>` |
+| Resource | `service.name=web-shell`, `service.namespace=portal`, `service.version=<BUILD_VERSION>`, `deployment.environment.name=<env>` (from `runtime.json` `environment`; when the config itself could not be loaded, the build-time environment) |
 | Attributes | `error` (serialised by the SDK: type, message, stack, with URL queries and tokens removed) |
 | Sent to | `telemetry.otlpBaseUrl` from `/config/runtime.json`; the default `/otel` when that file never arrived |
 

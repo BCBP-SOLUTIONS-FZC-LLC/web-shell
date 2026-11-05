@@ -103,7 +103,7 @@ Separately, `ci.yml` pushes the image on every push to `main` or `master` with t
 | `MAJOR` | Accept MINOR and PATCH updates automatically — not recommended before `v1.0.0` |
 | `latest` / `main` | Local or dev experiments only; never production |
 
-The image is the same for every environment: Keycloak origin, client id, API base and remotes are read from `/config/runtime.json` at run time. The only environment build arg is `PLATFORM_ENVIRONMENT` (default `prod`), which sets the identity environment the SDK reports.
+The image is the same for every environment: Keycloak origin, client id, API base and remotes are read from `/config/runtime.json` at run time. The environment itself is now read there too (`environment`, SDK alpha.6): one image is promoted through every environment. `PLATFORM_ENVIRONMENT` (default `prod`) is only the fallback for a `runtime.json` without the key, and goes away once every deployed file names its environment.
 
 ### Static bundle
 
@@ -164,7 +164,7 @@ Both match the `v[0-9]*.[0-9]*.[0-9]*-*` tag trigger and produce a signed, scann
 
 | web-shell | Node | React | Platform SDK | Dashboard remote |
 |-----------|------|-------|--------------|------------------|
-| Unreleased (`main`) | 26 (image builder `node:26-bookworm`, CI `node-version: 26`) | `^19.0.0` (strict singleton, from the preset) | `@bcbp-solutions-fzc-llc/*` `1.0.0-alpha.5`, all three on one version | From `/remotes/manifest.json`. Must be built with `webpack-preset` `1.0.0-alpha.4` or `1.0.0-alpha.5` (container global `__platform_mfe_<name>`; a remote requires `^<its SDK>`, so never newer than this shell's); an alpha.3 build defines the old global, which this shell does not read. Not versioned in this repo |
+| Unreleased (`main`) | 26 (image builder `node:26-bookworm`, CI `node-version: 26`) | `^19.0.0` (strict singleton, from the preset) | `@bcbp-solutions-fzc-llc/*` `1.0.0-alpha.6`, all three on one version | From `/remotes/manifest.json`. Must be built with `webpack-preset` `1.0.0-alpha.4`, `alpha.5` or `alpha.6` (container global `__platform_mfe_<name>`; a remote requires `^<its SDK>`, so never newer than this shell's); an alpha.3 build defines the old global, which this shell does not read. Not versioned in this repo |
 
 Keycloak itself is not a library dependency of the image. The shell talks to the `auth.idpOrigin` and `auth.clientId` in `/config/runtime.json`, and to the realm PUB-1 resolves for the workspace. The runtime image is nginx and the static files.
 

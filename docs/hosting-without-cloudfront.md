@@ -13,7 +13,7 @@ CloudFront is not available yet (expected next month). Until then the image serv
 | SPA rewrite, `nosniff`, `Referrer-Policy`, `X-Frame-Options`, COOP, `Permissions-Policy`, Cache-Control, gzip | Already in the image (`nginx/default.conf`) |
 | Edge cache | None: nginx serves every request. `/assets/` is `immutable`, so browsers still cache it |
 
-Each environment also mounts its own `/config/runtime.json` and `/remotes/manifest.json` over the image's defaults (README § Production image).
+Each environment also mounts its own `/config/runtime.json` and `/remotes/manifest.json` over the image's defaults (README § Production image). The `runtime.json` names that environment (`"environment": "dev"`, …; SDK alpha.6): one image serves every environment, and the smoke check below fails a file that names none or another.
 
 ## The dashboard: same origin (recommended) or its own
 
@@ -44,7 +44,7 @@ In Kubernetes, the same four files as ConfigMap volumes at those paths (`readOnl
 ## Check it
 
 ```bash
-SMOKE_BASE_URL=https://<host> SMOKE_MODE=live npm run test-smoke
+SMOKE_BASE_URL=https://<host> SMOKE_MODE=live ENVIRONMENT=<dev|staging|prod> npm run test-smoke
 ```
 
 `live` mode fails without the CSP (including the IdP in `form-action`), HSTS of at least a year, or `nosniff`, and checks the SPA rule, caching, integrity and the runtime files. Then sign in, open the dashboard, and sign out: the sign-out must reach Keycloak (the next sign-in asks for the password).

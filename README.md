@@ -3,7 +3,7 @@
 The browser shell for the BCBP micro-frontend platform. It runs the platform SDK's start-up sequence once for the whole page: identity, runtime config, telemetry, the Keycloak session, the workspace, permissions and flags. Then it renders the dashboard as a Module Federation remote (`dashboard`) inside this origin. The sign-in page and the session screens (signed out, session ended and so on) belong to the shell. Remotes initialise nothing; they read the shell's state through the SDK's hooks.
 
 **Repository:** `github.com/BCBP-SOLUTIONS-FZC-LLC/web-shell`
-**Runtime:** Node.js 26 · Rsbuild 2 (Rspack) · React 19.3 · `@bcbp-solutions-fzc-llc/frontend-sdk` `1.0.0-alpha.5` · private npm package `web-shell` (`"private": true`) · production image is nginx on port **8080**
+**Runtime:** Node.js 26 · Rsbuild 2 (Rspack) · React 19.3 · `@bcbp-solutions-fzc-llc/frontend-sdk` `1.0.0-alpha.6` · private npm package `web-shell` (`"private": true`) · production image is nginx on port **8080**
 **Contract:** Module Federation host `shell`, built with `@bcbp-solutions-fzc-llc/webpack-preset`. It provides React, React DOM, the OTel API and every SDK subpath to remotes, and exposes nothing. Versioning of the image and that contract is in [VERSIONING.md](./VERSIONING.md).
 **Status:** Released: **`v0.2.0`** (remote `dashboard`, pairs with mfe-dashboard `v0.3.0`) is current and `latest`; **`v0.1.0`** (remote `app2`, pairs with mfe-dashboard `v0.2.0`) is kept as its rollback. Both were published by `release.yml` (signed, SBOM, SLSA provenance, tags added after signing). Not deployed yet. Deploy them in pairs: web-shell `0.2.0` + mfe-dashboard `0.3.0` (or `0.1.0` + `0.2.0`). Until CloudFront exists (next month) environments follow [docs/hosting-without-cloudfront.md](./docs/hosting-without-cloudfront.md). What is still open: [LLD §15](./docs/lld/web-shell-lld.md#15-open-items).
 
@@ -264,7 +264,7 @@ The full schema is in the SDK's README (Runtime configuration) and LLD §12.1.
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `PLATFORM_ENVIRONMENT` | `prod` for a production build, `local` for `npm run dev` | `__ENVIRONMENT__`, the identity environment passed to `initializeCore` (`local`, `dev`, `test`, `staging`, `prod`) |
+| `PLATFORM_ENVIRONMENT` | `prod` for a production build, `local` for `npm run dev` | `__ENVIRONMENT__`: only the fallback now. The identity environment comes from `runtime.json` `environment` when the deployed file names it (SDK alpha.6), which every environment's should; then this goes away (`local`, `dev`, `test`, `staging`, `prod`) |
 | `BUILD_VERSION` | `package.json` `version` | `__BUILD_VERSION__`, and the content of `/version.json` |
 | `NODE_AUTH_TOKEN` | — | `npm ci` only: reads `@bcbp-solutions-fzc-llc/*` from GitHub Packages |
 

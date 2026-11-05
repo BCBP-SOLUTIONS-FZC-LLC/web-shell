@@ -6,7 +6,7 @@
 import { StrictMode } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { initializeCore } from '@bcbp-solutions-fzc-llc/frontend-sdk/core'
-import { loadRuntimeConfig, setRuntimeConfig } from '@bcbp-solutions-fzc-llc/frontend-sdk/config'
+import { loadRuntimeConfig, setRuntimeConfig, type RuntimeConfig } from '@bcbp-solutions-fzc-llc/frontend-sdk/config'
 import { initializeTracing } from '@bcbp-solutions-fzc-llc/frontend-sdk/tracing'
 import { getLogger, initializeLogging } from '@bcbp-solutions-fzc-llc/frontend-sdk/logging'
 import { initializeMetrics, startWebVitals } from '@bcbp-solutions-fzc-llc/frontend-sdk/metrics'
@@ -65,16 +65,26 @@ const DEFAULT_OTLP_BASE_URL = '/otel'
 export async function bootstrap(): Promise<void> {
   let core = false
   const report = { otlpBaseUrl: DEFAULT_OTLP_BASE_URL }
+  const identify = (environment: RuntimeConfig['environment'] & string) => {
+    initializeCore({ serviceName: 'web-shell', domain: 'portal', environment, buildVersion: __BUILD_VERSION__ })
+    core = true
+  }
   try {
     installTrustedTypesPolicy()
-    initializeCore({
-      serviceName: 'web-shell',
-      domain: 'portal',
-      environment: __ENVIRONMENT__,
-      buildVersion: __BUILD_VERSION__,
-    })
-    core = true
-    await start(report)
+    // One build for every environment (SDK alpha.6): the deployed runtime.json names its environment,
+    // so the config is loaded before the identity and its `environment` becomes the page's. Until every
+    // deployed runtime.json has the key, the build-time environment fills in (then it goes away).
+    let cfg: RuntimeConfig
+    try {
+      cfg = await loadRuntimeConfig()
+    } catch (error) {
+      // No config means no environment from it: identify with the build-time one, so the failure is
+      // still reported (WebShellStartupFailures) before the unavailable page.
+      identify(__ENVIRONMENT__)
+      throw error
+    }
+    identify(cfg.environment ?? __ENVIRONMENT__)
+    await start(cfg, report)
   } catch (error) {
     // Without core there is no identity to report under; the console still has it (index.ts).
     if (core) reportStartupFailure(error, report.otlpBaseUrl)
@@ -91,8 +101,7 @@ function reportStartupFailure(error: unknown, otlpBaseUrl: string): void {
   }
 }
 
-async function start(report: { otlpBaseUrl: string }): Promise<void> {
-  const cfg = await loadRuntimeConfig()
+async function start(cfg: RuntimeConfig, report: { otlpBaseUrl: string }): Promise<void> {
   setRuntimeConfig(cfg)
   report.otlpBaseUrl = cfg.telemetry.otlpBaseUrl
   // Consent: the SDK's default grants `essential` only (errors and essential warnings), which is the

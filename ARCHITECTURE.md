@@ -2,7 +2,7 @@
 
 This document describes the internal structure, dependency direction, and browser flows of `web-shell`.
 
-`web-shell` is a **private Rsbuild application** (`github.com/BCBP-SOLUTIONS-FZC-LLC/web-shell`, Node.js 26, React 19.3) built on the platform SDK (`@bcbp-solutions-fzc-llc/frontend-sdk` `1.0.0-alpha.5`). The npm package name is `web-shell` and `"private": true`. Nothing installs it. What ships is a static bundle: the SDK bootstrap, the sign-in and session screens, and a Module Federation host (`shell`) that renders the dashboard remote. The production process is nginx on port **8080**, uid **101**. There is no API server, database, or message bus in this repository.
+`web-shell` is a **private Rsbuild application** (`github.com/BCBP-SOLUTIONS-FZC-LLC/web-shell`, Node.js 26, React 19.3) built on the platform SDK (`@bcbp-solutions-fzc-llc/frontend-sdk` `1.0.0-alpha.6`). The npm package name is `web-shell` and `"private": true`. Nothing installs it. What ships is a static bundle: the SDK bootstrap, the sign-in and session screens, and a Module Federation host (`shell`) that renders the dashboard remote. The production process is nginx on port **8080**, uid **101**. There is no API server, database, or message bus in this repository.
 
 Current release: `v0.2.0` (remote `dashboard`); `v0.1.0` (remote `app2`) is its rollback. `package.json` `version` matches the latest tag. Image tags, the SemVer contract, and how to cut a release are in [VERSIONING.md](./VERSIONING.md).
 
@@ -169,8 +169,8 @@ sequenceDiagram
 
     Browser->>Index: load document
     Index->>Boot: import('./bootstrap'), bootstrap()
-    Boot->>SDK: installTrustedTypesPolicy, initializeCore
-    Boot->>SDK: loadRuntimeConfig (/config/runtime.json)
+    Boot->>SDK: installTrustedTypesPolicy, loadRuntimeConfig (/config/runtime.json)
+    Boot->>SDK: initializeCore (environment from runtime.json, else build-time), setRuntimeConfig
     Note over Boot,SDK: a failure is logged as an error (default /otel), then "The app is unavailable right now."
     Boot->>SDK: tracing, logging, metrics, error handlers, web vitals (consent: SDK default, essential only)
     Boot->>SDK: createOidcProvider, initializeAuth, setTokenSource
@@ -202,8 +202,8 @@ sequenceDiagram
     end
 ```
 
-1. `installTrustedTypesPolicy()`, then `initializeCore({ serviceName: 'web-shell', domain: 'portal', environment: __ENVIRONMENT__, buildVersion: __BUILD_VERSION__ })`.
-2. `loadRuntimeConfig()` fetches `/config/runtime.json` and validates it; `setRuntimeConfig`. A throw from here on is logged as an essential error (`the app could not start`; logging starts on the default `/otel` when the config never arrived), then reaches `index.ts`, which replaces `#app` with "The app is unavailable right now."
+1. `installTrustedTypesPolicy()`, then `loadRuntimeConfig()` fetches `/config/runtime.json` and validates it.
+2. `initializeCore({ serviceName: 'web-shell', domain: 'portal', environment: cfg.environment ?? __ENVIRONMENT__, buildVersion: __BUILD_VERSION__ })`, then `setRuntimeConfig(cfg)`: the deployed `/config/runtime.json` names its environment (`environment`, SDK alpha.6) and the page takes it from there, so one build serves every environment; until every deployed file has the key, the build-time `PLATFORM_ENVIRONMENT` fills in. When the config cannot be loaded, the identity takes the build-time environment so the failure can still be reported. A throw from here on is logged as an essential error (`the app could not start`; logging starts on the default `/otel` when the config never arrived), then reaches `index.ts`, which replaces `#app` with "The app is unavailable right now."
 3. Consent stays the SDK's default (essential only), then tracing, logging and metrics against `telemetry.otlpBaseUrl`, `installGlobalErrorHandlers()`, `startWebVitals()`, platform flags from the runtime config.
 4. `createOidcProvider(cfg.auth, workspaceResolver)`, `setTokenSource(initializeAuth(idp))`, `idp.init()`. On a reload or a new tab `init()` may redirect once with `prompt=none` and never settle.
 5. Anonymous: see the sign-in flow. The bootstrap returns without rendering the app.
@@ -376,7 +376,7 @@ Remotes that need storage use `storage(appId)` from `/storage`, which is namespa
 | Document | `GET /` | `index.html`, `id="app"`, `Cache-Control: no-cache` |
 | Runtime files | `GET /config/runtime.json`, `/remotes/manifest.json`, `/version.json` | `no-cache`, 404 when the file is absent |
 
-Build args: `BUILD_VERSION`, `SOURCE_DATE_EPOCH`, `PLATFORM_ENVIRONMENT` (default `prod`). The image ships `public/config/runtime.json` (SDK defaults: `https://auth.bcbpsolutions.com`, client `tender-web`) and an empty manifest `{}`. An environment serves its own files over those paths, from CloudFront or a mount. The image sends no CSP or HSTS: CloudFront does, and until it exists (next month) each environment mounts `nginx/security.d/csp.conf` and `hsts.conf` and routes `/api`, `/otel`, `/csp-report` and `/remotes/dashboard/` on the same origin at its ingress ([docs/hosting-without-cloudfront.md](docs/hosting-without-cloudfront.md)).
+Build args: `BUILD_VERSION`, `SOURCE_DATE_EPOCH`, `PLATFORM_ENVIRONMENT` (default `prod`; only a fallback now: each environment's `runtime.json` names its own `environment`). The image ships `public/config/runtime.json` (SDK defaults: `https://auth.bcbpsolutions.com`, client `tender-web`) and an empty manifest `{}`. An environment serves its own files over those paths, from CloudFront or a mount. The image sends no CSP or HSTS: CloudFront does, and until it exists (next month) each environment mounts `nginx/security.d/csp.conf` and `hsts.conf` and routes `/api`, `/otel`, `/csp-report` and `/remotes/dashboard/` on the same origin at its ingress ([docs/hosting-without-cloudfront.md](docs/hosting-without-cloudfront.md)).
 
 CI on `main` pushes `ghcr.io/bcbp-solutions-fzc-llc/web-shell` with the branch tag and `sha-<short>`, then Cosign-signs the digest. A Git tag `vX.Y.Z` publishes image tags `X.Y.Z`, `X.Y`, `X`, and `latest` when the tag has no pre-release suffix. The Git tag keeps the `v`. The static tarball on the GitHub Release is `web-shell_<tag>_dist.tar.gz`, without source maps (the release keeps them as the workflow artifact `sourcemaps-<tag>`). `BUILD_VERSION` is the version without the `v`. Releases so far: `v0.1.0`, `v0.2.0`. It does not include the nginx `/healthz` location.
 

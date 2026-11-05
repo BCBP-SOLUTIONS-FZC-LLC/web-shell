@@ -12,7 +12,7 @@ import { initializeCore } from '@bcbp-solutions-fzc-llc/frontend-sdk/core'
 import { loadManifest } from '@bcbp-solutions-fzc-llc/frontend-sdk/mfe'
 import { smokeenv } from './env'
 
-const { baseUrl, mode, environment } = smokeenv
+const { baseUrl, mode, environment, environmentSet } = smokeenv
 const image = mode === 'image'
 
 interface Fetched {
@@ -184,6 +184,22 @@ describe(`web-shell smoke (${mode}, ${baseUrl})`, () => {
       expectNoCache(r)
       await ensureConfig()
       expect(tryGetConfig()?.auth.clientId, where(r, 'auth.clientId')).toBeTruthy()
+    })
+
+    // One shell build serves every environment (SDK alpha.6): the page takes its identity's
+    // environment from this file, so each deployment's file must name its own. This is the deploy
+    // pipeline's check: run it against every environment with ENVIRONMENT set to the target.
+    it.skipIf(image)("names the target environment (the deploy check: ENVIRONMENT=<target>)", async () => {
+      expect(environmentSet, 'set ENVIRONMENT to the environment this deployment is (local, dev, test, staging, prod)').toBe(true)
+      const r = await get('/config/runtime.json')
+      const named = (json(r) as { environment?: string }).environment
+      expect(named, where(r, 'runtime.json "environment" (missing: the shell would fall back to its build-time environment)')).toBeDefined()
+      expect(named, where(r, `runtime.json "environment" must be the target, ${environment}`)).toBe(environment)
+    })
+
+    it.skipIf(!image)('the image ships no environment: each deployment writes its own', async () => {
+      const r = await get('/config/runtime.json')
+      expect((json(r) as { environment?: string }).environment, where(r, 'runtime.json "environment" in the image')).toBeUndefined()
     })
   })
 

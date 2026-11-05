@@ -8,6 +8,14 @@ Pull requests that change the shell, its dependencies, or the image add an entry
 
 ## [Unreleased]
 
+### Changed
+
+- **Platform SDK `1.0.0-alpha.6`: one build for every environment (`2026-11-06`).** All three packages move to `1.0.0-alpha.6`, pinned exactly; the shell goes first, since a remote built on alpha.6 requires `^1.0.0-alpha.6`. The bootstrap now loads `/config/runtime.json` **before** `initializeCore` and passes its `environment` (new optional key, the registry vocabulary) to the identity, then `setRuntimeConfig`; the SDK refuses a config that names another environment than the identity's. Order of the move:
+  1. **This release:** the environment comes from `runtime.json` when the file names one, else from the build-time `PLATFORM_ENVIRONMENT` (`__ENVIRONMENT__`). If the config cannot be loaded at all, the identity takes the build-time environment so the failure is still reported (`WebShellStartupFailures`).
+  2. **Operators:** each environment's deployed `runtime.json` gets `"environment": "<its environment>"`. The deploy check is the smoke suite: `SMOKE_MODE=live ENVIRONMENT=<target> npm run test-smoke` fails a file that names none or another. The image's default `public/config/runtime.json` names none on purpose (checked in image mode), and `config/runtime.local.json` names `local`.
+  3. **Then this repo** drops `__ENVIRONMENT__` / `PLATFORM_ENVIRONMENT` (LLD §15), and a file without the key stops at the unavailable page.
+  Checked: 143 tests at 100% (new: the environment from the file, the build-time fallback, the report without a config; e2e with the real SDK: a file naming `dev` makes the identity `dev`); image smoke 27 passed; the deploy check against nginx (target matches; another environment fails; no key fails); browser suite 18/18; contract 12/12 against the released mfe-dashboard `v0.3.0` (alpha.5). alpha.6's other changes (`formatDate` calendar dates, console warnings while logging is off) need nothing here.
+
 ### Added
 
 - **Dependabot can read GitHub Packages (`2026-11-05`).** Its npm job failed with 401 on `npm.pkg.github.com` (run of 2026-11-05: `@bcbp-solutions-fzc-llc/frontend-sdk`, `eslint-plugin`), so no npm update could open, public packages included. `.github/dependabot.yml` now declares the `github-packages` registry with the Dependabot secret `PACKAGES_READ_TOKEN` and ignores `@bcbp-solutions-fzc-llc/*` (moved by hand, in lockstep). Same as mfe-dashboard #29. Needs the secret: an organization Dependabot secret shared with both repositories.

@@ -358,6 +358,14 @@ describe('the shell, end to end', () => {
     expect(assigned).toEqual([])
   })
 
+  it("takes the page's environment from the deployed runtime.json (one build, SDK alpha.6), not the build", async () => {
+    net.on('GET /config/runtime.json', { ...RUNTIME_CONFIG, environment: 'dev' })
+    await load('/t/acme/dashboard')
+    await until(() => assigned.length > 0, 'the redirect to Keycloak')
+    const { getIdentity } = await import('@bcbp-solutions-fzc-llc/frontend-sdk/core')
+    expect(getIdentity()).toMatchObject({ serviceName: 'web-shell', domain: 'portal', environment: 'dev' })
+  })
+
   it("Forgot your password? resolves the email and opens the realm's Keycloak reset page", async () => {
     await load('/')
     await userEvent.type(await emailBox(), EMAIL)

@@ -4,7 +4,7 @@ Condensed from the [LLD](../docs/lld/web-shell-lld.md) §5–§6. Step numbers r
 
 ## Bootstrap (every page load)
 
-1. `installTrustedTypesPolicy` → `initializeCore` (`web-shell`, `portal`) → `loadRuntimeConfig`/`setRuntimeConfig`. A throw so far → "The app is unavailable right now."
+1. `installTrustedTypesPolicy` → `loadRuntimeConfig` → `initializeCore` (`web-shell`, `portal`, environment `cfg.environment ?? __ENVIRONMENT__`) → `setRuntimeConfig`. A throw so far → "The app is unavailable right now."
 2. (Consent: the SDK's default, essential only) → tracing, logging, metrics, `installGlobalErrorHandlers`, `startWebVitals` → runtime-config flags.
 3. `createOidcProvider(cfg.auth, workspaceResolver)` → `setTokenSource(initializeAuth(idp))` → `idp.init()`.
 4. Anonymous → sign-in (below); return. Wrong workspace → `showWrongWorkspace`; return.
