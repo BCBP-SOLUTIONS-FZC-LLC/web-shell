@@ -333,6 +333,8 @@ docker run --rm -p 18080:8080 \
   web-shell:local
 ```
 
+**Without CloudFront** (until it is available): the load balancer or ingress routes `/api`, `/otel`, `/csp-report` and `/remotes/app2/` on the same origin, and the image gets the CSP and HSTS as mounted files. See [docs/hosting-without-cloudfront.md](./docs/hosting-without-cloudfront.md); remove those mounts when CloudFront arrives.
+
 Two stages, both digest-pinned: `node:26-bookworm` runs `npm ci` and `npm run build`, then deletes the source maps; `nginxinc/nginx-unprivileged:1.31-alpine` serves `/usr/share/nginx/html` as uid 101. The CI smoke job fails the image above 200 MB, requires `/healthz`, `/` (a document that contains `id="app"`), `/config/runtime.json` and `/version.json` to return 200, fails when the image contains a `.map` file, and then runs the smoke suite against the container (`npm run test-smoke`, [test/smoke/README.md](./test/smoke/README.md)). To run it locally: `docker run -d --rm -p 127.0.0.1:18080:8080 web-shell:local`, then `SMOKE_BASE_URL=http://127.0.0.1:18080 npm run test-smoke`.
 
 ### Local Keycloak compose
