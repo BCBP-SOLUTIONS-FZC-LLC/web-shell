@@ -8,8 +8,8 @@ Order:
 
 1. `validate-test` and `validate-quality` check out that tag.
 2. `build` checks the tag is exactly `HEAD` (`verify-release-tag.sh`), checks `CHANGELOG.md` contains `## [X.Y.Z]` (`verify-changelog-entry.sh`), and packs `web-shell_<tag>_dist.tar.gz`.
-3. `docker` pushes `ghcr.io/bcbp-solutions-fzc-llc/web-shell`, scans it, writes the CycloneDX SBOM and SLSA provenance, and Cosign-signs the digest.
-4. `publish` creates the GitHub Release only after `build` and `docker` succeed. Notes are the changelog section (`extract-release-notes.sh`). Assets are the tarball, `checksums.txt`, `sbom.cyclonedx.json`, and `provenance.slsa.json`.
+3. `docker` pushes `ghcr.io/bcbp-solutions-fzc-llc/web-shell`, scans it, writes the CycloneDX SBOM and SLSA provenance, and Cosign-signs the digest. The provenance is BuildKit's attestation inside the image index (`provenance: mode=max`), read with `docker buildx imagetools inspect` (`export-image-provenance.sh`); there is no Cosign attestation to download.
+4. `publish` creates the GitHub Release only after `build` and `docker` succeed. Notes are the changelog section (`extract-release-notes.sh`). Assets are the tarball, `checksums.txt`, `sbom.cyclonedx.json`, and `provenance.slsa.json`. The source maps of the release build are a workflow artifact (`sourcemaps-<tag>`, 90 days), never a Release asset.
 
 The image tag drops the `v`. Git tag `v1.2.3` publishes `1.2.3`, `1.2`, `1`, and `latest`. Git tag `v1.2.3-rc.1` publishes `1.2.3-rc.1` and does not move `latest`.
 
@@ -43,7 +43,7 @@ git push origin vX.Y.Z
 
 ## Build args on the tagged image
 
-`release.yml` passes `BUILD_VERSION` (the tag) and `SOURCE_DATE_EPOCH`, and the registry token as the BuildKit secret `npm_token`. `PLATFORM_ENVIRONMENT` keeps its default, `prod`.
+`release.yml` passes `BUILD_VERSION` (the version without the `v`: `0.1.0` for `v0.1.0`, as `/version.json` and telemetry's `service.version` report it) and `SOURCE_DATE_EPOCH`, and the registry token as the BuildKit secret `npm_token`. `PLATFORM_ENVIRONMENT` keeps its default, `prod`.
 
 The tagged image is the same for every environment. It ships `public/config/runtime.json` (SDK defaults) and an empty `/remotes/manifest.json`. Each environment serves its own `/config/runtime.json` and `/remotes/manifest.json` over those paths; nothing about Keycloak, the API or the remotes is baked in at build time.
 

@@ -91,7 +91,7 @@ The Git tag keeps the `v`. Image tags from `docker/metadata-action` are `X.Y.Z`,
 
 Release Trivy fails on unfixed **CRITICAL** and **HIGH**. It does not include the CI job's **UNKNOWN** severity. Both jobs honor `.trivyignore`.
 
-The GitHub Release attaches `web-shell_<tag>_dist.tar.gz`, `checksums.txt`, `sbom.cyclonedx.json`, and `provenance.slsa.json`. Notes come from the matching `## [X.Y.Z]` section. Steps when a tag fails are in [the release runbook](../runbook-release.md). Maintainer order of work is in [VERSIONING.md](../../VERSIONING.md).
+The GitHub Release attaches `web-shell_<tag>_dist.tar.gz`, `checksums.txt`, `sbom.cyclonedx.json`, and `provenance.slsa.json`. The build's source maps stay a workflow artifact (`sourcemaps-<tag>`, 90 days), for reading production stack traces. Notes come from the matching `## [X.Y.Z]` section. Steps when a tag fails are in [the release runbook](../runbook-release.md). Maintainer order of work is in [VERSIONING.md](../../VERSIONING.md).
 
 ## Changelog check
 

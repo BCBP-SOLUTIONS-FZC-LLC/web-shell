@@ -42,6 +42,12 @@ Pull requests that change the shell, its dependencies, or the image add an entry
 
 ### Changed
 
+- **The release workflow, checked before its first run (`2026-11-05`).** mfe-dashboard's `v0.1.0` release failed at "Export SLSA provenance" with the same script this repository had; three more release steps differed from it:
+  - `export-image-provenance.sh` read a Cosign attestation that does not exist: `build-push-action` (`provenance: mode=max`) stores provenance as a BuildKit attestation in the image index. It now reads it with `docker buildx imagetools inspect` (checked against `web-shell:main`). Without this the first tag would have pushed an image and stopped before signing it or opening the Release.
+  - `extract-release-notes.sh` piped `tee` into `true`, which could cut the notes short on a closed pipe; plain redirects now (a 3 000-line section extracted whole).
+  - `BUILD_VERSION` is the version without the `v` (`0.1.0`), in the tarball and the image, as mfe-dashboard reports it.
+  - Source maps were deleted, though comments said they were "uploaded privately". A release now keeps them as the workflow artifact `sourcemaps-<tag>` (90 days), never in the bundle, the image or the Release.
+
 - **Hosting until CloudFront (`2026-11-05`).** CloudFront is expected next month. Until then environments follow `docs/hosting-without-cloudfront.md`: the ingress routes `/api`, `/otel`, `/csp-report` and `/remotes/app2/` on the shell's origin, and the image gets the platform CSP and HSTS as mounted files (`nginx/security.d/csp.conf.example`, new `hsts.conf.example`). It lists the extra settings if the dashboard must live on its own origin, and what to remove when CloudFront arrives. The smoke job now mounts both files and checks both headers.
 
 - **Release checks (`2026-11-05`).**
