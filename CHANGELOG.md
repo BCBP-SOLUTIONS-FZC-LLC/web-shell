@@ -16,6 +16,8 @@ Pull requests that change the shell, its dependencies, or the image add an entry
 
 ### Changed
 
+- **A permanent guard against duplicating the SDK (`2026-11-05`).** `test/unit/no-sdk-duplicates.test.ts` runs on every PR: no module-level name in `src/`, `config/` or the browser-suite server may be one of the SDK's public exports (about 170), which also flags the shell's copies of unpublished platform code (`retrySessionContext`, `createStore`, `isTransient`, `ShellRoot`, `buildCsp`) the day the SDK publishes them; and no test or dev-server code may hand-build a problem body. It found one more on its first run: `test/unit/session-context.test.ts` built `ProblemError`s by hand; they now come from the SDK (`parseProblemResponse` of `mockProblem(typeForStatus(status))`, or of a bare response for 502, as the ApiClient does).
+
 - **Tests and the dev server use the SDK's problem responses (`2026-11-05`).** The e2e suite, its network fixture, the browser suite's server and `config/dev-platform.mjs` built error bodies by hand (`{ title: 'Unauthorized', status: 401 }` as `application/json`), duplicating the SDK's `/testing` `mockProblem`, and unlike the platform's real ones (no `type`, `errorCode`, `timestamp`, not `application/problem+json`), so the SDK's problem parsing was not what the tests exercised. They now use `mockProblem(PlatformProblemTypes.…)`. The platform has no 502 type: the e2e outage case and the dev server's unreachable `DEV_API_URL` answer 503 (Service Unavailable), which the SDK treats the same (transient).
 
 - **No logic duplicated from the platform SDK (`2026-11-05`).** An independent review of `src/` against the SDK's public exports and dist (and platform-reactcommon's source) found two real duplicates, both removed:
