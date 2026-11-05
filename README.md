@@ -191,6 +191,7 @@ The dashboard is a second process. Start `mfe-dashboard` (`npm run dev` there) s
 | `npm run test-unit` / `test-int` / `test-e2e` | One layer |
 | `npm run budget` | Bundle size budget over `dist/` (run after `npm run build`; CI does) |
 | `npm run test-browser` | The real-browser suite (Playwright, Chromium, Firefox, WebKit) against `dist/` under the production CSP ([test/browser/README.md](./test/browser/README.md)) |
+| `npm run test-contract` | The browser suite against a real mfe-dashboard build: `REMOTE_DIST=../mfe-dashboard/dist npm run test-contract` after building both ([test/browser/README.md](./test/browser/README.md)) |
 | `npm run test-smoke` | The smoke suite against `SMOKE_BASE_URL` ([test/smoke/README.md](./test/smoke/README.md)) |
 | `npm run test:coverage` | Same, with the v8 coverage report |
 | `npm run test:ci` | Coverage plus the 95% gate (`.github/scripts/coverage-gate.mjs`) |
@@ -228,6 +229,7 @@ Port **8080** is Keycloak in this compose file and also the port the shell image
 | End to end | `test/e2e/` | The real bootstrap, screens, `App` and SDK against a fake Keycloak (PKCE) and network: email → PUB-1 → sign-in → the `app2` remote under `/t/<slug>/`, deep links, role-map permissions in the remote, deny-all, a failing remote, global sign-out, the device clock |
 | Smoke | `test/smoke/` | `npm run test-smoke` against the served image (CI) or a deployment: the SPA rule, Cache-Control, script integrity, 404s, and the runtime files validated by the SDK. See [test/smoke/README.md](./test/smoke/README.md) |
 | Browser | `test/browser/` | `npm run test-browser` after a build: the production bundle in Chromium, Firefox and WebKit under the production CSP and Trusted Types, with a fake Keycloak on a second origin: fonts, PKCE sign-in, the remote with integrity, `navigate()`, the sign-out form POST, the start-up failure report, colour contrast |
+| Dashboard contract | `test/browser/dashboard.spec.ts`, CI `dashboard-contract` | The real mfe-dashboard build (`REMOTE_DIST`) in this shell, three engines, production CSP: integrity, share scope and CSS, the role map reaching it, its navigation, its Logout through the shell's form POST. Informational in CI |
 
 Vitest uses happy-dom and Testing Library. `vitest.config.ts` defines `__ENVIRONMENT__` and `__BUILD_VERSION__` as `test`. The bootstrap test replaces every SDK subpath with a recording fake. The e2e suite runs the real SDK (Vitest inlines it, so each simulated page load gets a fresh one) against `test/fixtures/` fakes, modelled on platform-reactcommon's. No suite calls Keycloak, the IAM APIs or port 5002.
 
@@ -280,7 +282,7 @@ The image takes `PLATFORM_ENVIRONMENT`, `BUILD_VERSION` and `SOURCE_DATE_EPOCH` 
 | **Redirect** | The SDK checks `state` before the code is exchanged. The redirect URI is `{origin}{auth.redirectPath}` |
 | **API calls** | The SDK's `ApiClient` sends the token to the page's own origin only and never sends identity headers. The ESLint plugin enforces subpath imports, no identity headers, no raw `window.*Storage`, no unsafe HTML |
 | **Remote code** | Remotes execute in this origin. Entries load only from the page's origin or `remotes.allowedOrigins`, pinned by `integrity` outside local, dev and test |
-| **CSP** | The bundle is Trusted-Types and `script-src 'self'` safe (preset output, `installTrustedTypesPolicy`). nginx sets no CSP header; the platform's CloudFront distribution does. Fonts (Geist, Inter) are self-hosted under `/assets/`, so `font-src 'self'` and `style-src 'self'` hold |
+| **CSP** | The bundle is Trusted-Types and `script-src 'self'` safe (preset output, `installTrustedTypesPolicy`). nginx sends no CSP by default; the platform's CloudFront distribution does. An environment served without CloudFront mounts `nginx/security.d/csp.conf.example` (with its IdP origin) as `/etc/nginx/security.d/csp.conf`; one behind CloudFront mounts nothing, since two CSPs are both enforced. Fonts (Geist, Inter) are self-hosted under `/assets/`, so `font-src 'self'` and `style-src 'self'` hold |
 | **Image** | nginx runs as uid 101. `.env` is not copied into the build context. The registry token is a BuildKit secret and never lands in a layer. Source maps are deleted from the image |
 | **Reporting** | [SECURITY.md](./.github/SECURITY.md). Email vijay@bcbpsolutions.com with subject `[web-shell]` |
 

@@ -1,0 +1,10 @@
+# The platform CSP for an environment that serves this image WITHOUT CloudFront in front (behind
+# CloudFront, mount nothing: CloudFront sends this policy, and two CSPs are both enforced).
+# Mount it read-only as /etc/nginx/security.d/csp.conf, e.g.
+#   docker run -v "$PWD/csp.conf:/etc/nginx/security.d/csp.conf:ro" ghcr.io/bcbp-solutions-fzc-llc/web-shell:<tag>
+# or as a Kubernetes ConfigMap at that path. Replace https://auth.bcbpsolutions.com with that
+# environment's Keycloak origin (runtime.json auth.idpOrigin) in connect-src and form-action: the
+# SDK's global sign-out POSTs a form to it. Same directives as platform-reactcommon
+# examples/cloudfront/csp.mjs (alpha.4). Add HSTS only where the environment serves HTTPS.
+add_header Content-Security-Policy "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self' https://auth.bcbpsolutions.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'self' https://auth.bcbpsolutions.com; frame-ancestors 'none'; object-src 'none'; upgrade-insecure-requests; require-trusted-types-for 'script'; trusted-types platform-sdk platform-webpack dompurify 'allow-duplicates'; report-uri /csp-report; report-to csp" always;
+add_header Reporting-Endpoints 'csp="/csp-report"' always;

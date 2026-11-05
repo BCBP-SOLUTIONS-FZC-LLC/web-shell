@@ -19,6 +19,7 @@ const rows = [
   ['Trivy CVE scan', 'trivy'],
   ['Smoke tests', 'smoke'],
   ['Browser tests (Chromium · Firefox · WebKit)', 'browser'],
+  ['Dashboard contract (real mfe-dashboard, informational)', 'dashboard-contract'],
 ];
 
 const table = rows

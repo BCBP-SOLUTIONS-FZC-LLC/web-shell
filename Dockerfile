@@ -43,6 +43,8 @@ USER 0
 RUN apk upgrade --no-cache
 
 COPY nginx/default.conf /etc/nginx/conf.d/default.conf
+# Empty: an environment without CloudFront mounts its CSP here (nginx/security.d/csp.conf.example).
+RUN mkdir -p /etc/nginx/security.d
 # 101 is the nginx user in nginxinc/nginx-unprivileged. A name fails Hadolint DL3066.
 COPY --from=builder --chown=101:101 /app/dist /usr/share/nginx/html
 

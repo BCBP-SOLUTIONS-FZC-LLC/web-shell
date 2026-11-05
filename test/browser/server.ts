@@ -10,6 +10,11 @@
 //   signed in), the token endpoint with PKCE and CORS, and the end-session endpoint the SDK's
 //   global sign-out POSTs a form to.
 //
+// With REMOTE_DIST set to a built mfe-dashboard's dist/ (the dashboard contract run, CI `Dashboard
+// contract`), the manifest's app2 is that real build instead of the stub: its remoteEntry.js and
+// chunks served under /remotes/app2/<version>/, with the integrity its build wrote to
+// remote-manifest-entry.json.
+//
 // HTTPS with a throwaway self-signed certificate: the production CSP has upgrade-insecure-requests,
 // which WebKit applies to http://127.0.0.1 too. Tests read what the servers saw at GET /__test/state.
 import { execFileSync } from 'node:child_process'
@@ -127,6 +132,17 @@ async function body(req: IncomingMessage): Promise<string> {
   return Buffer.concat(chunks).toString('utf8')
 }
 
+/** REMOTE_DIST: a built mfe-dashboard dist/ with its remote-manifest-entry.json. */
+function remoteBuild(): { dir: string; base: string; version: string; integrity: string } | undefined {
+  const dist = process.env.REMOTE_DIST
+  if (!dist) return undefined
+  const dir = normalize(dist.startsWith('/') ? dist : join(ROOT, dist))
+  const entryFile = join(dir, 'remote-manifest-entry.json')
+  if (!existsSync(entryFile)) throw new Error(`test/browser: REMOTE_DIST=${dist} has no remote-manifest-entry.json; build mfe-dashboard first.`)
+  const { app2 } = JSON.parse(readFileSync(entryFile, 'utf8')) as { app2: { version: string; integrity: string } }
+  return { dir, base: `/remotes/app2/${app2.version}/`, version: app2.version, integrity: app2.integrity }
+}
+
 const listen = (s: Server) =>
   new Promise<string>((resolve) => s.listen(0, '127.0.0.1', () => resolve(`https://127.0.0.1:${(s.address() as AddressInfo).port}`)))
 
@@ -152,7 +168,11 @@ export async function startServers(): Promise<{ app: string; idp: string; close:
   }
   const entryPath = '/remotes/app2/1.0.0/remoteEntry.js'
   const integrity = `sha384-${createHash('sha384').update(REMOTE_ENTRY).digest('base64')}`
-  const manifest = { app2: { entry: entryPath, version: '1.0.0', ownerDomain: 'portal', integrity } }
+  /** The real dashboard build (REMOTE_DIST), or undefined for the stub. */
+  const real = remoteBuild()
+  const manifest = real
+    ? { app2: { entry: `${real.base}remoteEntry.js`, version: real.version, ownerDomain: 'portal', integrity: real.integrity } }
+    : { app2: { entry: entryPath, version: '1.0.0', ownerDomain: 'portal', integrity } }
   const headers = {
     'Content-Security-Policy': buildCsp(idp),
     'Reporting-Endpoints': 'csp="/csp-report"',
@@ -188,7 +208,12 @@ export async function startServers(): Promise<{ app: string; idp: string; close:
     }
     if (p === '/config/runtime.json') return json(res, 200, runtimeConfig)
     if (p === '/remotes/manifest.json') return json(res, 200, manifest)
-    if (p === entryPath) return send(res, 200, REMOTE_ENTRY, TYPES['.js']!)
+    if (!real && p === entryPath) return send(res, 200, REMOTE_ENTRY, TYPES['.js']!)
+    if (real && p.startsWith(real.base)) {
+      const file = normalize(join(real.dir, p.slice(real.base.length)))
+      if (!file.startsWith(real.dir) || !existsSync(file) || file.endsWith('.map')) return send(res, 404, 'Not Found', 'text/plain')
+      return send(res, 200, readFileSync(file), TYPES[extname(file)] ?? 'application/octet-stream')
+    }
     if (p === '/api/v1/public/tenants/resolve') {
       const found = url.searchParams.get('identifier') === EMAIL
       return json(res, 200, found ? { found: true, realm: REALM, strategy: 'dedicated' } : { found: false })

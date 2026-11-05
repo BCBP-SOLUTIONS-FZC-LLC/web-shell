@@ -11,6 +11,9 @@ const APP = process.env.BROWSER_APP_URL!
 const IDP = process.env.BROWSER_IDP_URL!
 const EMAIL = 'ada@acme.test'
 
+// The stub remote's cases; the real dashboard's are in dashboard.spec.ts (REMOTE_DIST).
+test.skip(!!process.env.REMOTE_DIST, 'REMOTE_DIST: the dashboard contract run')
+
 const state = async (page: Page): Promise<State> => (await page.request.get(`${APP}/__test/state`)).json()
 
 /** securitypolicyviolation events in every document the page loads (an init script runs before CSP applies). */
@@ -97,8 +100,9 @@ test('a deploy without its runtime config shows the unavailable page and reports
   await page.route('**/config/runtime.json', (r) => r.fulfill({ status: 404, body: 'Not Found' }))
   await page.goto(`${APP}/`)
   await expect(page.getByRole('alert')).toContainText('The app is unavailable right now')
-  // The record goes on the next export or the page-hide beacon, whichever is first.
-  await page.goto('about:blank')
+  // The user stays on the unavailable page: the record goes with the SDK's next export (every 5 s).
+  // Not by leaving the page: WebKit sometimes drops the page-hide beacon (the SDK's engine notes),
+  // which made this case fail about once in 90 runs; delivery on unload is the SDK's to test.
   await expect
     .poll(async () => (await state(page)).otel.filter((o) => o.path === '/otel/v1/logs').map((o) => o.body).join('\n'), {
       timeout: 15_000,

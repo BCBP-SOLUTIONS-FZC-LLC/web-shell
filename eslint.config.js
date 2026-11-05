@@ -6,7 +6,7 @@ import globals from 'globals'
 import tseslint from 'typescript-eslint'
 
 export default tseslint.config(
-  { ignores: ['dist', 'coverage', 'node_modules', 'keycloak'] },
+  { ignores: ['dist', 'coverage', 'node_modules', 'keycloak', '.remote', 'test-results', 'playwright-report'] },
   ...tseslint.configs.recommended,
   {
     files: ['**/*.{ts,tsx}'],

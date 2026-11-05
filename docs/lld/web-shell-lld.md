@@ -14,6 +14,7 @@
 
 | Date | Change |
 |---|---|
+| 2026-11-05 | Release checks: dashboard contract test against a real mfe-dashboard build, optional mounted CSP in nginx, start-up failure runbook |
 | 2026-11-05 | Launch hardening: background P-35 retry with a live provider, i18n `detect`, SDK navigator, start-up failure report, real-browser suite, bundle budget, hashed images, `LoginPage1` removed, package renamed `web-shell` |
 | 2026-11-05 | SDK `1.0.0-alpha.4`: container global `__platform_mfe_app2`, global sign-out as a form POST (CSP `form-action` needs the IdP), `no-raw-storage` exemption for remember-email |
 | 2026-11-04 | Launch decisions: self-hosted fonts, Forgot password → Keycloak reset, links shown only with official URLs, essential-only consent for v1, update banner |
@@ -334,7 +335,7 @@ Here (a remote's `useSignOut()`) or in another tab (`BroadcastChannel('platform-
 | Shared device | App unmounted before "You are signed out" | `idp.subscribe` handler; e2e |
 | Remote code | Runs in this origin; manifest-only entries, allowed origins, integrity outside local/dev/test | SDK `/mfe` |
 | Script integrity | sha384 on the entry and every lazy chunk | Preset `ChunkIntegrityPlugin`; smoke checks the entry |
-| CSP | Bundle is `script-src 'self'` and Trusted Types safe; fonts and styles are same-origin (`font-src 'self'`, `style-src 'self'`); headers come from CloudFront | Preset output, `inlineScripts: false`, self-hosted fonts; smoke `live` mode checks headers |
+| CSP | Bundle is `script-src 'self'` and Trusted Types safe; fonts and styles are same-origin (`font-src 'self'`, `style-src 'self'`); headers come from CloudFront; without CloudFront, from a mounted `/etc/nginx/security.d/csp.conf` | Preset output, `inlineScripts: false`, self-hosted fonts; smoke `live` mode checks headers; the smoke job checks the image sends none by default and the mounted file adds it |
 | Sign-out POST | CSP `form-action 'self' <idpOrigin>`: the SDK's global sign-out is a form POST to Keycloak | CloudFront; smoke `live` mode checks `form-action` contains the runtime config's `auth.idpOrigin` |
 | Outbound links | Help and legal links open in a new tab with `rel="noopener noreferrer"`; unset links are not rendered | `PageLinks.tsx` |
 | Generic errors | The email screen never says which input failed | `WORKSPACE_NOT_FOUND` |
@@ -390,7 +391,7 @@ Validated strictly by the SDK (unknown keys rejected). Schema: SDK LLD §12.1.
 | `~ \.[^/]*$` (any path with an extension) | `no-cache`; 404 when absent |
 | `/` | `no-cache`; `try_files $uri /index.html` |
 
-This is the platform's SPA rule (`platform-reactcommon` `examples/cloudfront/spa-rewrite.js`): only extension-less paths are app routes. nginx sets no CSP or HSTS: CloudFront does, and a second CSP here would be enforced alongside it.
+This is the platform's SPA rule (`platform-reactcommon` `examples/cloudfront/spa-rewrite.js`): only extension-less paths are app routes. nginx sets no CSP or HSTS: CloudFront does, and a second CSP here would be enforced alongside it. `include /etc/nginx/security.d/*.conf` (empty in the image) is for an environment without CloudFront: it mounts `nginx/security.d/csp.conf.example` there.
 
 ### 10.2 Image
 
@@ -417,7 +418,7 @@ Identity: `service.name` `web-shell`, domain `portal`, environment `__ENVIRONMEN
 | Event | Level | When |
 |---|---|---|
 | `session context unavailable` | `warn` | P-35 failed (§5 step 11), and each failed retry (`attempt`) |
-| `the app could not start` | `error` | Start-up threw after `initializeCore` (§5 step 3) |
+| `the app could not start` | `error` | Start-up threw after `initializeCore` (§5 step 3). Alert and diagnosis: [runbook](../runbook-startup-failure.md) |
 | `manifest load failed` | `error` | `loadManifest` rejected (§5 step 15) |
 | `the app could not start` | `console.error` only | Fatal start-up error (telemetry may not exist yet) |
 
@@ -439,6 +440,7 @@ Vitest 5, happy-dom at `http://localhost:5001/`, Testing Library. `vitest.config
 E2E seams (`test/fixtures/`): `FakeKeycloak` (authorize via `approve()`, token endpoint with PKCE check and refresh rotation), `FakeNetwork` (route table on the page origin; `/otel` → 204), `FakeBroadcastChannel`. Only the remote's entry `<script>` is stubbed: it defines `window.__platform_mfe_app2` exposing a dashboard built on SDK hooks. A page load clears `globalThis[Symbol.for('@bcbp-solutions-fzc-llc/frontend-sdk')]`, resets modules, and imports the bootstrap again; storage is kept.
 
 | Browser | `test/browser/shell.spec.ts` (Playwright) | the production build | Chromium, Firefox, WebKit over HTTPS with the production CSP and Trusted Types (`server.ts`), a fake Keycloak on a second origin, a remote stub on the shared SDK: fonts and hashed images with no third-party request, PKCE sign-in and the remote with integrity, `navigate()` without a reload, the sign-out form POST under `form-action`, the start-up failure at `/otel`, axe colour contrast (the logotype is exempt, WCAG 1.4.3). Any CSP report fails the test |
+| Dashboard contract | `test/browser/dashboard.spec.ts` (`REMOTE_DIST`) | the production build | A real mfe-dashboard build served as `app2` with its own `remote-manifest-entry.json` integrity: it loads with its CSS and no CSP violation, the role map reaches it, its `NavLink` stays in the page, its Logout POSTs to Keycloak through the shell. A wrong integrity fails it |
 
 ---
 
@@ -451,6 +453,7 @@ E2E seams (`test/fixtures/`): `FakeKeycloak` (authorize via `approve()`, token e
 | `ci.yml` `build-image` | Hadolint, Buildx cache build `web-shell-ci-test` |
 | `ci.yml` `trivy` | Unfixed CRITICAL/HIGH/UNKNOWN fail; SBOM artifact |
 | `ci.yml` `smoke` | `smoke-tests.sh`: ≤ 200 MB, startup gate, then `npm run test-smoke` (`SMOKE_MODE=image`) against the container |
+| `ci.yml` `dashboard-contract` | Builds mfe-dashboard (`vars.DASHBOARD_REF`, default `main`), then `REMOTE_DIST=… npm run test-contract`. Informational: does not gate `push` |
 | `ci.yml` `browser` | Playwright browsers, `npm run build`, `npm run test-browser` (Chromium, Firefox, WebKit). Gates `push` |
 | `ci.yml` `push` | `main`/`master`: GHCR branch and `sha-<short>` tags, Cosign keyless sign |
 | `changelog-check.yml` | `CHANGELOG.md` required when `src/`, `package*.json`, `Dockerfile`, `nginx/`, `rsbuild.config.ts`, `config/**`, `public/config/**` or `index.html` change |
@@ -480,7 +483,7 @@ Details: [VERSIONING.md](../../VERSIONING.md).
 |---|---|---|
 | 1 | Official Privacy, Terms, Trust & Security and Help URLs: set them in `src/pages/links.ts` (hidden until then; none exists on bcbpsolutions.com) | product / legal |
 | 3 | Consent is essential only in v1 (decision). A consent manager would call `cmp.accept()` | product |
-| 5 | `mfe-dashboard` is on alpha.3: until it is rebuilt with the alpha.4 preset, this shell cannot load it (`__platform_mfe_app2` undefined) | `mfe-dashboard` |
+| 5 | `mfe-dashboard` `main` is on alpha.4 and passes the contract (`dashboard.spec.ts`), but is not released: release it with this shell, and set its `PUBLIC_APP1_URL` | `mfe-dashboard` |
 | 6 | PUB-1 and P-35 must exist behind `/api` in every environment; they are stubbed only in dev | IAM |
 | 7 | No cluster deploy; each environment serves its own runtime config and manifest | operators |
 | 8 | Tender permissions in the role map are provisional | Tender Service |

@@ -9,6 +9,7 @@ Operator material for `web-shell`. Product setup stays in the repository [README
 | [pipeline/](pipeline/README.md) | What `ci.yml` and `release.yml` run, and in which order |
 | [runbook-coverage-gate.md](runbook-coverage-gate.md) | A red `validate-test` job |
 | [runbook-image-scan.md](runbook-image-scan.md) | Hadolint, digest pin, Trivy, or the smoke job |
+| [runbook-startup-failure.md](runbook-startup-failure.md) | `the app could not start` errors: the alert, and what to check |
 | [runbook-release.md](runbook-release.md) | A tag that does not publish |
 
 This shell has no metrics registry, Helm chart, or schema registry. Those documents in `iam-org-membership` have no counterpart here.
