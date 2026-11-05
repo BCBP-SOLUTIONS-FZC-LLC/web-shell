@@ -3,7 +3,7 @@
 The browser shell for the BCBP micro-frontend platform. It runs the platform SDK's start-up sequence once for the whole page: identity, runtime config, telemetry, the Keycloak session, the workspace, permissions and flags. Then it renders the dashboard as a Module Federation remote (`app2`) inside this origin. The sign-in page and the session screens (signed out, session ended and so on) belong to the shell. Remotes initialise nothing; they read the shell's state through the SDK's hooks.
 
 **Repository:** `github.com/BCBP-SOLUTIONS-FZC-LLC/web-shell`
-**Runtime:** Node.js 26 · Rsbuild 2 (Rspack) · React 19.3 · `@bcbp-solutions-fzc-llc/frontend-sdk` `1.0.0-alpha.4` · private npm package `web-shell` (`"private": true`) · production image is nginx on port **8080**
+**Runtime:** Node.js 26 · Rsbuild 2 (Rspack) · React 19.3 · `@bcbp-solutions-fzc-llc/frontend-sdk` `1.0.0-alpha.5` · private npm package `web-shell` (`"private": true`) · production image is nginx on port **8080**
 **Contract:** Module Federation host `shell`, built with `@bcbp-solutions-fzc-llc/webpack-preset`. It provides React, React DOM, the OTel API and every SDK subpath to remotes, and exposes nothing. Versioning of the image and that contract is in [VERSIONING.md](./VERSIONING.md).
 **Status:** not tagged or deployed. `main` passes every CI job; the release workflow has never run. Compatible with mfe-dashboard `v0.1.0`+ (alpha.4, checked by the contract suite). Until CloudFront exists (next month) environments follow [docs/hosting-without-cloudfront.md](./docs/hosting-without-cloudfront.md). What is still open: [LLD §15](./docs/lld/web-shell-lld.md#15-open-items).
 
