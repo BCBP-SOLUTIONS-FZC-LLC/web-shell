@@ -7,13 +7,16 @@
 | **Repository** | `github.com/BCBP-SOLUTIONS-FZC-LLC/web-shell` (private) |
 | **Artifact** | Static bundle served by nginx (`ghcr.io/bcbp-solutions-fzc-llc/web-shell`), never installed as a package (`web-shell`, `"private": true`, `0.0.0`) |
 | **Platform SDK** | `@bcbp-solutions-fzc-llc/frontend-sdk`, `webpack-preset`, `eslint-plugin` `1.0.0-alpha.4`, pinned exactly, all three on one version |
-| **Status** | Not tagged or deployed. Everything is `[Unreleased]` in [CHANGELOG.md](../../CHANGELOG.md) |
+| **Status** | Not tagged or deployed; everything is `[Unreleased]` in [CHANGELOG.md](../../CHANGELOG.md). `main` passes every CI job; the release workflow has not run (its provenance step fixed in #27). Compatible with mfe-dashboard `v0.1.0`+ (contract suite). Hosting until CloudFront (next month): [hosting-without-cloudfront.md](../hosting-without-cloudfront.md). Open: §15 |
 | **Owners** | `@BCBP-SOLUTIONS-FZC-LLC/web-shell` (CODEOWNERS) |
 
 ### Revision history
 
 | Date | Change |
 |---|---|
+| 2026-11-05 | Docs aligned with `main` after #25–#27: status, layout, hosting until CloudFront, release workflow, compatibility, open items |
+| 2026-11-05 | Release workflow fixed before its first run (#27): provenance via `imagetools`, release notes, `BUILD_VERSION` without `v`, source maps artifact |
+| 2026-11-05 | Hosting until CloudFront (#26): ingress routing, mounted CSP and HSTS |
 | 2026-11-05 | Release checks: dashboard contract test against a real mfe-dashboard build, optional mounted CSP in nginx, start-up failure runbook |
 | 2026-11-05 | Launch hardening: background P-35 retry with a live provider, i18n `detect`, SDK navigator, start-up failure report, real-browser suite, bundle budget, hashed images, `LoginPage1` removed, package renamed `web-shell` |
 | 2026-11-05 | SDK `1.0.0-alpha.4`: container global `__platform_mfe_app2`, global sign-out as a form POST (CSP `form-action` needs the IdP), `no-raw-storage` exemption for remember-email |
@@ -391,7 +394,7 @@ Validated strictly by the SDK (unknown keys rejected). Schema: SDK LLD §12.1.
 | `~ \.[^/]*$` (any path with an extension) | `no-cache`; 404 when absent |
 | `/` | `no-cache`; `try_files $uri /index.html` |
 
-This is the platform's SPA rule (`platform-reactcommon` `examples/cloudfront/spa-rewrite.js`): only extension-less paths are app routes. nginx sets no CSP or HSTS: CloudFront does, and a second CSP here would be enforced alongside it. `include /etc/nginx/security.d/*.conf` (empty in the image) is for an environment without CloudFront: it mounts `nginx/security.d/csp.conf.example` there.
+This is the platform's SPA rule (`platform-reactcommon` `examples/cloudfront/spa-rewrite.js`): only extension-less paths are app routes. nginx sets no CSP or HSTS: CloudFront does, and a second CSP here would be enforced alongside it. `include /etc/nginx/security.d/*.conf` (empty in the image) is for an environment without CloudFront, which mounts `nginx/security.d/csp.conf.example` and `hsts.conf.example` there: every environment until CloudFront is available (next month; [hosting-without-cloudfront.md](../hosting-without-cloudfront.md)).
 
 ### 10.2 Image
 
@@ -468,9 +471,9 @@ Every `npm ci` reads `@bcbp-solutions-fzc-llc/*` from GitHub Packages with `GITH
 | Peer | Rule |
 |---|---|
 | SDK | Pinned exactly; the shell shares it as `1.0.0-alpha.4` under the preset's range `^1.0.0-0` |
-| Remotes | A remote built with the preset requires `^<its SDK version>`: it must not be newer than the shell's. **Upgrade the shell first**, then remotes. alpha.4 is the exception: the container global changed, so the shell and every remote deploy together |
+| Remotes | A remote built with the preset requires `^<its SDK version>`: it must not be newer than the shell's. **Upgrade the shell first**, then remotes. A release that changes the shell–remote contract is the exception (alpha.4 changed the container global): the shell and every remote deploy together. `npm run test-contract` checks a pairing |
 | React | Strict singleton `^19.0.0` from the preset; the shell ships 19.3 |
-| `mfe-dashboard` (`app2`) | Rsbuild remote with `pluginPlatform({ role: 'remote', name: 'app2' })`, async-only chunk splitting, reads the user and sign-out through SDK hooks, takes no props. Verified end to end on alpha.3 on 2026-11-04 (owner sees Invite; member does not; logout asks for the password again). Must be rebuilt with the alpha.4 preset to load in this shell |
+| `mfe-dashboard` (`app2`) | Rsbuild remote with `pluginPlatform({ role: 'remote', name: 'app2' })`, async-only chunk splitting, reads the user and sign-out through SDK hooks, takes no props. alpha.4 from its `main` and tag `v0.1.0` on. Contract suite (`dashboard.spec.ts`) on 2026-11-05 against `main` `e1b04c3` and branch `0be083c` (v0.1.1 prep): 9/9 in three engines (loads with its CSS and integrity, role map reaches it, `NavLink` without a reload, Logout through the shell's form POST). Its `v0.1.0` tag has no published release (its provenance step failed); `v0.1.1` is pending. An alpha.3 build does not load in this shell |
 | Keycloak | Each workspace realm registers `{origin}/auth/callback` and the origin as post-logout redirect for the client |
 
 Details: [VERSIONING.md](../../VERSIONING.md).
@@ -483,7 +486,11 @@ Details: [VERSIONING.md](../../VERSIONING.md).
 |---|---|---|
 | 1 | Official Privacy, Terms, Trust & Security and Help URLs: set them in `src/pages/links.ts` (hidden until then; none exists on bcbpsolutions.com) | product / legal |
 | 3 | Consent is essential only in v1 (decision). A consent manager would call `cmp.accept()` | product |
-| 5 | `mfe-dashboard` `main` is on alpha.4 and passes the contract (`dashboard.spec.ts`), but is not released: release it with this shell, and set its `PUBLIC_APP1_URL` | `mfe-dashboard` |
+| 5 | mfe-dashboard: `v0.1.0` has no published release; release `v0.1.1` (alpha.4, contract 9/9) with this shell, with its `PUBLIC_APP1_URL` repository variable set | `mfe-dashboard` |
 | 6 | PUB-1 and P-35 must exist behind `/api` in every environment; they are stubbed only in dev | IAM |
-| 7 | No cluster deploy; each environment serves its own runtime config and manifest | operators |
+| 7 | No cluster deploy; each environment serves its own runtime config and manifest (with the remote's integrity) and registers its redirect URIs in each realm | operators |
+| 9 | No CloudFront until next month: environments route `/api`, `/otel`, `/csp-report`, `/remotes/app2/` at the ingress and mount the CSP (IdP in `form-action`) and HSTS ([hosting-without-cloudfront.md](../hosting-without-cloudfront.md)); remove the mounts when CloudFront arrives | operators |
+| 10 | Keycloak realms need SMTP and "Forgot password" enabled for the reset flow (§6.1a); unconfirmed | Keycloak ops |
+| 11 | The `WebShellStartupFailures` alert ([runbook](../runbook-startup-failure.md)) is an example; it must be deployed to the Loki ruler | operators |
+| 12 | First release: add `## [0.1.0]` to the CHANGELOG, set `package.json` `version`, tag `v0.1.0` (release workflow never run), then `SMOKE_MODE=live` against the environment | this repo |
 | 8 | Tender permissions in the role map are provisional | Tender Service |
