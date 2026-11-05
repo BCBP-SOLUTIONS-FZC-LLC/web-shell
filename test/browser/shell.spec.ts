@@ -83,11 +83,16 @@ test('sign-out POSTs to Keycloak under form-action, ends the SSO session and wai
   await signIn(page)
   await page.getByRole('button', { name: 'Sign out' }).click()
   await expect(page.getByRole('heading', { name: 'You are signed out' })).toBeVisible()
+  // The dialog shows as soon as the SDK reports the sign-out, before the form POST reaches
+  // Keycloak and the browser comes back: wait for the POST, not for the dialog.
+  await expect.poll(async () => (await state(page)).logouts.length).toBe(1)
   const { logouts } = await state(page)
-  expect(logouts).toHaveLength(1)
   expect(logouts[0]).toMatchObject({ client_id: 'tender-web', post_logout_redirect_uri: `${APP}/` })
   expect(logouts[0]!.id_token_hint).toBeTruthy()
-  expect(page.url()).toBe(`${APP}/`) // Keycloak sent the browser back; no token in any URL
+  // Keycloak sends the browser back to the app root (no token in any URL); that page load shows
+  // the dialog again, and that is the one to click.
+  await expect(page).toHaveURL(`${APP}/`)
+  await expect(page.getByRole('heading', { name: 'You are signed out' })).toBeVisible()
   expect(await violations(page)).toEqual([])
 
   // Sign in again: credentials are asked for (prompt=login), not a silent pass on a live session.
