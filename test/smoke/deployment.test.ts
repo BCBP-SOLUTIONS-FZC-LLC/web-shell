@@ -283,6 +283,11 @@ describe(`web-shell smoke (${mode}, ${baseUrl})`, () => {
         expect(script, where(r, 'CSP script-src')).not.toContain("'unsafe-eval'")
         expect(d.get('require-trusted-types-for'), where(r, 'CSP require-trusted-types-for')).toEqual(["'script'"])
         expect(d.get('frame-ancestors'), where(r, 'CSP frame-ancestors')).toEqual(["'none'"])
+        // SDK alpha.4 signs out globally with a form POST to the IdP's end-session endpoint: without
+        // the IdP origin here the browser blocks it and the Keycloak SSO session stays alive.
+        await ensureConfig()
+        const idp = new URL(tryGetConfig()!.auth.idpOrigin).origin
+        expect(d.get('form-action'), where(r, 'CSP form-action (the global sign-out POST)')).toContain(idp)
         expect(Number(/max-age=(\d+)/i.exec(h('strict-transport-security') ?? '')?.[1] ?? 0), where(r, 'HSTS')).toBeGreaterThanOrEqual(
           31_536_000,
         )

@@ -6,10 +6,12 @@
 // runtime global is cleared and every module is evaluated again), and the bootstrap runs.
 //
 // Stubbed seams, and why:
-// - the remote's entry <script>: happy-dom does not run remoteEntry.js. The stub defines the `app2`
-//   container global the way the entry does, exposing a dashboard built only on the SDK's hooks, as
-//   mfe-dashboard's is.
+// - the remote's entry <script>: happy-dom does not run remoteEntry.js. The stub defines the
+//   `__platform_mfe_app2` container global the way the entry does (the preset's containerName since
+//   alpha.4), exposing a dashboard built only on the SDK's hooks, as mfe-dashboard's is.
 // - location.assign/replace: a redirect is recorded instead of leaving the page.
+// - HTMLFormElement#submit: the global sign-out's form POST to Keycloak is recorded (URL and fields)
+//   instead of leaving the page.
 // - react-dom/client's createRoot is wrapped only to unmount the app between page loads.
 import { createElement, type ComponentType } from 'react'
 import type { Root } from 'react-dom/client'
@@ -37,6 +39,8 @@ vi.mock('react-dom/client', async (importOriginal) => {
 const ORIGIN = window.location.origin
 const RUNTIME_KEY = Symbol.for('@bcbp-solutions-fzc-llc/frontend-sdk')
 const ENTRY = '/remotes/app2/1.0.0/remoteEntry.js'
+/** The global app2's remoteEntry.js defines: `__platform_mfe_<name>` (SDK alpha.4). */
+const CONTAINER = '__platform_mfe_app2'
 const TENANT = '7d3c1f9e-2b4a-4c6d-8e0f-1a2b3c4d5e6f'
 const EMAIL = 'ada@acme.test'
 
@@ -49,6 +53,8 @@ const RUNTIME_CONFIG = (() => {
 let kc: FakeKeycloak
 let net: FakeNetwork
 let assigned: string[]
+/** Form POST navigations (the global sign-out). */
+let posted: { url: string; fields: Record<string, string> }[]
 let injected: string[]
 let roles: string[]
 /** How the next container.get answers; the hooks-only dashboard by default. */
@@ -90,7 +96,7 @@ async function unload(): Promise<void> {
 async function load(path?: string): Promise<void> {
   await unload()
   delete (globalThis as Record<symbol, unknown>)[RUNTIME_KEY]
-  delete (globalThis as Record<string, unknown>).app2
+  delete (globalThis as Record<string, unknown>)[CONTAINER]
   vi.resetModules()
   if (path) window.history.replaceState(null, '', path)
   const app = document.createElement('div')
@@ -139,6 +145,7 @@ beforeEach(() => {
   kc = new FakeKeycloak()
   net = new FakeNetwork(kc, ORIGIN)
   assigned = []
+  posted = []
   injected = []
   roles = ['member', 'tenant_owner']
   bootError = undefined
@@ -167,13 +174,17 @@ beforeEach(() => {
   const record = (u: string | URL) => void assigned.push(String(u))
   vi.spyOn(window.location, 'assign').mockImplementation(record)
   vi.spyOn(window.location, 'replace').mockImplementation(record)
+  vi.spyOn(HTMLFormElement.prototype, 'submit').mockImplementation(function (this: HTMLFormElement) {
+    const fields = Object.fromEntries([...new FormData(this)].map(([k, v]) => [k, String(v)]))
+    posted.push({ url: `${this.method.toUpperCase()} ${this.action}`, fields })
+  })
   // The remote's entry script: define the container as remoteEntry.js would, then fire load.
   const append = document.head.appendChild.bind(document.head)
   vi.spyOn(document.head, 'appendChild').mockImplementation(<T extends Node>(node: T): T => {
     if (!(node instanceof HTMLScriptElement)) return append(node)
     const src = new URL(node.src, ORIGIN)
     injected.push(src.pathname)
-    ;(globalThis as Record<string, unknown>).app2 = { init: () => {}, get: (m: string) => exposeModule(m) }
+    ;(globalThis as Record<string, unknown>)[CONTAINER] = { init: () => {}, get: (m: string) => exposeModule(m) }
     setTimeout(() => node.onload?.(new Event('load')))
     return node
   })
@@ -182,7 +193,7 @@ beforeEach(() => {
 afterEach(async () => {
   await unload()
   delete (globalThis as Record<symbol, unknown>)[RUNTIME_KEY]
-  delete (globalThis as Record<string, unknown>).app2
+  delete (globalThis as Record<string, unknown>)[CONTAINER]
   FakeBroadcastChannel.reset()
 })
 
@@ -289,12 +300,16 @@ describe('the shell, end to end', () => {
     expect(document.getElementById('app')!.childElementCount).toBe(0)
     expect(otherTab).toEqual([{ type: 'logout' }])
 
-    // Global sign-out: the page goes to Keycloak's end-session endpoint, which returns to the app.
-    const endSession = new URL(assigned.at(-1)!)
-    expect(endSession.pathname).toBe('/realms/tenant-acme/protocol/openid-connect/logout')
-    expect(endSession.searchParams.get('client_id')).toBe('tender-web')
-    assigned.length = 0
-    await load(new URL(endSession.searchParams.get('post_logout_redirect_uri')!).pathname)
+    // Global sign-out: a form POST to Keycloak's end-session endpoint (the ID token stays out of URLs
+    // and history; CSP form-action must allow the IdP), which returns to the app.
+    expect(assigned).toEqual([])
+    expect(posted).toHaveLength(1)
+    const { url, fields } = posted[0]!
+    expect(url).toBe(`POST ${IDP}/realms/tenant-acme/protocol/openid-connect/logout`)
+    expect(fields.client_id).toBe('tender-web')
+    expect(fields.id_token_hint).toBeTruthy()
+    expect(fields.post_logout_redirect_uri).toBe(`${ORIGIN}/`)
+    await load(new URL(fields.post_logout_redirect_uri!).pathname)
     await screen.findByRole('heading', { name: 'You are signed out' })
     expect(assigned).toEqual([]) // no silent sign-in on the live SSO session
 

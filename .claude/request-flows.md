@@ -36,7 +36,7 @@ Typed email → PUB-1 (generic message on failure) → `location.assign({idpOrig
 | `anonymous` / `signed-out` (here or another tab) | Unmount `#app`, then "You are signed out"; Sign in → `idp.login({ workspace })` |
 | New `/version.json` | "A new version is available." with Reload (`useAppUpdate`); never forced |
 | `switchWorkspace(id)` | PUB-1 → not found: "Workspace not found"; else `idp.switchWorkspace` |
-| Remote `useSignOut()` | `idp.logout()`; global by default: end-session redirect, then `/` shows the signed-out dialog |
+| Remote `useSignOut()` | `idp.logout()`; global by default: form POST to the realm's end-session endpoint (ID token out of URLs; CSP `form-action` must allow the IdP), then `/` shows the signed-out dialog |
 
 ## Dashboard load
 

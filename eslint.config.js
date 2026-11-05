@@ -16,6 +16,13 @@ export default tseslint.config(
   },
   { files: ['src/**/*.{ts,tsx}'], ...platform.configs.recommended },
   {
+    // "Remember Email" is needed before any workspace is known and must survive sign-out; the SDK's
+    // storage() is workspace-scoped and cleared on sign-out. Only the typed email is kept, never a
+    // token. This is the one file allowed raw localStorage (the rule has no allow option).
+    files: ['src/pages/rememberEmail.ts'],
+    rules: { '@bcbp-solutions-fzc-llc/no-raw-storage': 'off' },
+  },
+  {
     files: ['**/*.{js,mjs}', '.github/**/*.{js,mjs}', 'scripts/**/*.mjs'],
     languageOptions: { globals: globals.node },
   },

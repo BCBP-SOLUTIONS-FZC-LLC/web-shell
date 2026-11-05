@@ -2,7 +2,7 @@
 
 This document describes the internal structure, dependency direction, and browser flows of `web-shell`.
 
-`web-shell` is a **private Rsbuild application** (`github.com/BCBP-SOLUTIONS-FZC-LLC/web-shell`, Node.js 26, React 19.3) built on the platform SDK (`@bcbp-solutions-fzc-llc/frontend-sdk` `1.0.0-alpha.3`). The npm package name is `app1` and `"private": true`. Nothing installs it. What ships is a static bundle: the SDK bootstrap, the sign-in and session screens, and a Module Federation host (`shell`) that renders the dashboard remote. The production process is nginx on port **8080**, uid **101**. There is no API server, database, or message bus in this repository.
+`web-shell` is a **private Rsbuild application** (`github.com/BCBP-SOLUTIONS-FZC-LLC/web-shell`, Node.js 26, React 19.3) built on the platform SDK (`@bcbp-solutions-fzc-llc/frontend-sdk` `1.0.0-alpha.4`). The npm package name is `app1` and `"private": true`. Nothing installs it. What ships is a static bundle: the SDK bootstrap, the sign-in and session screens, and a Module Federation host (`shell`) that renders the dashboard remote. The production process is nginx on port **8080**, uid **101**. There is no API server, database, or message bus in this repository.
 
 The shell has not been tagged. `package.json` `version` is `0.0.0`. Image tags, the SemVer contract, and how to cut a release are in [VERSIONING.md](./VERSIONING.md).
 
@@ -341,7 +341,7 @@ Remotes that need storage use `storage(appId)` from `/storage`, which is namespa
 | Invariant | Where it holds |
 |---|---|
 | The shell is a public OAuth client. There is no client secret in the repo or the bundle | Runtime config has a `clientId` only |
-| Tokens never touch storage | SDK `/auth`. `no-raw-storage` lint rule on `src/` |
+| Tokens never touch storage | SDK `/auth`. `no-raw-storage` lint rule on `src/` (off only for `src/pages/rememberEmail.ts`) |
 | No login starts without a click after a logout | `showSignedOut`, `showDeviceClock`, `showSessionEnded` |
 | The app never renders for a wrong-workspace login | `isWrongWorkspace` check before render |
 | The bootstrap runs once, behind the async boundary | `src/index.ts` |
@@ -418,7 +418,7 @@ Use this before serving this image in an environment, or before changing `app2`.
 - [ ] Serve `index.html` for extension-less client-side routes only, as `platform-reactcommon` `examples/cloudfront/spa-rewrite.js` does (this image's nginx config follows it). Missing config, remote, asset and API files must stay 404.
 - [ ] Serve this environment's `/config/runtime.json` and `/remotes/manifest.json`, revalidated. Cache `/assets/` as immutable.
 - [ ] Route `/api` to the platform API (PUB-1 and P-35 must exist) and `/otel` to the collector, same origin.
-- [ ] Send the platform's CSP with the Trusted Types policies (`platform-reactcommon/examples/cloudfront`).
+- [ ] Send the platform's CSP with the Trusted Types policies (`platform-reactcommon/examples/cloudfront`), with the IdP origin in `form-action` (the global sign-out POSTs to Keycloak).
 - [ ] Keep `GET /healthz` if the orchestrator probes the image. The tarball alone does not include that location.
 - [ ] Register `{origin}/auth/callback` as a redirect URI, and the origin as a post-logout redirect, on the Keycloak client in every workspace realm.
 
