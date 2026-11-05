@@ -2,7 +2,7 @@ flowchart LR
     test["validate-test"]
     quality["validate-quality"]
     build["build\ntag matches HEAD\nchangelog section\ndist tarball"]
-    docker["docker\nsemver tags, Trivy,\nSBOM, provenance, Cosign"]
+    docker["docker\npush by digest, Trivy, SBOM,\nprovenance, Cosign, then tags"]
     publish["publish\nGitHub Release"]
 
     test --> build
