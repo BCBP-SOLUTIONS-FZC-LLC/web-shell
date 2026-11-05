@@ -1,4 +1,5 @@
 {
+  "environment": "local",
   "api": { "baseUrl": "/api", "timeoutMs": 35000, "propagationAllowlist": [] },
   "telemetry": { "otlpBaseUrl": "/otel", "sampleRatio": 1, "logLevel": "debug", "sendSessionHeader": true },
   "auth": {

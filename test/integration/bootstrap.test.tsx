@@ -173,8 +173,8 @@ describe('bootstrap, signed in', () => {
     await act(() => bootstrap())
     expect(calls).toEqual([
       'installTrustedTypesPolicy',
-      'initializeCore',
       'loadRuntimeConfig',
+      'initializeCore',
       'setRuntimeConfig',
       'initializeTracing',
       'initializeLogging',
@@ -363,6 +363,29 @@ describe('bootstrap, signed in', () => {
     expect(screen.getByRole('alertdialog', { name: /different workspace/ })).toBeInTheDocument()
     expect(screen.queryByRole('main')).not.toBeInTheDocument()
     expect(calls).not.toContain('loadManifest')
+  })
+})
+
+describe('bootstrap, the environment from runtime.json (SDK alpha.6)', () => {
+  const environmentOf = () => (initializeCore.mock.calls.at(-1)?.[0] as { environment: string }).environment
+
+  it("identifies the page with the deployed runtime.json's environment, so one build serves every environment", async () => {
+    loadRuntimeConfig.mockResolvedValue({ ...cfg, environment: 'staging' } as typeof cfg)
+    await act(() => bootstrap())
+    expect(environmentOf()).toBe('staging')
+    expect(initializeCore).toHaveBeenCalledWith(expect.objectContaining({ serviceName: 'web-shell', domain: 'portal' }))
+  })
+
+  it('falls back to the build-time environment while a runtime.json has no environment key', async () => {
+    await act(() => bootstrap())
+    expect(environmentOf()).toBe('test') // vitest.config.ts __ENVIRONMENT__
+  })
+
+  it('without a config, identifies with the build-time environment so the failure is still reported', async () => {
+    loadRuntimeConfig.mockRejectedValue(new Error('config 404'))
+    await expect(bootstrap()).rejects.toThrow('config 404')
+    expect(environmentOf()).toBe('test')
+    expect(logger.error).toHaveBeenCalledWith('the app could not start', { error: expect.any(Error) })
   })
 })
 

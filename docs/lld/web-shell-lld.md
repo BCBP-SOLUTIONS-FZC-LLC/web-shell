@@ -6,7 +6,7 @@
 |---|---|
 | **Repository** | `github.com/BCBP-SOLUTIONS-FZC-LLC/web-shell` (private) |
 | **Artifact** | Static bundle served by nginx (`ghcr.io/bcbp-solutions-fzc-llc/web-shell`), never installed as a package (`web-shell`, `"private": true`; `version` = the latest tag) |
-| **Platform SDK** | `@bcbp-solutions-fzc-llc/frontend-sdk`, `webpack-preset`, `eslint-plugin` `1.0.0-alpha.5`, pinned exactly, all three on one version |
+| **Platform SDK** | `@bcbp-solutions-fzc-llc/frontend-sdk`, `webpack-preset`, `eslint-plugin` `1.0.0-alpha.6`, pinned exactly, all three on one version |
 | **Status** | Released: **`v0.2.0`** (remote `dashboard`, pairs with mfe-dashboard `v0.3.0`) is current and `latest`; **`v0.1.0`** (remote `app2`, pairs with mfe-dashboard `v0.2.0`) is kept as its rollback. Both were published by `release.yml` (signed, SBOM, SLSA provenance, tags added after signing). Not deployed yet ([CHANGELOG.md](../../CHANGELOG.md)). Pairs: web-shell `0.2.0` + mfe-dashboard `0.3.0`; `0.1.0` + `0.2.0`. Hosting until CloudFront (next month): [hosting-without-cloudfront.md](../hosting-without-cloudfront.md). Open: §15 |
 | **Owners** | `@BCBP-SOLUTIONS-FZC-LLC/web-shell` (CODEOWNERS) |
 
@@ -14,6 +14,7 @@
 
 | Date | Change |
 |---|---|
+| 2026-11-06 | SDK `1.0.0-alpha.6`: `runtime.json` names the environment; config loaded before the identity; deploy check in smoke `live` |
 | 2026-11-05 | Observability standard: inventory (`docs/observability.md`), `metrics-check` in CI |
 | 2026-11-05 | Released `v0.1.0` and `v0.2.0`; status and open items updated |
 | 2026-11-05 | Remote renamed `app2` → `dashboard` (breaking; pairs with mfe-dashboard `v0.3.0`) |
@@ -171,7 +172,7 @@ SDK subpaths `src/` uses: `/core`, `/config`, `/tracing`, `/logging`, `/metrics`
 | Setting | Value | Reason |
 |---|---|---|
 | Entry | `index: ./src/index.ts` | Emits `index.html` |
-| `source.define` | `__ENVIRONMENT__` (`PLATFORM_ENVIRONMENT`, default `prod` / `local` in dev), `__BUILD_VERSION__` | The only compiled-in values |
+| `source.define` | `__ENVIRONMENT__` (`PLATFORM_ENVIRONMENT`, default `prod` / `local` in dev; only the fallback for a `runtime.json` without `environment`), `__BUILD_VERSION__` | The only compiled-in values |
 | `output.distPath` | css, font, image, svg, media, wasm, assets → `assets` | Every hashed file under `/assets/` (immutable). JS paths are the preset's |
 | `inlineScripts`, `inlineStyles` | `false` | CSP `script-src 'self'`, `style-src 'self'` |
 | `tools.cssLoader.url` | `false` | Root-relative `url()` points at `public/` |
@@ -252,8 +253,8 @@ Keys are IAM's closed role set: `member`, `tenant_owner`, `tenant_admin`, `tende
 | # | Call | Notes |
 |---|---|---|
 | 1 | `installTrustedTypesPolicy()` | No-op without Trusted Types |
-| 2 | `initializeCore({ serviceName: 'web-shell', domain: 'portal', environment: __ENVIRONMENT__, buildVersion: __BUILD_VERSION__ })` | Registry-validated identity |
-| 3 | `loadRuntimeConfig()` → `setRuntimeConfig(cfg)` | Strict schema. Any throw from here on is fatal (§7): after `initializeCore` it is first logged as `error 'the app could not start'` (to `telemetry.otlpBaseUrl` once the config is read, else the default `/otel`) |
+| 2 | `loadRuntimeConfig()` | Strict schema; checked against the file's own `environment` (no identity yet). On a throw, `initializeCore` with the build-time environment, so it can be reported |
+| 3 | `initializeCore({ serviceName: 'web-shell', domain: 'portal', environment: cfg.environment ?? __ENVIRONMENT__, buildVersion: __BUILD_VERSION__ })` → `setRuntimeConfig(cfg)` | Registry-validated identity. One build for every environment (SDK alpha.6): the deployed file names the environment; the build-time one is the fallback until every file has the key. The SDK refuses a config whose `environment` differs from the identity's. Any throw from here on is fatal (§7): after `initializeCore` it is first logged as `error 'the app could not start'` (to `telemetry.otlpBaseUrl` once the config is read, else the default `/otel`) |
 | 4 | (consent) | The SDK's default: essential only (v1). A consent manager would call `setConsentProvider` here |
 | 5 | `initializeTracing`, `initializeLogging`, `initializeMetrics` (`cfg.telemetry`), `installGlobalErrorHandlers()`, `startWebVitals()` | |
 | 6 | `setFlagProvider(runtimeConfigFlagProvider())` | Platform flags only, until P-35 |
@@ -486,7 +487,7 @@ Every `npm ci` reads `@bcbp-solutions-fzc-llc/*` from GitHub Packages with `GITH
 
 | Peer | Rule |
 |---|---|
-| SDK | Pinned exactly; the shell shares it as `1.0.0-alpha.5` under the preset's range `^1.0.0-0`. It loads remotes built on alpha.4 (`^1.0.0-alpha.4`) and alpha.5 |
+| SDK | Pinned exactly; the shell shares it as `1.0.0-alpha.6` under the preset's range `^1.0.0-0`. It loads remotes built on alpha.4, alpha.5 and alpha.6 (each requires `^<its SDK>`) |
 | Remotes | A remote built with the preset requires `^<its SDK version>`: it must not be newer than the shell's. **Upgrade the shell first**, then remotes. A release that changes the shell–remote contract is the exception (alpha.4 changed the container global): the shell and every remote deploy together. `npm run test-contract` checks a pairing |
 | React | Strict singleton `^19.0.0` from the preset; the shell ships 19.3 |
 | `mfe-dashboard` (remote `dashboard`) | Rsbuild remote with `pluginPlatform({ role: 'remote', name: 'dashboard' })`, async-only chunk splitting, reads the user and sign-out through SDK hooks, takes no props. alpha.4 from its `main` and tag `v0.1.0` on. Contract suite (`dashboard.spec.ts`) on 2026-11-05 against `main` `e1b04c3` and branch `0be083c` (v0.1.1 prep): 9/9 in three engines (loads with its CSS and integrity, role map reaches it, `NavLink` without a reload, Logout through the shell's form POST). Its `v0.1.0` tag has no published release (its provenance step failed); `v0.1.1` is pending. An alpha.3 build does not load in this shell |
@@ -509,3 +510,4 @@ Details: [VERSIONING.md](../../VERSIONING.md).
 | 9 | No CloudFront until next month: environments route `/api`, `/otel`, `/csp-report`, `/remotes/dashboard/` at the ingress and mount the CSP (IdP in `form-action`) and HSTS ([hosting-without-cloudfront.md](../hosting-without-cloudfront.md)); remove the mounts when CloudFront arrives | operators |
 | 10 | Keycloak realms need SMTP and "Forgot password" enabled for the reset flow (§6.1a); unconfirmed | Keycloak ops |
 | 11 | The `WebShellStartupFailures` alert ([runbook](../runbook-startup-failure.md)) is an example; it must be deployed to the Loki ruler | operators |
+| 12 | One build for every environment (SDK alpha.6): each deployed `runtime.json` must name its `environment` (checked by `SMOKE_MODE=live ENVIRONMENT=<target> npm run test-smoke`); then the shell drops `__ENVIRONMENT__` / `PLATFORM_ENVIRONMENT`, and a file without the key stops at the unavailable page | operators, then this repo |

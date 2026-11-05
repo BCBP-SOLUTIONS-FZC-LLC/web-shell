@@ -8,8 +8,8 @@ sequenceDiagram
 
     Browser->>Index: load document
     Index->>Boot: import('./bootstrap'), bootstrap()
-    Boot->>SDK: installTrustedTypesPolicy, initializeCore
-    Boot->>SDK: loadRuntimeConfig (/config/runtime.json)
+    Boot->>SDK: installTrustedTypesPolicy, loadRuntimeConfig (/config/runtime.json)
+    Boot->>SDK: initializeCore (environment from runtime.json, else build-time), setRuntimeConfig
     Note over Boot,SDK: a failure is logged as an error (default /otel), then "The app is unavailable right now."
     Boot->>SDK: tracing, logging, metrics, error handlers, web vitals (consent: SDK default, essential only)
     Boot->>SDK: createOidcProvider, initializeAuth, setTokenSource

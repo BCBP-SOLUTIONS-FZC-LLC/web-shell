@@ -8,7 +8,7 @@ How the shell fits the platform's three metric tiers, what it emits, and how a m
 |---|---|---|
 | `domain` | `portal` (registry vocabulary) | `initializeCore` in `src/bootstrap.tsx` |
 | `service` | `web-shell` | same |
-| `environment` | `local`, `dev`, `test`, `staging` or `prod` | build-time `PLATFORM_ENVIRONMENT` (`__ENVIRONMENT__`) |
+| `environment` | `local`, `dev`, `test`, `staging` or `prod` | the deployed `runtime.json` `environment` (SDK alpha.6), else build-time `PLATFORM_ENVIRONMENT` |
 | Tier 3 prefix | `portal_web_shell_` | the SDK's `ServicePrefix` (`<domain>_<service>_`, snake_case) |
 
 The SDK injects `domain`, `service` and `environment` into every data point (the standard's rule 8: instrumentation cannot omit or misspell them). Code never declares them as labels; `metrics-check` and the SDK both refuse it. Metrics export to the same-origin collector (`/otel/v1/metrics`, delta temporality, every 60 s); the platform's reference collector gateway also drops label keys outside the registry (platform-reactcommon `examples/collector`).
