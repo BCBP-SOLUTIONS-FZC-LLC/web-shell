@@ -218,13 +218,12 @@ describe('bootstrap, signed in', () => {
     const subjects: unknown[] = []
     sdk.setAuthzSubject = (s) => subjects.push(s)
     vi.useFakeTimers({ toFake: ['setTimeout'] })
-    const started = bootstrap()
-    await act(() => vi.advanceTimersByTimeAsync(1_000))
-    await act(() => started)
+    await act(() => bootstrap())
+    await act(() => vi.advanceTimersByTimeAsync(10_000))
     delete sdk.setAuthzSubject
     expect(logger.warn).toHaveBeenCalledWith('session context unavailable', { error: expect.any(Error) })
-    // A 403-like answer is final: one retry, then deny-all for the page's life.
-    expect(loadContext).toHaveBeenCalledTimes(2)
+    // A 403-like answer is final: not asked again (no retry), deny-all for the page's life.
+    expect(loadContext).toHaveBeenCalledOnce()
     expect(subjects).toEqual([undefined])
     expect(calls).not.toContain('rememberWorkspace')
     expect(screen.getByRole('main')).toHaveTextContent('app at (root)')

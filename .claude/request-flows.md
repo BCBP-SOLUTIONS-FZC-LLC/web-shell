@@ -10,7 +10,7 @@ Condensed from the [LLD](../docs/lld/web-shell-lld.md) §5–§6. Step numbers r
 4. Anonymous → sign-in (below); return. Wrong workspace → `showWrongWorkspace`; return.
 5. `idp.subscribe` → `roleMapAuthorizer(permissions)` → P-35 into a store (`warn` and deny-all on failure) → subject, context flags, `rememberWorkspace` (URL → `/t/<slug>/`) → `initializeI18n` (`detect`: P-35 `locale`) → `loadManifest` (`error` on failure) → `startVersionPolling` → render.
 
-After render: `registerNavigator` (router under the basename; other paths load in full). Without a context, P-35 is retried after 1 s, 2 s, 4 s (network, timeout, 429, 5xx) and applied live; a sign-out stops it, and a sign-out during boot stops before the app mounts. Any start-up throw after `initializeCore` is logged `error 'the app could not start'` before the unavailable page.
+After render: `registerNavigator` (router under the basename; other paths load in full). Without a context, and only after a transient first failure, P-35 is retried after 1 s, 2 s, 4 s (network, timeout, 429, 5xx) and applied live; a sign-out stops it, and a sign-out during boot stops before the app mounts. Any start-up throw after `initializeCore` is logged `error 'the app could not start'` before the unavailable page.
 
 ## Sign-in
 

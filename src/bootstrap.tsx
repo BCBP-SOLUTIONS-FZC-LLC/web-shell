@@ -47,7 +47,7 @@ import {
   showWrongWorkspace,
 } from './platform/SessionScreens'
 import { hideScreen } from './platform/screen'
-import { createStore, retrySessionContext } from './platform/sessionContext'
+import { createStore, isTransient, retrySessionContext } from './platform/sessionContext'
 import { ShellRoot } from './platform/ShellRoot'
 // Self-hosted fonts (Fontsource, SIL OFL 1.1): served from /assets/, as the platform CSP requires
 // (font-src 'self', style-src 'self').
@@ -166,8 +166,10 @@ async function start(report: { otlpBaseUrl: string }): Promise<void> {
 
   // Roles, plan and flags are not in the token. Without them: deny-all, platform flags only.
   setAuthorizer(roleMapAuthorizer(permissions))
+  let firstError: unknown
   const context = createStore(
     await sessionContextSource.load().catch((error: unknown) => {
+      firstError = error
       getLogger().warn('session context unavailable', { error })
       return undefined
     }),
@@ -231,8 +233,9 @@ async function start(report: { otlpBaseUrl: string }): Promise<void> {
   render()
 
   // A transient failure (network, timeout, 429, 5xx) is retried 3 times (1 s, 2 s, 4 s); on success
-  // the subject, flags and provider get the context. A sign-out stops the retries.
-  if (!context.get()) {
+  // the subject, flags and provider get the context. A sign-out stops the retries. A final answer
+  // (401, 403, 404: P-35 missing in this environment) is not asked again.
+  if (!context.get() && isTransient(firstError)) {
     const retried = await retrySessionContext((signal) => sessionContextSource.load(signal), {
       signal: signedOutDuringBoot.signal,
       onError: (error, attempt) => getLogger().warn('session context unavailable', { error, attempt }),

@@ -253,7 +253,7 @@ Keys are IAM's closed role set: `member`, `tenant_owner`, `tenant_admin`, `tende
 | 15 | `loadManifest()` | Failure → `error 'manifest load failed'`; the app still renders |
 | 16 | `startVersionPolling()` | `/version.json` every `appUpdate.pollIntervalMs` |
 | 17 | `hideScreen()`, `createRoot(#app).render(<StrictMode><ShellRoot context={store} shell={…}><App basename? onRouter/></ShellRoot></StrictMode>)` | `basename = workspacePathPrefix + slugFromPath(...)` when the URL has a slug. `onRouter` → `registerNavigator(shellNavigator(navigate, basename))` |
-| 18 | Without a context: `retrySessionContext` (1 s, 2 s, 4 s; network, timeout, 429, 5xx only) → `store.set`, step 12–13 again | Stopped by a sign-out. The provider re-renders with the context; no reload. When `rememberWorkspace` moved the URL under `/t/<slug>/`, `App` is rendered again keyed by the new basename (and the navigator with it) |
+| 18 | Without a context, and only when the first failure was transient (network, timeout, 429, 5xx): `retrySessionContext` (1 s, 2 s, 4 s) → `store.set`, step 12–13 again. A final answer (401, 403, 404) is not asked again | Stopped by a sign-out. The provider re-renders with the context; no reload. When `rememberWorkspace` moved the URL under `/t/<slug>/`, `App` is rendered again keyed by the new basename (and the navigator with it) |
 
 `test/integration/bootstrap.test.tsx` asserts this order with every SDK subpath replaced by a recording fake.
 
