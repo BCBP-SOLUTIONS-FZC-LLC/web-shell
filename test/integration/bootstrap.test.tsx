@@ -3,6 +3,7 @@ import { act, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SessionState, Workspace } from '@bcbp-solutions-fzc-llc/frontend-sdk/auth'
+import { NetworkError } from '@bcbp-solutions-fzc-llc/frontend-sdk/problem'
 
 const calls: string[] = []
 const record =
@@ -44,14 +45,19 @@ const loadContext = vi.fn()
 const resolve = vi.fn<(id: string) => Promise<Workspace | undefined>>()
 const logger = { warn: vi.fn(), error: vi.fn() }
 const loadManifest = vi.fn(async () => ({}))
+const loadRuntimeConfig = vi.fn(async () => cfg)
+const initializeCore = vi.fn()
+const i18nOptions: { detect?: () => string | undefined }[] = []
+let navigator: ((appId: string, path: string) => void) | undefined
+let duringI18n: (() => void) | undefined
 let shellProps: Record<string, unknown> = {}
 
 vi.mock('@bcbp-solutions-fzc-llc/frontend-sdk/core', () => ({
-  initializeCore: record('initializeCore'),
+  initializeCore: (...a: unknown[]) => (calls.push('initializeCore'), initializeCore(...a)),
   setConsentProvider: record('setConsentProvider'),
 }))
 vi.mock('@bcbp-solutions-fzc-llc/frontend-sdk/config', () => ({
-  loadRuntimeConfig: async () => (calls.push('loadRuntimeConfig'), cfg),
+  loadRuntimeConfig: () => (calls.push('loadRuntimeConfig'), loadRuntimeConfig()),
   setRuntimeConfig: record('setRuntimeConfig'),
 }))
 vi.mock('@bcbp-solutions-fzc-llc/frontend-sdk/tracing', () => ({ initializeTracing: record('initializeTracing') }))
@@ -86,7 +92,19 @@ vi.mock('@bcbp-solutions-fzc-llc/frontend-sdk/authz', () => ({
   setAuthorizer: record('setAuthorizer'),
   setAuthzSubject: record('setAuthzSubject'),
 }))
-vi.mock('@bcbp-solutions-fzc-llc/frontend-sdk/i18n', () => ({ initializeI18n: async () => void calls.push('initializeI18n') }))
+vi.mock('@bcbp-solutions-fzc-llc/frontend-sdk/i18n', () => ({
+  initializeI18n: async (o: { detect?: () => string | undefined }) => {
+    calls.push('initializeI18n')
+    i18nOptions.push(o)
+    duringI18n?.()
+  },
+}))
+vi.mock('@bcbp-solutions-fzc-llc/frontend-sdk/nav', () => ({
+  registerNavigator: (n: (appId: string, path: string) => void) => {
+    calls.push('registerNavigator')
+    navigator = n
+  },
+}))
 vi.mock('@bcbp-solutions-fzc-llc/frontend-sdk/mfe', () => ({
   loadManifest: () => (calls.push('loadManifest'), loadManifest()),
   startVersionPolling: record('startVersionPolling'),
@@ -96,14 +114,22 @@ vi.mock('@bcbp-solutions-fzc-llc/frontend-sdk/security', () => ({
 }))
 vi.mock('@bcbp-solutions-fzc-llc/frontend-sdk/react', () => ({
   installGlobalErrorHandlers: record('installGlobalErrorHandlers'),
+  useLocale: () => ({ locale: 'en' }),
   PlatformProvider: (p: { shell: Record<string, unknown>; children: unknown }) => {
     shellProps = p.shell
     return p.children
   },
 }))
-vi.mock('../../src/App', () => ({
-  default: ({ basename }: { basename?: string }) => <main>app at {basename ?? '(root)'}</main>,
-}))
+const routerNavigate = vi.fn()
+vi.mock('../../src/App', async () => {
+  const { useEffect } = await import('react')
+  return {
+    default: function App({ basename, onRouter }: { basename?: string; onRouter?: (n: typeof routerNavigate) => void }) {
+      useEffect(() => onRouter?.(routerNavigate), [onRouter])
+      return <main>app at {basename ?? '(root)'}</main>
+    },
+  }
+})
 vi.mock('../../src/platform/iam', () => ({
   workspaceResolver: { resolve: (i: string) => resolve(i) },
   sessionContextSource: { load: () => loadContext() },
@@ -120,6 +146,9 @@ async function typeEmail(email: string) {
 
 beforeEach(() => {
   calls.length = 0
+  i18nOptions.length = 0
+  navigator = undefined
+  duringI18n = undefined
   subscriber = undefined
   shellProps = {}
   document.body.innerHTML = '<div id="app"></div>'
@@ -129,9 +158,12 @@ beforeEach(() => {
   chooseWorkspace.mockResolvedValue(undefined)
   isWrongWorkspace.mockReturnValue(false)
   loadManifest.mockResolvedValue({})
+  loadRuntimeConfig.mockResolvedValue(cfg)
+  initializeCore.mockImplementation(() => {})
 })
 
 afterEach(() => {
+  vi.useRealTimers()
   act(() => resetScreen())
   vi.clearAllMocks()
 })
@@ -161,21 +193,116 @@ describe('bootstrap, signed in', () => {
       'initializeI18n',
       'loadManifest',
       'startVersionPolling',
+      // StrictMode runs the router bridge's effect twice in development; registering again replaces it.
+      'registerNavigator',
+      'registerNavigator',
     ])
     expect(screen.getByRole('main')).toHaveTextContent('app at /t/acme')
-    expect(shellProps).toMatchObject({ user, workspace: acme, context: { slug: 'acme' } })
+    expect(shellProps).toMatchObject({ user, workspace: acme, context: { slug: 'acme' }, locale: 'en' })
+  })
+
+  it("negotiates the locale from the session context's IAM locale", async () => {
+    loadContext.mockResolvedValue({ tenantId: 't-1', slug: 'acme', roles: ['member'], locale: 'ar' })
+    await act(() => bootstrap())
+    expect(i18nOptions[0]!.detect!()).toBe('ar')
+  })
+
+  it("registers the router as the SDK's navigator, inside the /t/<slug> basename", async () => {
+    await act(() => bootstrap())
+    navigator!('app2', '/t/acme/dashboard/members?tab=1')
+    expect(routerNavigate).toHaveBeenCalledWith('/dashboard/members?tab=1', {})
   })
 
   it('renders from the root with deny-all when the session context is unavailable', async () => {
-    loadContext.mockRejectedValue(new Error('503'))
+    loadContext.mockRejectedValue(new Error('403'))
     const subjects: unknown[] = []
     sdk.setAuthzSubject = (s) => subjects.push(s)
-    await act(() => bootstrap())
+    vi.useFakeTimers({ toFake: ['setTimeout'] })
+    const started = bootstrap()
+    await act(() => vi.advanceTimersByTimeAsync(1_000))
+    await act(() => started)
     delete sdk.setAuthzSubject
     expect(logger.warn).toHaveBeenCalledWith('session context unavailable', { error: expect.any(Error) })
+    // A 403-like answer is final: one retry, then deny-all for the page's life.
+    expect(loadContext).toHaveBeenCalledTimes(2)
     expect(subjects).toEqual([undefined])
     expect(calls).not.toContain('rememberWorkspace')
     expect(screen.getByRole('main')).toHaveTextContent('app at (root)')
+  })
+
+  it('retries a transient session-context failure in the background and applies it when it answers', async () => {
+    loadContext
+      .mockRejectedValueOnce(new NetworkError(true, 'req-1'))
+      .mockRejectedValueOnce(new NetworkError(true, 'req-1'))
+      .mockResolvedValue({ tenantId: 't-1', slug: 'acme', roles: ['tenant_owner'] })
+    const subjects: unknown[] = []
+    sdk.setAuthzSubject = (s) => subjects.push(s)
+    vi.useFakeTimers({ toFake: ['setTimeout'] })
+    const started = bootstrap()
+    await act(() => vi.advanceTimersByTimeAsync(0))
+    expect(shellProps).toMatchObject({ context: undefined })
+    await act(() => vi.advanceTimersByTimeAsync(1_000 + 2_000))
+    await act(() => started)
+    delete sdk.setAuthzSubject
+    expect(logger.warn).toHaveBeenCalledWith('session context unavailable', { error: expect.any(NetworkError), attempt: 1 })
+    expect(subjects).toEqual([undefined, { roles: ['tenant_owner'], tenantId: 't-1' }])
+    expect(calls).toContain('rememberWorkspace')
+    expect(shellProps).toMatchObject({ context: { roles: ['tenant_owner'] } })
+    // The app mounted at the root; the late context moved the URL under /t/acme/, so the router
+    // is rebuilt with that basename and the navigator follows it.
+    expect(screen.getByRole('main')).toHaveTextContent('app at /t/acme')
+    navigator!('app2', '/t/acme/dashboard/members')
+    expect(routerNavigate).toHaveBeenLastCalledWith('/dashboard/members', {})
+  })
+
+  it('keeps the router when a late context leaves the URL where it was', async () => {
+    window.history.replaceState({}, '', '/t/acme/dashboard')
+    loadContext.mockRejectedValueOnce(new NetworkError(true, 'req-1')).mockResolvedValue({ tenantId: 't-1', slug: 'acme', roles: ['member'] })
+    vi.useFakeTimers({ toFake: ['setTimeout'] })
+    const started = bootstrap()
+    await act(() => vi.advanceTimersByTimeAsync(1_000))
+    await act(() => started)
+    expect(screen.getByRole('main')).toHaveTextContent('app at /t/acme')
+  })
+
+  it('stops the retries on a sign-out', async () => {
+    loadContext.mockRejectedValue(new NetworkError(true, 'req-1'))
+    vi.useFakeTimers({ toFake: ['setTimeout'] })
+    const started = bootstrap()
+    await act(() => vi.advanceTimersByTimeAsync(0))
+    act(() => subscriber!({ status: 'anonymous', reason: 'signed-out' }))
+    await act(() => vi.advanceTimersByTimeAsync(10_000))
+    await act(() => started)
+    expect(loadContext).toHaveBeenCalledOnce()
+    expect(screen.queryByRole('main')).not.toBeInTheDocument()
+  })
+
+  it('never mounts the app when the user signs out (another tab) while it boots', async () => {
+    loadContext.mockImplementation(async () => {
+      subscriber!({ status: 'anonymous', reason: 'signed-out' })
+      return { tenantId: 't-1', slug: 'acme', roles: ['member'] }
+    })
+    await act(() => bootstrap())
+    expect(calls).not.toContain('loadManifest')
+    expect(screen.queryByRole('main')).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'You are signed out' })).toBeInTheDocument()
+  })
+
+  it('stops before the manifest when the user signs out during i18n', async () => {
+    duringI18n = () => subscriber!({ status: 'anonymous', reason: 'signed-out' })
+    await act(() => bootstrap())
+    expect(calls).not.toContain('loadManifest')
+    expect(screen.queryByRole('main')).not.toBeInTheDocument()
+  })
+
+  it('stops before version polling when the user signs out during the manifest load', async () => {
+    loadManifest.mockImplementation(async () => {
+      subscriber!({ status: 'anonymous', reason: 'signed-out' })
+      return {}
+    })
+    await act(() => bootstrap())
+    expect(calls).not.toContain('startVersionPolling')
+    expect(screen.queryByRole('main')).not.toBeInTheDocument()
   })
 
   it('logs a manifest failure and still renders', async () => {
@@ -238,6 +365,41 @@ describe('bootstrap, signed in', () => {
     expect(screen.getByRole('alertdialog', { name: /different workspace/ })).toBeInTheDocument()
     expect(screen.queryByRole('main')).not.toBeInTheDocument()
     expect(calls).not.toContain('loadManifest')
+  })
+})
+
+describe('bootstrap, start-up failure', () => {
+  it('reports a failure as an essential error on the default /otel, then rethrows for the unavailable page', async () => {
+    loadRuntimeConfig.mockRejectedValue(new Error('config 404'))
+    await expect(bootstrap()).rejects.toThrow('config 404')
+    expect(calls).toContain('initializeLogging')
+    expect(logger.error).toHaveBeenCalledWith('the app could not start', { error: expect.any(Error) })
+  })
+
+  it("reports to the runtime config's collector once the config is loaded", async () => {
+    const otlp: unknown[] = []
+    sdk.initializeLogging = (o) => otlp.push((o as { otlpBaseUrl: string }).otlpBaseUrl)
+    idp.init.mockRejectedValueOnce(new Error('idp down'))
+    loadRuntimeConfig.mockResolvedValue({ ...cfg, telemetry: { ...cfg.telemetry, otlpBaseUrl: 'https://collector.example/otel' } })
+    await expect(bootstrap()).rejects.toThrow('idp down')
+    delete sdk.initializeLogging
+    expect(otlp).toEqual(['https://collector.example/otel', 'https://collector.example/otel'])
+    expect(logger.error).toHaveBeenCalledWith('the app could not start', { error: expect.any(Error) })
+  })
+
+  it('does not report without core (no identity), and a failing report never hides the error', async () => {
+    initializeCore.mockImplementation(() => {
+      throw new Error('core')
+    })
+    await expect(bootstrap()).rejects.toThrow('core')
+    expect(logger.error).not.toHaveBeenCalled()
+
+    initializeCore.mockImplementation(() => {})
+    loadRuntimeConfig.mockRejectedValue(new Error('config 404'))
+    logger.error.mockImplementationOnce(() => {
+      throw new Error('logger')
+    })
+    await expect(bootstrap()).rejects.toThrow('config 404')
   })
 })
 

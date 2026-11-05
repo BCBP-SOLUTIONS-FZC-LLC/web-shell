@@ -10,6 +10,8 @@
 | `npm run lint` / `typecheck` / `build` | ESLint (platform rules) / `tsc -p tsconfig.test.json` / `tsc && rsbuild build` |
 | `npm test`, `test-unit`, `test-int`, `test-e2e` | Vitest (all, or one layer) |
 | `npm run test:ci` | Coverage + `.github/scripts/coverage-gate.mjs` (95%) |
+| `npm run budget` | `.github/scripts/bundle-budget.mjs` over `dist/`: entry 12 KB, JS+CSS 300 KB, largest 85 KB (gzip), images 2.7 MB. Raise a limit only on purpose, with a CHANGELOG line |
+| `npm run test-browser` | Playwright over `dist/` (build first): Chromium, Firefox, WebKit, production CSP, HTTPS (openssl self-signed cert in `test/browser/.build/`), fake Keycloak on a second origin. `-- --project=webkit` for one engine |
 | `npm run test-smoke` | `SMOKE_BASE_URL=http://127.0.0.1:<port>` after `docker run -p 127.0.0.1:<port>:8080 <image>`; `SMOKE_MODE=live` for a deployment |
 | `npm run hooks:install` | `.githooks/pre-commit` (env files, workflow hygiene, digest pin, `tsc --noEmit`) |
 
@@ -19,11 +21,12 @@ Image locally: `docker build --secret id=npm_token,env=NODE_AUTH_TOKEN -t web-sh
 
 | Job | Gate |
 |---|---|
-| `Validate / Test / test` | `npm ci`, coverage, gate 95%, build |
+| `Validate / Test / test` | `npm ci`, coverage, gate 95%, build, size budget |
 | `Validate / Quality / quality` | ESLint `--max-warnings 0`, typecheck, workflow LF and literal operators, digest pins, `.dockerignore`, `npm audit --omit=dev --audit-level=high` |
 | `Build image (cache)` | Hadolint, Buildx `web-shell-ci-test` (secret `npm_token`) |
 | `Trivy CVE scan` | Unfixed CRITICAL/HIGH/UNKNOWN fail; `.trivyignore` with reason and expiry |
 | `Smoke tests` | Node 26 + `npm ci`, then `smoke-tests.sh`: ≤ 200 MB, `/healthz`, startup gate, `npm run test-smoke` (`SMOKE_MODE=image`) |
+| `Browser tests` | `npx playwright install --with-deps`, build, `npm run test-browser`; report uploaded on failure. Gates push |
 | `PR summary` / `Push image → GHCR` | Comment on PRs / `main`: GHCR tags, Cosign |
 | `changelog` | `CHANGELOG.md` when `src/`, `package*.json`, `Dockerfile`, `nginx/`, `rsbuild.config.ts`, `config/**`, `public/config/**`, `index.html` change |
 

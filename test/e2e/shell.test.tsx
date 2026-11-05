@@ -256,7 +256,8 @@ describe('the shell, end to end', () => {
   })
 
   it('renders with deny-all permissions when the session context is unavailable, and says so', async () => {
-    net.on('GET /api/v1/me/session-context', () => Response.json({ title: 'Bad Gateway', status: 502 }, { status: 502 }))
+    // A final answer (IAM's endpoint missing in this environment): no retry.
+    net.on('GET /api/v1/me/session-context', () => Response.json({ title: 'Not Found', status: 404 }, { status: 404 }))
     await load('/t/acme/dashboard')
     await until(() => assigned.length > 0, 'the redirect to Keycloak')
     await approveLogin()
@@ -265,6 +266,29 @@ describe('the shell, end to end', () => {
     expect(screen.queryByRole('button', { name: 'Invite' })).toBeNull()
     expect(screen.getByRole('status')).toHaveTextContent("We couldn't load your permissions")
   })
+
+  it('a session context outage (502) is retried in the background, and the permissions appear when IAM is back', async () => {
+    let iamDown = true
+    net.on('GET /api/v1/me/session-context', (req) =>
+      iamDown
+        ? Response.json({ title: 'Bad Gateway', status: 502 }, { status: 502 })
+        : bearerOf(req)
+          ? Response.json({ tenant_id: TENANT, slug: 'acme', roles, feature_flags: [], read_only: false, locale: 'en' })
+          : Response.json({ title: 'Unauthorized', status: 401 }, { status: 401 }),
+    )
+    await load('/t/acme/dashboard')
+    await until(() => assigned.length > 0, 'the redirect to Keycloak')
+    await approveLogin()
+    await screen.findByRole('heading', { name: /Dashboard for Ada Lovelace/ }, { timeout: 5_000 })
+    expect(screen.getByRole('status')).toHaveTextContent("We couldn't load your permissions")
+    expect(screen.queryByRole('button', { name: 'Invite' })).toBeNull()
+
+    // IAM recovers: the shell's next retry answers, the owner's actions appear and the notice goes, no reload.
+    iamDown = false
+    await screen.findByRole('button', { name: 'Invite' }, { timeout: 8_000 })
+    expect(screen.queryByText("We couldn't load your permissions", { exact: false })).toBeNull()
+    expect(assigned).toEqual([])
+  }, 15_000)
 
   it('a remote that fails to load stays inside its boundary, and Try again recovers', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})

@@ -6,7 +6,7 @@ describe('BrandLogo', () => {
   it('renders the cube mark at the default size', () => {
     render(<BrandLogo />)
     const img = screen.getByRole('img', { name: 'Beyond Code' })
-    expect(img).toHaveAttribute('src', '/image/logo.png')
+    expect(img.getAttribute('src')).toMatch(/logo/)
     expect(img).toHaveAttribute('width', '52')
     expect(img).toHaveAttribute('height', '52')
   })

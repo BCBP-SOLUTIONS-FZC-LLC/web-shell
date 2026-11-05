@@ -73,6 +73,7 @@ test/
   e2e/                   ← The real shell and SDK against test/fixtures fakes
   fixtures/              ← FakeKeycloak, FakeNetwork, FakeBroadcastChannel
   smoke/                 ← GET-only checks against the image or a deployment (npm run test-smoke)
+  browser/               ← Playwright: the build in Chromium, Firefox, WebKit under the production CSP (npm run test-browser)
 docs/lld/web-shell-lld.md ← Low-level design (the contract)
 .claude/                 ← Claude Code guidance, hook scripts, reviewer agent
 .github/workflows/       ← ci, test, quality, changelog, release
@@ -123,10 +124,11 @@ docs/lld/web-shell-lld.md ← Low-level design (the contract)
 
 | Layer | Location | Docker | Notes |
 |---|---|---|---|
-| Unit | `test/unit/` | No | IAM mappings and ports, entry point, remember-email, consent, screen host, `BrandLogo`, login variant, dev platform middleware |
+| Unit | `test/unit/` | No | IAM mappings and ports, entry point, remember-email, consent, screen host, `BrandLogo`, session-context retry, navigator, dev platform middleware |
 | Integration | `test/integration/` | No | Login layouts and carousel, session screens, `App`, bootstrap order and branches. SDK subpaths are `vi.mock` fakes where needed; axe-core over every shell screen (`accessibility.test.tsx`) |
 | End to end | `test/e2e/` | No | The real shell and SDK against `test/fixtures/` fakes (Keycloak, network, BroadcastChannel); only the remote's entry script is stubbed |
 | Smoke | `test/smoke/`, CI `smoke` job | Image or deployment | `.github/scripts/smoke-tests.sh`: image ≤ 200 MB and the startup gate, then `npm run test-smoke` against the container (SPA rule, Cache-Control, integrity, 404s, SDK-validated runtime files). [test/smoke/README.md](./test/smoke/README.md) |
+| Browser | `test/browser/`, CI `browser` job | `dist/` | Playwright over HTTPS with the production CSP: fonts, sign-in, the remote with integrity, `navigate()`, sign-out POST, start-up report, contrast |
 
 Run one file:
 

@@ -4,11 +4,11 @@ This file provides guidance to Claude Code when working with **web-shell**, the 
 
 ## What This Repo Is
 
-A **private Rsbuild application** (npm name `app1`, `"private": true`, `0.0.0`) that ships as a static bundle in an nginx image (`ghcr.io/bcbp-solutions-fzc-llc/web-shell`, port 8080, uid 101). It runs the platform SDK's start-up sequence once per page, owns the sign-in and session screens and the IAM ports, and hosts the dashboard remote `app2` (`mfe-dashboard`) through Module Federation. It exposes nothing.
+A **private Rsbuild application** (npm name `web-shell`, `"private": true`, `0.0.0`) that ships as a static bundle in an nginx image (`ghcr.io/bcbp-solutions-fzc-llc/web-shell`, port 8080, uid 101). It runs the platform SDK's start-up sequence once per page, owns the sign-in and session screens and the IAM ports, and hosts the dashboard remote `app2` (`mfe-dashboard`) through Module Federation. It exposes nothing.
 
 Node 26, TypeScript `~6.0.3` (typescript-eslint has no TS 7 support), React 19.3, Rsbuild 2 (Rspack), Tailwind 4 + daisyUI. Platform packages from **GitHub Packages** (`.npmrc`, `NODE_AUTH_TOKEN` with `read:packages`): `@bcbp-solutions-fzc-llc/frontend-sdk`, `webpack-preset`, `eslint-plugin`, all **`1.0.0-alpha.4`, pinned exactly, on one version**.
 
-**Status:** never tagged or deployed; everything is `[Unreleased]` in `CHANGELOG.md`. Open items: [LLD §15](../docs/lld/web-shell-lld.md#15-open-items) (official legal/help URLs for `src/pages/links.ts`, no real-browser suite, unused SDK navigator/i18n-detect). v1 decisions: essential-only consent; fonts self-hosted; Forgot password → Keycloak reset.
+**Status:** never tagged or deployed; everything is `[Unreleased]` in `CHANGELOG.md`. Open items: [LLD §15](../docs/lld/web-shell-lld.md#15-open-items) (official legal/help URLs for `src/pages/links.ts`, mfe-dashboard still on alpha.3, IAM endpoints and environments). v1 decisions: essential-only consent; fonts self-hosted; Forgot password → Keycloak reset.
 
 **The shell owns:** `src/bootstrap.tsx` (SDK order, session branches, render), `src/App.tsx` (routes under `/t/<slug>/`, `RemoteBoundary` for `app2` `./App`), `src/platform/` (PUB-1 and P-35 ports, role map, consent stand-in, session screens and their host), `src/pages/` (login layouts, remember-email), `rsbuild.config.ts`, `config/dev-platform.mjs` (dev stand-ins), `nginx/default.conf`, `Dockerfile`.
 
@@ -23,8 +23,10 @@ npm run dev               # :5001 with config/dev-platform.mjs stand-ins (Keyclo
 npm run lint              # ESLint + platform rules (CI: --max-warnings 0)
 npm run typecheck         # tsc over src/ and test/
 npm test                  # Vitest: unit, integration, e2e
-npm run test:ci           # + coverage gate 95% (100% today, 120 tests)
+npm run test:ci           # + coverage gate 95% (100% today)
 npm run build             # tsc + rsbuild build
+npm run budget            # bundle size budget, after a build
+npm run test-browser      # Playwright, Chromium/Firefox/WebKit under the production CSP, after a build
 npm run test-smoke        # needs SMOKE_BASE_URL (test/smoke/README.md)
 ```
 
@@ -54,7 +56,7 @@ Run one test: `npx vitest run test/e2e/shell.test.tsx -t "sign-out"`. Full list:
 
 ## Conventions
 
-- Tests: `test/unit` (small modules; real SDK pieces via `/testing` where useful), `test/integration` (bootstrap wiring with `vi.mock` fakes of every SDK subpath), `test/e2e` (the real shell and SDK against `test/fixtures/` fakes; only the remote's entry script stubbed), `test/smoke` (GET-only against a served image or deployment; not in `npm test`). A new bootstrap branch needs an integration test; a user-visible flow change needs an e2e case.
+- Tests: `test/unit` (small modules; real SDK pieces via `/testing` where useful), `test/integration` (bootstrap wiring with `vi.mock` fakes of every SDK subpath), `test/e2e` (the real shell and SDK against `test/fixtures/` fakes; only the remote's entry script stubbed), `test/smoke` (GET-only against a served image or deployment; not in `npm test`), `test/browser` (Playwright against `dist/` with the production CSP; not in `npm test`). A change that only a real engine can check (CSP, Trusted Types, fonts, form POSTs, contrast) needs a browser case. A new bootstrap branch needs an integration test; a user-visible flow change needs an e2e case.
 - Wait on conditions with real-time bounds (`waitFor`, `findBy*`), never on fixed sleeps.
 - Docs: plain, direct English; tables over prose; every claim checkable against the code. A change to routes, storage keys, config keys, nginx paths or the remote contract updates README, ARCHITECTURE, the LLD and CHANGELOG together.
 - Commits: short imperative subject that says why (CONTRIBUTING § Commit style). Branches `feat/ fix/ docs/ chore/ test/`; PRs into `main`.

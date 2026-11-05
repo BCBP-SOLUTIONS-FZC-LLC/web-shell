@@ -14,7 +14,7 @@ Condensed from [ARCHITECTURE.md](../ARCHITECTURE.md) and the [LLD](../docs/lld/w
 | `src/platform/consent.ts` | `cmp`: `essential` only (v1 decision); `accept()` unused |
 | `src/platform/SessionScreens.tsx` | `askForWorkspace`, `showSignedOut`, `showDeviceClock`, `showSessionEnded`, `showWrongWorkspace`, `showWorkspaceNotFound`, `WORKSPACE_NOT_FOUND` |
 | `src/platform/screen.tsx` | `#shell-screen` fixed overlay host: `showScreen`, `hideScreen`, `resetScreen` |
-| `src/pages/` | `LoginPage` (latest), `LoginPage1` (`?variant=login1`), `useEmailSignIn` (submit, forgot password), `rememberEmail`, `loginVariant`, `links` + `PageLinks` (help/legal, shown only with a URL) |
+| `src/pages/` | `LoginPage`, `useEmailSignIn` (submit, forgot password), `rememberEmail`, `links` + `PageLinks` (help/legal, shown only with a URL) |
 | `src/platform/passwordReset.ts` | `passwordResetUrl(workspace)`: Keycloak `login-actions/reset-credentials` from `getConfig().auth` |
 | `rsbuild.config.ts` | `pluginReact`, `pluginPlatform({ role: 'shell' })`, `pluginVersionJson`; output, CSS, dev server |
 | `config/` | Dev only: `runtime.local.json`, `remotes.local.json`, `dev-platform.mjs` (+ `.d.mts`) |

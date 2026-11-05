@@ -5,7 +5,7 @@
 | | |
 |---|---|
 | **Repository** | `github.com/BCBP-SOLUTIONS-FZC-LLC/web-shell` (private) |
-| **Artifact** | Static bundle served by nginx (`ghcr.io/bcbp-solutions-fzc-llc/web-shell`), never installed as a package (`app1`, `"private": true`, `0.0.0`) |
+| **Artifact** | Static bundle served by nginx (`ghcr.io/bcbp-solutions-fzc-llc/web-shell`), never installed as a package (`web-shell`, `"private": true`, `0.0.0`) |
 | **Platform SDK** | `@bcbp-solutions-fzc-llc/frontend-sdk`, `webpack-preset`, `eslint-plugin` `1.0.0-alpha.4`, pinned exactly, all three on one version |
 | **Status** | Not tagged or deployed. Everything is `[Unreleased]` in [CHANGELOG.md](../../CHANGELOG.md) |
 | **Owners** | `@BCBP-SOLUTIONS-FZC-LLC/web-shell` (CODEOWNERS) |
@@ -14,6 +14,7 @@
 
 | Date | Change |
 |---|---|
+| 2026-11-05 | Launch hardening: background P-35 retry with a live provider, i18n `detect`, SDK navigator, start-up failure report, real-browser suite, bundle budget, hashed images, `LoginPage1` removed, package renamed `web-shell` |
 | 2026-11-05 | SDK `1.0.0-alpha.4`: container global `__platform_mfe_app2`, global sign-out as a form POST (CSP `form-action` needs the IdP), `no-raw-storage` exemption for remember-email |
 | 2026-11-04 | Launch decisions: self-hosted fonts, Forgot password → Keycloak reset, links shown only with official URLs, essential-only consent for v1, update banner |
 | 2026-11-04 | Production-readiness fixes: login photo weight, nginx gzip and baseline headers, dotfile 404s, accessibility, missing-context notice, Try again |
@@ -93,7 +94,7 @@ The shell implements only what the SDK leaves to a shell: the screens, the two I
 
 | Reference shell (`examples/shell`) | This shell | Why |
 |---|---|---|
-| Slug-or-email identifier form | Email-only form on the existing login layouts (`LoginPage`, `LoginPage1` for `?variant=login1`) | Product layout; the email doubles as `login_hint` |
+| Slug-or-email identifier form | Email-only form on the login page (`LoginPage`) | Product layout; the email doubles as `login_hint` |
 | Example role map | `IAM_ROLES` closed set with §10.4 grants (§4.3) | IAM's roles |
 | No remember-email | `bcbp.rememberEmail`, `bcbp.loginEmail` in `localStorage` | Needed before a workspace exists, when the SDK's `storage()` ignores writes |
 | Webpack | Rsbuild 2 with `pluginPlatform({ role: 'shell' })` | Same Module Federation v1 protocol; remotes built with any of the three load |
@@ -112,15 +113,19 @@ src/
     permissions.ts          IAM_ROLES, permissions (role → action:resource)
     consent.ts              cmp: essential only until accept()
     SessionScreens.tsx      askForWorkspace and the dialogs
+    sessionContext.ts       P-35 retry (isTransient, retrySessionContext) and the store the provider reads
+    ShellRoot.tsx           PlatformProvider with the live context and locale
+    navigator.ts            shellNavigator: the router as the SDK's navigate() target
     screen.tsx              #shell-screen host (fixed overlay outside #app)
-  pages/                    LoginPage, LoginPage1, useEmailSignIn, rememberEmail, loginVariant
+  pages/                    LoginPage, useEmailSignIn, rememberEmail, links, PageLinks
   components/BrandLogo.tsx
+  assets/images/            carousel photos and the logo, bundled into /assets/ with a hash
   theme/, index.css         Tailwind 4 and daisyUI theme
   globals.d.ts              __ENVIRONMENT__, __BUILD_VERSION__
 config/                     dev only: runtime.local.json, remotes.local.json, dev-platform.mjs
-public/                     config/runtime.json (prod defaults), remotes/manifest.json ({}), images, favicons
+public/                     config/runtime.json (prod defaults), remotes/manifest.json ({}), favicons
 nginx/default.conf          the image's server
-test/                       unit, integration, e2e, fixtures, smoke (§12)
+test/                       unit, integration, e2e, fixtures, smoke, browser (§12)
 ```
 
 ### 3.1 Dependency rules
@@ -228,7 +233,7 @@ Keys are IAM's closed role set: `member`, `tenant_owner`, `tenant_admin`, `tende
 |---|---|---|
 | 1 | `installTrustedTypesPolicy()` | No-op without Trusted Types |
 | 2 | `initializeCore({ serviceName: 'web-shell', domain: 'portal', environment: __ENVIRONMENT__, buildVersion: __BUILD_VERSION__ })` | Registry-validated identity |
-| 3 | `loadRuntimeConfig()` → `setRuntimeConfig(cfg)` | Strict schema. Any throw up to here is fatal (§7) |
+| 3 | `loadRuntimeConfig()` → `setRuntimeConfig(cfg)` | Strict schema. Any throw from here on is fatal (§7): after `initializeCore` it is first logged as `error 'the app could not start'` (to `telemetry.otlpBaseUrl` once the config is read, else the default `/otel`) |
 | 4 | `setConsentProvider(cmp)` | |
 | 5 | `initializeTracing`, `initializeLogging`, `initializeMetrics` (`cfg.telemetry`), `installGlobalErrorHandlers()`, `startWebVitals()` | |
 | 6 | `setFlagProvider(runtimeConfigFlagProvider())` | Platform flags only, until P-35 |
@@ -236,13 +241,14 @@ Keys are IAM's closed role set: `member`, `tenant_owner`, `tenant_admin`, `tende
 | 8 | Anonymous → §6.1 and return | The app is not rendered |
 | 9 | `isWrongWorkspace(session.workspace, session.user)` → `showWrongWorkspace(idp)` and return | Not cached, never rendered |
 | 10 | `idp.subscribe(...)` | §6.4, §6.5 |
-| 11 | `sessionContextSource.load()` | Failure → `warn 'session context unavailable'`, context `undefined` |
-| 12 | `setAuthorizer(roleMapAuthorizer(permissions))`, `setAuthzSubject(context && { roles, tenantId })` | |
+| 11 | `setAuthorizer(roleMapAuthorizer(permissions))`; `sessionContextSource.load()` into a store | Failure → `warn 'session context unavailable'`, context `undefined`. A sign-out from here on stops the boot (checked after every await) |
+| 12 | `setAuthzSubject(context && { roles, tenantId })` | |
 | 13 | With a context: `setFlagProvider(sessionContextFlagProvider(context))`, `rememberWorkspace({ ...session.workspace, slug: context.slug })` | Moves the URL under `/t/<slug>/` |
-| 14 | `initializeI18n({ defaultLocale, supported })` | |
+| 14 | `initializeI18n({ defaultLocale, supported, detect: () => context.locale })` | The user's IAM locale first, then the browser's languages |
 | 15 | `loadManifest()` | Failure → `error 'manifest load failed'`; the app still renders |
 | 16 | `startVersionPolling()` | `/version.json` every `appUpdate.pollIntervalMs` |
-| 17 | `hideScreen()`, `createRoot(#app).render(<StrictMode><PlatformProvider shell={…}><App basename?/></PlatformProvider></StrictMode>)` | `basename = workspacePathPrefix + slugFromPath(...)` when the URL has a slug |
+| 17 | `hideScreen()`, `createRoot(#app).render(<StrictMode><ShellRoot context={store} shell={…}><App basename? onRouter/></ShellRoot></StrictMode>)` | `basename = workspacePathPrefix + slugFromPath(...)` when the URL has a slug. `onRouter` → `registerNavigator(shellNavigator(navigate, basename))` |
+| 18 | Without a context: `retrySessionContext` (1 s, 2 s, 4 s; network, timeout, 429, 5xx only) → `store.set`, step 12–13 again | Stopped by a sign-out. The provider re-renders with the context; no reload. When `rememberWorkspace` moved the URL under `/t/<slug>/`, `App` is rendered again keyed by the new basename (and the navigator with it) |
 
 `test/integration/bootstrap.test.tsx` asserts this order with every SDK subpath replaced by a recording fake.
 
@@ -410,7 +416,8 @@ Identity: `service.name` `web-shell`, domain `portal`, environment `__ENVIRONMEN
 
 | Event | Level | When |
 |---|---|---|
-| `session context unavailable` | `warn` | P-35 failed (§5 step 11) |
+| `session context unavailable` | `warn` | P-35 failed (§5 step 11), and each failed retry (`attempt`) |
+| `the app could not start` | `error` | Start-up threw after `initializeCore` (§5 step 3) |
 | `manifest load failed` | `error` | `loadManifest` rejected (§5 step 15) |
 | `the app could not start` | `console.error` only | Fatal start-up error (telemetry may not exist yet) |
 
@@ -431,7 +438,7 @@ Vitest 5, happy-dom at `http://localhost:5001/`, Testing Library. `vitest.config
 
 E2E seams (`test/fixtures/`): `FakeKeycloak` (authorize via `approve()`, token endpoint with PKCE check and refresh rotation), `FakeNetwork` (route table on the page origin; `/otel` → 204), `FakeBroadcastChannel`. Only the remote's entry `<script>` is stubbed: it defines `window.__platform_mfe_app2` exposing a dashboard built on SDK hooks. A page load clears `globalThis[Symbol.for('@bcbp-solutions-fzc-llc/frontend-sdk')]`, resets modules, and imports the bootstrap again; storage is kept.
 
-Not covered here: real browser engines under the production CSP (the SDK's `test/browser` suite does that for the SDK; §15).
+| Browser | `test/browser/shell.spec.ts` (Playwright) | the production build | Chromium, Firefox, WebKit over HTTPS with the production CSP and Trusted Types (`server.ts`), a fake Keycloak on a second origin, a remote stub on the shared SDK: fonts and hashed images with no third-party request, PKCE sign-in and the remote with integrity, `navigate()` without a reload, the sign-out form POST under `form-action`, the start-up failure at `/otel`, axe colour contrast (the logotype is exempt, WCAG 1.4.3). Any CSP report fails the test |
 
 ---
 
@@ -439,11 +446,12 @@ Not covered here: real browser engines under the production CSP (the SDK's `test
 
 | Workflow | Gate |
 |---|---|
-| `ci.yml` → `validate-test.yml` | `npm ci`, `npm run test:coverage`, coverage gate 95%, `npm run build` |
+| `ci.yml` → `validate-test.yml` | `npm ci`, `npm run test:coverage`, coverage gate 95%, `npm run build`, `npm run budget` (entry 12 KB, JS+CSS 300 KB, largest 85 KB gzip; images 2.7 MB) |
 | `ci.yml` → `validate-quality.yml` | ESLint `--max-warnings 0`, `npm run typecheck`, workflow hygiene, LF, digest pins, `.dockerignore`, `npm audit --omit=dev --audit-level=high` |
 | `ci.yml` `build-image` | Hadolint, Buildx cache build `web-shell-ci-test` |
 | `ci.yml` `trivy` | Unfixed CRITICAL/HIGH/UNKNOWN fail; SBOM artifact |
 | `ci.yml` `smoke` | `smoke-tests.sh`: ≤ 200 MB, startup gate, then `npm run test-smoke` (`SMOKE_MODE=image`) against the container |
+| `ci.yml` `browser` | Playwright browsers, `npm run build`, `npm run test-browser` (Chromium, Firefox, WebKit). Gates `push` |
 | `ci.yml` `push` | `main`/`master`: GHCR branch and `sha-<short>` tags, Cosign keyless sign |
 | `changelog-check.yml` | `CHANGELOG.md` required when `src/`, `package*.json`, `Dockerfile`, `nginx/`, `rsbuild.config.ts`, `config/**`, `public/config/**` or `index.html` change |
 | `release.yml` | `vX.Y.Z[-*]`: re-validate, changelog section, dist tarball, semver image tags, scan, SBOM, SLSA, Cosign, GitHub Release |
@@ -471,9 +479,7 @@ Details: [VERSIONING.md](../../VERSIONING.md).
 | # | Item | Owner |
 |---|---|---|
 | 1 | Official Privacy, Terms, Trust & Security and Help URLs: set them in `src/pages/links.ts` (hidden until then; none exists on bcbpsolutions.com) | product / legal |
-| 2 | No real-browser suite under the production CSP (the SDK's `test/browser` pattern) | this repo |
 | 3 | Consent is essential only in v1 (decision). A consent manager would call `cmp.accept()` | product |
-| 4 | SDK features not used yet: `registerNavigator` (a remote's `navigate()` does a full load), i18n `detect` from P-35 `locale` | this repo |
 | 5 | `mfe-dashboard` is on alpha.3: until it is rebuilt with the alpha.4 preset, this shell cannot load it (`__platform_mfe_app2` undefined) | `mfe-dashboard` |
 | 6 | PUB-1 and P-35 must exist behind `/api` in every environment; they are stubbed only in dev | IAM |
 | 7 | No cluster deploy; each environment serves its own runtime config and manifest | operators |

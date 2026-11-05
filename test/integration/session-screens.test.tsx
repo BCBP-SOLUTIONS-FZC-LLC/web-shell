@@ -68,13 +68,6 @@ describe('askForWorkspace', () => {
     expect(await screen.findByText(screens.WORKSPACE_NOT_FOUND)).toBeInTheDocument()
     expect(assign).not.toHaveBeenCalled()
   })
-
-  it('uses the previous layout for ?variant=login1', async () => {
-    window.history.replaceState({}, '', '/?variant=login1')
-    void screens.askForWorkspace()
-    expect(await screen.findByRole('heading', { name: 'Login to your account' })).toBeInTheDocument()
-    expect(screen.queryByRole('region', { name: 'Product highlights' })).not.toBeInTheDocument()
-  })
 })
 
 describe('dialogs', () => {

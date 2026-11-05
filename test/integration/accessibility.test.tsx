@@ -7,7 +7,6 @@ import axe from 'axe-core'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { IdentityProvider } from '@bcbp-solutions-fzc-llc/frontend-sdk/auth'
 import LoginPage from '../../src/pages/LoginPage'
-import LoginPage1 from '../../src/pages/LoginPage1'
 
 vi.mock('../../src/platform/iam', () => ({ workspaceResolver: { resolve: async () => undefined } }))
 const screens = await import('../../src/platform/SessionScreens')
@@ -24,10 +23,7 @@ afterEach(() => {
 })
 
 describe('accessibility (axe)', () => {
-  it.each([
-    ['latest', LoginPage],
-    ['login1', LoginPage1],
-  ] as const)('the %s login layout, with a notice and an error', async (_name, Page) => {
+  it.each([['latest', LoginPage]] as const)('the %s login layout, with a notice and an error', async (_name, Page) => {
     render(
       <Page
         notice="Your session has ended."

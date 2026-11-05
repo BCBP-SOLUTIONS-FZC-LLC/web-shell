@@ -2,7 +2,7 @@
 
 This document describes the internal structure, dependency direction, and browser flows of `web-shell`.
 
-`web-shell` is a **private Rsbuild application** (`github.com/BCBP-SOLUTIONS-FZC-LLC/web-shell`, Node.js 26, React 19.3) built on the platform SDK (`@bcbp-solutions-fzc-llc/frontend-sdk` `1.0.0-alpha.4`). The npm package name is `app1` and `"private": true`. Nothing installs it. What ships is a static bundle: the SDK bootstrap, the sign-in and session screens, and a Module Federation host (`shell`) that renders the dashboard remote. The production process is nginx on port **8080**, uid **101**. There is no API server, database, or message bus in this repository.
+`web-shell` is a **private Rsbuild application** (`github.com/BCBP-SOLUTIONS-FZC-LLC/web-shell`, Node.js 26, React 19.3) built on the platform SDK (`@bcbp-solutions-fzc-llc/frontend-sdk` `1.0.0-alpha.4`). The npm package name is `web-shell` and `"private": true`. Nothing installs it. What ships is a static bundle: the SDK bootstrap, the sign-in and session screens, and a Module Federation host (`shell`) that renders the dashboard remote. The production process is nginx on port **8080**, uid **101**. There is no API server, database, or message bus in this repository.
 
 The shell has not been tagged. `package.json` `version` is `0.0.0`. Image tags, the SemVer contract, and how to cut a release are in [VERSIONING.md](./VERSIONING.md).
 
@@ -104,10 +104,11 @@ graph LR
     iam(["platform/iam.ts"])
     consent(["platform/consent.ts"])
     perms(["platform/permissions.ts"])
-    login(["pages/LoginPage.tsx\npages/LoginPage1.tsx"])
+    ctx(["platform/sessionContext.ts\nplatform/ShellRoot.tsx"])
+    nav(["platform/navigator.ts"])
+    login(["pages/LoginPage.tsx"])
     hook(["pages/useEmailSignIn.ts"])
     remember(["pages/rememberEmail.ts"])
-    variant(["pages/loginVariant.ts"])
     links(["pages/links.ts\npages/PageLinks.tsx"])
     reset(["platform/passwordReset.ts"])
     logo(["BrandLogo.tsx"])
@@ -120,11 +121,13 @@ graph LR
     boot --> iam
     boot --> consent
     boot --> perms
+    boot --> ctx
+    boot --> nav
+    ctx --> sdk
     boot --> remember
     boot --> sdk
     app --> sdk
     screens --> login
-    screens --> variant
     screens --> iam
     screens --> screen
     screens --> reset
@@ -143,9 +146,10 @@ graph LR
 |---|---|
 | `platform/iam.ts`, `consent.ts`, `permissions.ts`, `passwordReset.ts` | SDK subpaths only |
 | `platform/screen.tsx` | `react-dom/client` |
-| `platform/SessionScreens.tsx` | Login pages, `loginVariant`, `iam`, `passwordReset`, `screen`, SDK types |
+| `platform/SessionScreens.tsx` | `LoginPage`, `iam`, `passwordReset`, `screen`, SDK types |
+| `platform/sessionContext.ts`, `ShellRoot.tsx`, `navigator.ts` | SDK subpaths (`/auth` and `/problem` types, `/react`), React |
 | `pages/*`, `BrandLogo.tsx` | Each other and `rememberEmail.ts`. Never `platform/` or the SDK |
-| `App.tsx` | `react-router-dom`, SDK `/react` (`RemoteBoundary`, `useRouteTemplate`, `useSessionContext`, `useAppUpdate`) |
+| `App.tsx` | `react-router-dom`, SDK `/react` (`RemoteBoundary`, `useRouteTemplate`, `useSessionContext`, `useAppUpdate`). It hands the router's `navigate` to the bootstrap through `onRouter` instead of importing `/nav` |
 | `bootstrap.tsx` | Everything above, every SDK subpath it initialises, `index.css` |
 | `index.ts` | `bootstrap.tsx`, dynamically |
 | `rsbuild.config.ts` | The platform plugin, React, Tailwind, `/version.json`, `config/dev-platform.mjs`. `src/` does not import it |
@@ -172,7 +176,7 @@ sequenceDiagram
     Index->>Boot: import('./bootstrap'), bootstrap()
     Boot->>SDK: installTrustedTypesPolicy, initializeCore
     Boot->>SDK: loadRuntimeConfig (/config/runtime.json)
-    Note over Boot,SDK: a failure so far shows "The app is unavailable right now."
+    Note over Boot,SDK: a failure is logged as an error (default /otel), then "The app is unavailable right now."
     Boot->>SDK: consent, tracing, logging, metrics, error handlers, web vitals
     Boot->>SDK: createOidcProvider, initializeAuth, setTokenSource
     Boot->>SDK: idp.init()
@@ -194,20 +198,24 @@ sequenceDiagram
         Boot->>SDK: idp.subscribe (expired, signed out)
         Boot->>IAM: GET /v1/me/session-context
         Boot->>SDK: authorizer, subject, flags, rememberWorkspace (/t/slug/)
-        Boot->>SDK: initializeI18n, loadManifest, startVersionPolling
-        Boot->>Browser: render App inside PlatformProvider
+        Boot->>SDK: initializeI18n (detect: P-35 locale), loadManifest, startVersionPolling
+        Boot->>Browser: render App inside ShellRoot (PlatformProvider), registerNavigator
+        opt no session context
+            Boot->>IAM: retry after 1 s, 2 s, 4 s (network, timeout, 429, 5xx)
+            Boot->>SDK: subject, flags, rememberWorkspace; the provider updates live
+        end
     end
 ```
 
 1. `installTrustedTypesPolicy()`, then `initializeCore({ serviceName: 'web-shell', domain: 'portal', environment: __ENVIRONMENT__, buildVersion: __BUILD_VERSION__ })`.
-2. `loadRuntimeConfig()` fetches `/config/runtime.json` and validates it; `setRuntimeConfig`. A throw up to here reaches `index.ts`, which replaces `#app` with "The app is unavailable right now."
+2. `loadRuntimeConfig()` fetches `/config/runtime.json` and validates it; `setRuntimeConfig`. A throw from here on is logged as an essential error (`the app could not start`; logging starts on the default `/otel` when the config never arrived), then reaches `index.ts`, which replaces `#app` with "The app is unavailable right now."
 3. `setConsentProvider(cmp)`, tracing, logging and metrics against `telemetry.otlpBaseUrl`, `installGlobalErrorHandlers()`, `startWebVitals()`, platform flags from the runtime config.
 4. `createOidcProvider(cfg.auth, workspaceResolver)`, `setTokenSource(initializeAuth(idp))`, `idp.init()`. On a reload or a new tab `init()` may redirect once with `prompt=none` and never settle.
 5. Anonymous: see the sign-in flow. The bootstrap returns without rendering the app.
 6. Authenticated in the wrong workspace (a trial login through an invitation that landed in another tenant): `showWrongWorkspace`. The app never renders and the workspace is not cached.
-7. Authenticated: `idp.subscribe` handles expiry and sign-out (below). The P-35 session context sets the authorizer subject and tenant flags, and `rememberWorkspace` caches the workspace with its slug and moves the URL to `/t/<slug>/`. Without a context: deny-all and platform flags only, with a warning log.
-8. `initializeI18n`, `loadManifest()` (a failure is logged; the app still renders), `startVersionPolling()`.
-9. Render `<App>` inside `<PlatformProvider shell={{ user, workspace, context, locale, switchWorkspace, signOut }}>` into `#app`. The router's basename is `/t/<slug>` when `slugFromPath` finds one in the URL.
+7. Authenticated: `idp.subscribe` handles expiry and sign-out (below). The P-35 session context sets the authorizer subject and tenant flags, and `rememberWorkspace` caches the workspace with its slug and moves the URL to `/t/<slug>/`. Without a context: deny-all and platform flags only, with a warning log; after render a network error, timeout, 429 or 5xx is retried after 1 s, 2 s and 4 s, and a success updates the subject, flags and provider without a reload. A sign-out stops the retries, and a sign-out during these steps stops the boot before the app mounts.
+8. `initializeI18n` (the user's P-35 `locale` first, through `detect`), `loadManifest()` (a failure is logged; the app still renders), `startVersionPolling()`.
+9. Render `<App>` inside `platform/ShellRoot` (a `PlatformProvider` whose `context` follows the retry store and whose `locale` follows `setLocale`) into `#app`. The router's basename is `/t/<slug>` when `slugFromPath` finds one in the URL. The router is registered as the SDK's navigator: a remote's `navigate()` under the basename stays in the page; any other path is a full load.
 
 After render the subscription does two things:
 
@@ -398,12 +406,13 @@ Vitest 5, happy-dom at `http://localhost:5001/`, Testing Library. `vitest.config
 
 | Layer | Path | What it locks |
 |---|---|---|
-| Unit | `test/unit/` | PUB-1 and P-35 mappings and the port calls, the entry point's fatal path, remember-email with blocked storage, the consent stand-in, the screen host, `BrandLogo`, the login variant |
-| Integration | `test/integration/` | Both login layouts and the carousel, every session screen, `App` routes and props, and the bootstrap: the exact initialisation order, each anonymous reason, wrong workspace, missing context, manifest failure, expiry and sign-out events; axe-core over every shell screen (`accessibility.test.tsx`) |
-| End to end | `test/e2e/` | The real bootstrap and SDK (inlined by Vitest, fresh per simulated page load) against a fake Keycloak and network: PKCE sign-in, `/t/<slug>/`, the remote's SDK hooks and permissions, deny-all, a failing remote, global sign-out, the device clock |
+| Unit | `test/unit/` | PUB-1 and P-35 mappings and the port calls, the entry point's fatal path, remember-email with blocked storage, the consent stand-in, the screen host, `BrandLogo`, the session-context retry and store, the navigator adapter |
+| Integration | `test/integration/` | The login page and the carousel, every session screen, `App` routes and props, and the bootstrap: the exact initialisation order, each anonymous reason, wrong workspace, missing context and its background retry, sign-out during boot, i18n `detect`, navigator registration, start-up failure reporting, manifest failure, expiry and sign-out events; axe-core over every shell screen (`accessibility.test.tsx`) |
+| End to end | `test/e2e/` | The real bootstrap and SDK (inlined by Vitest, fresh per simulated page load) against a fake Keycloak and network: PKCE sign-in, `/t/<slug>/`, the remote's SDK hooks and permissions, deny-all, an IAM outage that recovers in the background, a failing remote, global sign-out (form POST), the device clock |
+| Browser | `test/browser/`, CI `browser` | The production build in Chromium, Firefox and WebKit under the production CSP and Trusted Types, over HTTPS, with a fake Keycloak on a second origin: self-hosted fonts and hashed images, PKCE sign-in, the remote's entry with integrity and the share scope, `navigate()` without a reload, the sign-out form POST under `form-action`, the start-up failure reaching `/otel`, colour contrast (axe) |
 | Smoke | `test/smoke/`, `.github/scripts/smoke-tests.sh` | Image at most 200 MB and the startup gate, then the suite against the container: SPA rule, Cache-Control per location, script integrity, 404s, runtime config and manifest validated by the SDK. With `SMOKE_MODE=live`, a deployment's security headers too |
 
-`npm run test:ci` is the gate CI runs: coverage, then `coverage-gate.mjs` (95%; 100% today). Include is `src/**/*.{ts,tsx}`. Declaration files and CSS are excluded. `test/smoke` is excluded from `npm test` and runs with `vitest.smoke.config.ts` against `SMOKE_BASE_URL`.
+`npm run test:ci` is the gate CI runs: coverage, then `coverage-gate.mjs` (95%; 100% today). Include is `src/**/*.{ts,tsx}`. Declaration files and CSS are excluded. `test/smoke` and `test/browser` are excluded from `npm test`: the first runs with `vitest.smoke.config.ts` against `SMOKE_BASE_URL`, the second with Playwright (`npm run build && npm run test-browser`). CI also fails a build over its size budget (`npm run budget`: entry, total JS and CSS, largest file, images).
 
 The bootstrap test replaces every SDK subpath with a fake that records its call, so the order is asserted directly. The e2e suite then runs the same bootstrap with the real SDK, so the wiring is also checked against the SDK's actual behaviour (PKCE, the `/t/<slug>/` move, hooks, sign-out). Tests of SDK behaviour itself belong in the SDK repository. The full test contract is in [LLD §12](docs/lld/web-shell-lld.md#12-testing).
 
@@ -486,7 +495,7 @@ The login page's "Trouble logging in?" link is `href="#help"`. It does not open 
 
 3. **TypeScript 6, not 7.** `typescript-eslint` supports `<6.1.0`, and TypeScript 7 (the native port) does not offer the JavaScript API its parser uses. The SDK builds on 6. Revisit when `typescript-eslint` supports 7.
 
-4. **The email screen is the existing login page.** `askForWorkspace` renders `LoginPage` (or `LoginPage1` for `?variant=login1`) and resolves the email through PUB-1, instead of the SDK example's slug-or-email form. The email doubles as `login_hint`.
+4. **The email screen is the existing login page.** `askForWorkspace` renders `LoginPage` and resolves the email through PUB-1, instead of the SDK example's slug-or-email form. The email doubles as `login_hint`.
 
 5. **Remember-email uses `localStorage` directly.** The SDK's `storage()` is per workspace and ignores writes before sign-in, which is exactly when this value is needed. It holds the typed email only.
 

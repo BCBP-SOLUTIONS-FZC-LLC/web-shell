@@ -20,7 +20,7 @@ export default defineConfig({
     server: { deps: { inline: [/@bcbp-solutions-fzc-llc\/frontend-sdk/] } },
     include: ['test/**/*.test.ts', 'test/**/*.test.tsx'],
     // test/smoke runs against a served image or deployment: `npm run test-smoke` (vitest.smoke.config.ts).
-    exclude: ['test/smoke/**', 'node_modules/**'],
+    exclude: ['test/smoke/**', 'test/browser/**', 'node_modules/**'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json-summary'],

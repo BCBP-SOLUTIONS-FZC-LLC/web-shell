@@ -2,13 +2,9 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import LoginLatest from '../../src/pages/LoginPage'
-import LoginPrevious from '../../src/pages/LoginPage1'
 import { EMAIL_FIRST } from '../../src/pages/useEmailSignIn'
 
-const pages = [
-  ['latest', LoginLatest],
-  ['login1', LoginPrevious],
-] as const
+const pages = [['latest', LoginLatest]] as const
 
 const emailBox = () => screen.getByRole('textbox', { name: /work email address/i })
 const rememberBox = () => screen.getByRole('checkbox', { name: /remember email/i })

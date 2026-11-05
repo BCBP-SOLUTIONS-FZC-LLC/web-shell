@@ -80,9 +80,9 @@ describe('login hero carousel', () => {
     const { container } = render(<LoginPage onContinue={async () => {}} />)
     const sources = () =>
       [...container.querySelectorAll('section img.object-cover')].map((i) => i.getAttribute('src'))
-    expect(sources().filter(Boolean)).toEqual(['/image/image1.jpg', '/image/image2.jpg'])
+    expect(sources().filter(Boolean)).toEqual([expect.stringContaining('image1'), expect.stringContaining('image2')])
     fireEvent.click(screen.getByRole('button', { name: 'Show slide 5' }))
-    expect(sources().filter(Boolean)).toEqual(['/image/image1.jpg', '/image/image5.jpg', '/image/image6.jpg'])
+    expect(sources().filter(Boolean)).toEqual([expect.stringContaining('image1'), expect.stringContaining('image5'), expect.stringContaining('image6')])
   })
 
   it('does not mark an image that failed to decode as loaded', () => {

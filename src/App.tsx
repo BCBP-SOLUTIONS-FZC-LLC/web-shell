@@ -1,6 +1,7 @@
 // The signed-in shell. The bootstrap renders this only with an authenticated session, so there is
 // no signed-out route here: sign-in screens are mounted by the bootstrap outside this tree.
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { useEffect } from 'react'
+import { BrowserRouter, Navigate, Route, Routes, useNavigate, type NavigateFunction } from 'react-router-dom'
 import {
   RemoteBoundary,
   useAppUpdate,
@@ -74,14 +75,28 @@ function UpdateAvailable() {
   )
 }
 
+/** Hands the router's navigate to the bootstrap, which registers it as the SDK's navigator. */
+function RouterBridge({ onRouter }: { onRouter: (navigate: NavigateFunction) => void }) {
+  const navigate = useNavigate()
+  useEffect(() => onRouter(navigate), [navigate, onRouter])
+  return null
+}
+
 /**
  * Routes under /t/<slug>/ once the workspace has a slug (the SDK moves the URL there after
  * sign-in, from the session context); otherwise from the site root.
  */
-export default function App({ basename }: { basename?: string }) {
+export default function App({
+  basename,
+  onRouter,
+}: {
+  basename?: string
+  onRouter?: (navigate: NavigateFunction) => void
+}) {
   const context = useSessionContext()
   return (
     <BrowserRouter {...(basename ? { basename } : {})}>
+      {onRouter ? <RouterBridge onRouter={onRouter} /> : null}
       <UpdateAvailable />
       {context ? null : <ContextUnavailable />}
       <Routes>

@@ -1,5 +1,5 @@
 {
-  "name": "app1",
+  "name": "web-shell",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -8,6 +8,7 @@
     "docker:dev": "docker run -it --rm -p 5001:5001 -e NODE_AUTH_TOKEN -v %cd%:/app -v /app/node_modules node:26-alpine sh -c \"cd /app && npm ci && npm run dev\"",
     "docker:dev:mac": "docker run -it --rm -p 5001:5001 -e NODE_AUTH_TOKEN -v $(pwd):/app -v /app/node_modules node:26-alpine sh -c \"cd /app && npm ci && npm run dev\"",
     "build": "tsc && rsbuild build",
+    "budget": "node .github/scripts/bundle-budget.mjs",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:ci": "vitest run --coverage && node .github/scripts/coverage-gate.mjs",
@@ -15,6 +16,7 @@
     "test-int": "vitest run test/integration",
     "test-e2e": "vitest run test/e2e",
     "test-smoke": "vitest run --config vitest.smoke.config.ts",
+    "test-browser": "playwright test",
     "hooks:install": "node scripts/install-hooks.mjs",
     "preview": "rsbuild preview",
     "keycloak:dev": "node scripts/keycloak-compose.mjs up",
@@ -29,6 +31,7 @@
   "devDependencies": {
     "@bcbp-solutions-fzc-llc/eslint-plugin": "1.0.0-alpha.4",
     "@bcbp-solutions-fzc-llc/webpack-preset": "1.0.0-alpha.4",
+    "@playwright/test": "1.64.1",
     "@rsbuild/core": "^2.3.1",
     "@rsbuild/plugin-react": "^2.1.1",
     "@tailwindcss/postcss": "^4.3.4",
@@ -61,5 +64,8 @@
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "react-router-dom": "^7.18.5"
+  },
+  "overrides": {
+    "minimatch": "^11.0.4"
   }
 }

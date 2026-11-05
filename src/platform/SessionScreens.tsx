@@ -3,8 +3,6 @@
 import { useEffect, useRef, type ReactNode } from 'react'
 import type { IdentityProvider, SessionState, Workspace } from '@bcbp-solutions-fzc-llc/frontend-sdk/auth'
 import LoginPage from '../pages/LoginPage'
-import LoginPage1 from '../pages/LoginPage1'
-import { resolveLoginVariant } from '../pages/loginVariant'
 import { workspaceResolver } from './iam'
 import { passwordResetUrl } from './passwordReset'
 import { hideScreen, showScreen } from './screen'
@@ -72,10 +70,9 @@ async function resolveEmail(email: string): Promise<Workspace> {
 }
 
 export function askForWorkspace(notice?: string): Promise<SignInChoice> {
-  const Page = resolveLoginVariant(window.location.search) === 'login1' ? LoginPage1 : LoginPage
   return new Promise((resolve) => {
     showScreen(
-      <Page
+      <LoginPage
         notice={notice ?? null}
         onContinue={async (email) => {
           resolve({ workspace: await resolveEmail(email), loginHint: email })
