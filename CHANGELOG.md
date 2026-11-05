@@ -42,6 +42,12 @@ Pull requests that change the shell, its dependencies, or the image add an entry
 
 ### Changed
 
+- **The release workflow, checked before its first run (`2026-11-05`).** mfe-dashboard's `v0.1.0` release failed at "Export SLSA provenance" with the same script this repository had; three more release steps differed from it:
+  - `export-image-provenance.sh` read a Cosign attestation that does not exist: `build-push-action` (`provenance: mode=max`) stores provenance as a BuildKit attestation in the image index. It now reads it with `docker buildx imagetools inspect` (checked against `web-shell:main`). Without this the first tag would have pushed an image and stopped before signing it or opening the Release.
+  - `extract-release-notes.sh` piped `tee` into `true`, which could cut the notes short on a closed pipe; plain redirects now (a 3 000-line section extracted whole).
+  - `BUILD_VERSION` is the version without the `v` (`0.1.0`), in the tarball and the image, as mfe-dashboard reports it.
+  - Source maps were deleted, though comments said they were "uploaded privately". A release now keeps them as the workflow artifact `sourcemaps-<tag>` (90 days), never in the bundle, the image or the Release.
+
 - **Release checks (`2026-11-05`).**
   - **Dashboard contract** (`test/browser/dashboard.spec.ts`, `npm run test-contract`, CI `Dashboard contract`): this shell's production build with a **real** mfe-dashboard build (`REMOTE_DIST`; CI builds `BCBP-SOLUTIONS-FZC-LLC/mfe-dashboard` at `vars.DASHBOARD_REF`, default `main`) in Chromium, Firefox and WebKit under the production CSP: the remote's integrity, share scope and CSS, the shell's role map reaching it (`User management`), its navigation without a reload, and its Logout through the shell's form POST to Keycloak. A wrong integrity fails it. Informational: it reports in the PR summary but does not gate `push`. Run against mfe-dashboard `main` (`e1b04c3`, alpha.4): 9/9 passed.
   - **Optional per-environment CSP in the image.** `nginx/default.conf` includes `/etc/nginx/security.d/*.conf` (empty in the image). An environment served without CloudFront mounts `nginx/security.d/csp.conf.example` there; behind CloudFront nothing is mounted. Nothing is written at start, so a read-only root filesystem works. The smoke job checks both: no CSP by default, the platform CSP on every location with the file mounted.
