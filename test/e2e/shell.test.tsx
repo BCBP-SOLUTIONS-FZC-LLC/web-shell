@@ -7,7 +7,7 @@
 //
 // Stubbed seams, and why:
 // - the remote's entry <script>: happy-dom does not run remoteEntry.js. The stub defines the
-//   `__platform_mfe_app2` container global the way the entry does (the preset's containerName since
+//   `__platform_mfe_dashboard` container global the way the entry does (the preset's containerName since
 //   alpha.4), exposing a dashboard built only on the SDK's hooks, as mfe-dashboard's is.
 // - location.assign/replace: a redirect is recorded instead of leaving the page.
 // - HTMLFormElement#submit: the global sign-out's form POST to Keycloak is recorded (URL and fields)
@@ -38,9 +38,9 @@ vi.mock('react-dom/client', async (importOriginal) => {
 
 const ORIGIN = window.location.origin
 const RUNTIME_KEY = Symbol.for('@bcbp-solutions-fzc-llc/frontend-sdk')
-const ENTRY = '/remotes/app2/1.0.0/remoteEntry.js'
-/** The global app2's remoteEntry.js defines: `__platform_mfe_<name>` (SDK alpha.4). */
-const CONTAINER = '__platform_mfe_app2'
+const ENTRY = '/remotes/dashboard/1.0.0/remoteEntry.js'
+/** The global the dashboard's remoteEntry.js defines: `__platform_mfe_<name>` (SDK alpha.4). */
+const CONTAINER = '__platform_mfe_dashboard'
 const TENANT = '7d3c1f9e-2b4a-4c6d-8e0f-1a2b3c4d5e6f'
 const EMAIL = 'ada@acme.test'
 
@@ -159,7 +159,7 @@ beforeEach(() => {
   net
     .on('GET /config/runtime.json', RUNTIME_CONFIG)
     .on('GET /version.json', { version: 'test' })
-    .on('GET /remotes/manifest.json', { app2: { entry: ENTRY, version: '1.0.0', ownerDomain: 'portal' } })
+    .on('GET /remotes/manifest.json', { dashboard: { entry: ENTRY, version: '1.0.0', ownerDomain: 'portal' } })
     .on('GET /api/v1/public/tenants/resolve', (req) => {
       const id = new URL(req.url).searchParams.get('identifier')
       return Response.json(

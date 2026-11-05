@@ -15,7 +15,7 @@ npx playwright install chromium firefox webkit   # once, if the browsers are mis
 
 | Server | Serves |
 |---|---|
-| App | `dist/` with the platform CSP (`platform-reactcommon` `examples/cloudfront/csp.mjs`, copied in `buildCsp`) and the nginx SPA rule; a runtime config pointed at the fake Keycloak; a manifest whose `app2` entry is a stub built only on the shell's shared React and SDK (integrity `sha384`); PUB-1 and P-35; recorders for `/otel/*` and `/csp-report`; `GET /__test/state` and `/__test/reset` |
+| App | `dist/` with the platform CSP (`platform-reactcommon` `examples/cloudfront/csp.mjs`, copied in `buildCsp`) and the nginx SPA rule; a runtime config pointed at the fake Keycloak; a manifest whose `dashboard` entry is a stub built only on the shell's shared React and SDK (integrity `sha384`); PUB-1 and P-35; recorders for `/otel/*` and `/csp-report`; `GET /__test/state` and `/__test/reset` |
 | Fake Keycloak (second origin) | Authorize (the user counts as signed in; `prompt=none` fails without an SSO session), the token endpoint with PKCE and CORS, and the end-session endpoint the global sign-out POSTs a form to |
 
 ## Cases (`shell.spec.ts`)
@@ -35,7 +35,7 @@ Tests run one at a time (`workers: 1`): they share the fake Keycloak session and
 
 ## Dashboard contract (`dashboard.spec.ts`)
 
-With `REMOTE_DIST` set to a built mfe-dashboard `dist/` (it must contain `remote-manifest-entry.json`, which the dashboard's `npm run build` writes), the server serves that build as `app2` under `/remotes/app2/<version>/` with its own integrity, and `shell.spec.ts` is skipped:
+With `REMOTE_DIST` set to a built mfe-dashboard `dist/` (it must contain `remote-manifest-entry.json`, which the dashboard's `npm run build` writes), the server serves that build as `dashboard` under `/remotes/dashboard/<version>/` with its own integrity, and `shell.spec.ts` is skipped:
 
 ```bash
 git clone --depth 1 https://github.com/BCBP-SOLUTIONS-FZC-LLC/mfe-dashboard.git /tmp/mfe-dashboard

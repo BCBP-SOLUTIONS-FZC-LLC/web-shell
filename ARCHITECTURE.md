@@ -10,7 +10,7 @@ The shell has not been tagged. `package.json` `version` is `0.0.0`. Image tags, 
 |---|---|
 | The SDK start-up sequence, the email sign-in page, the session screens | Passwords, MFA, registration, token issuance (Keycloak). PKCE, token handling, refresh and idle timeout (the SDK's `/auth`) |
 | The IAM ports: PUB-1 resolver and P-35 session context | The IAM APIs, tenant membership, authorization decisions (IAM services, the gateway) |
-| Federation host `shell` and the shared map from `@bcbp-solutions-fzc-llc/webpack-preset` | Dashboard screens (`mfe-dashboard`, loaded as `app2`) |
+| Federation host `shell` and the shared map from `@bcbp-solutions-fzc-llc/webpack-preset` | Dashboard screens (`mfe-dashboard`, loaded as `dashboard`) |
 | The shell value remotes read through SDK hooks (`user`, `signOut`, `workspace`, `context`) | Each environment's `/config/runtime.json` and `/remotes/manifest.json` (deploy pipeline, CloudFront) |
 | `GET /healthz` and the static files nginx serves | Cluster rollout. A tag publishes an image. It does not deploy |
 
@@ -50,7 +50,7 @@ graph TD
     end
 
     subgraph remote["Remote, loaded in the browser"]
-        app2["app2 ./App\nSDK hooks, no props"]
+        dashboard["dashboard ./App\nSDK hooks, no props"]
     end
 
     subgraph build["Build, not imported by src/"]
@@ -76,7 +76,7 @@ graph TD
     screens --> screen
     login --> logo
     app --> sdkmods
-    app --> app2
+    app --> dashboard
     iam --> sdkmods
     rsbuild --> devplat
     docker --> nginx
@@ -140,7 +140,7 @@ graph LR
     consent --> sdk
 ```
 
-`App.tsx` renders `app2` through `RemoteBoundary`. That edge is not a file in this repo.
+`App.tsx` renders `dashboard` through `RemoteBoundary`. That edge is not a file in this repo.
 
 | Module | May import |
 |---|---|
@@ -228,7 +228,7 @@ Routes inside the app:
 
 | Path (under the basename) | Element |
 |---|---|
-| `/dashboard/*` | `RemoteBoundary` for `app2` `./App` |
+| `/dashboard/*` | `RemoteBoundary` for `dashboard` `./App` |
 | anything else | `<Navigate to="/dashboard" replace>` |
 
 ---
@@ -294,10 +294,10 @@ sequenceDiagram
     participant App as App.tsx
     participant Boundary as RemoteBoundary
     participant MFE as frontend-sdk /mfe
-    participant Remote as app2 ./App
+    participant Remote as dashboard ./App
 
     App->>Boundary: /t/slug/dashboard/*
-    Boundary->>MFE: loadRemote('app2', './App')
+    Boundary->>MFE: loadRemote('dashboard', './App')
     Note over MFE: entry from /remotes/manifest.json<br/>kill switch, allowed origin, integrity, timeout, retries
     alt remoteEntry.js loads and ./App renders
         MFE-->>Boundary: component
@@ -308,9 +308,9 @@ sequenceDiagram
     end
 ```
 
-The shell passes no props. `app2` reads the user with `useCurrentUser()` and signs out with `useSignOut()` (global by default: the Keycloak session ends too, and every tab follows), from the shell value `PlatformProvider` holds.
+The shell passes no props. `dashboard` reads the user with `useCurrentUser()` and signs out with `useSignOut()` (global by default: the Keycloak session ends too, and every tab follows), from the shell value `PlatformProvider` holds.
 
-`loadRemote` reads the entry from the manifest the bootstrap loaded, checks the kill switch (`remotes.killSwitch`, flag `remote.app2.disabled`) and the entry origin (the page's, or `remotes.allowedOrigins`), injects `remoteEntry.js` as a classic script with its `integrity`, and reads the container from `window.__platform_mfe_app2` (`__platform_mfe_<name>` since alpha.4). A remote must therefore be built with `@bcbp-solutions-fzc-llc/webpack-preset` (`role: 'remote'`, library type `var`; webpack, Rspack or Rsbuild). The share scope gives it this shell's React, OTel API and SDK; a remote built against a newer SDK than the shell's is refused at share negotiation, inside the boundary. "Try again" creates a new lazy import.
+`loadRemote` reads the entry from the manifest the bootstrap loaded, checks the kill switch (`remotes.killSwitch`, flag `remote.dashboard.disabled`) and the entry origin (the page's, or `remotes.allowedOrigins`), injects `remoteEntry.js` as a classic script with its `integrity`, and reads the container from `window.__platform_mfe_dashboard` (`__platform_mfe_<name>` since alpha.4). A remote must therefore be built with `@bcbp-solutions-fzc-llc/webpack-preset` (`role: 'remote'`, library type `var`; webpack, Rspack or Rsbuild). The share scope gives it this shell's React, OTel API and SDK; a remote built against a newer SDK than the shell's is refused at share negotiation, inside the boundary. "Try again" creates a new lazy import.
 
 ---
 
@@ -338,9 +338,9 @@ Remotes that need storage use `storage(appId)` from `/storage`, which is namespa
 | Leave for Keycloak | Browser navigation | stop | The shell is gone until Keycloak redirects back |
 | Session context | P-35 | degrade, then recover | Warning log. Deny-all permissions and platform flags until it answers; a network error, timeout, 429 or 5xx is retried after 1 s, 2 s, 4 s and applied live (a final 401, 403 or 404 is not asked again) (the router moves under `/t/<slug>/` then). A notice with Reload says some actions are hidden |
 | Remote manifest | `/remotes/manifest.json` | degrade | Error log. The app renders; `RemoteBoundary` shows its error |
-| Dashboard load or render | `app2` remote | degrade | Boundary message with "Try again". The rest of the shell keeps running |
+| Dashboard load or render | `dashboard` remote | degrade | Boundary message with "Try again". The rest of the shell keeps running |
 | Telemetry export | `/otel` | ignore | Bounded queues in the SDK. v1 exports `essential` only (errors and essential warnings), by decision |
-| `GET /healthz` | nginx only | liveness | `200` and `ok`. Keycloak, IAM and `app2` are not checked |
+| `GET /healthz` | nginx only | liveness | `200` and `ok`. Keycloak, IAM and `dashboard` are not checked |
 
 ---
 
@@ -381,7 +381,7 @@ Remotes that need storage use `storage(appId)` from `/storage`, which is namespa
 | Document | `GET /` | `index.html`, `id="app"`, `Cache-Control: no-cache` |
 | Runtime files | `GET /config/runtime.json`, `/remotes/manifest.json`, `/version.json` | `no-cache`, 404 when the file is absent |
 
-Build args: `BUILD_VERSION`, `SOURCE_DATE_EPOCH`, `PLATFORM_ENVIRONMENT` (default `prod`). The image ships `public/config/runtime.json` (SDK defaults: `https://auth.bcbpsolutions.com`, client `tender-web`) and an empty manifest `{}`. An environment serves its own files over those paths, from CloudFront or a mount. The image sends no CSP or HSTS: CloudFront does, and until it exists (next month) each environment mounts `nginx/security.d/csp.conf` and `hsts.conf` and routes `/api`, `/otel`, `/csp-report` and `/remotes/app2/` on the same origin at its ingress ([docs/hosting-without-cloudfront.md](docs/hosting-without-cloudfront.md)).
+Build args: `BUILD_VERSION`, `SOURCE_DATE_EPOCH`, `PLATFORM_ENVIRONMENT` (default `prod`). The image ships `public/config/runtime.json` (SDK defaults: `https://auth.bcbpsolutions.com`, client `tender-web`) and an empty manifest `{}`. An environment serves its own files over those paths, from CloudFront or a mount. The image sends no CSP or HSTS: CloudFront does, and until it exists (next month) each environment mounts `nginx/security.d/csp.conf` and `hsts.conf` and routes `/api`, `/otel`, `/csp-report` and `/remotes/dashboard/` on the same origin at its ingress ([docs/hosting-without-cloudfront.md](docs/hosting-without-cloudfront.md)).
 
 CI on `main` pushes `ghcr.io/bcbp-solutions-fzc-llc/web-shell` with the branch tag and `sha-<short>`, then Cosign-signs the digest. A Git tag `vX.Y.Z` publishes image tags `X.Y.Z`, `X.Y`, `X`, and `latest` when the tag has no pre-release suffix. The Git tag keeps the `v`. The static tarball on the GitHub Release is `web-shell_<tag>_dist.tar.gz`, without source maps (the release keeps them as the workflow artifact `sourcemaps-<tag>`). `BUILD_VERSION` is the version without the `v`. The release workflow has not run yet. It does not include the nginx `/healthz` location.
 
@@ -421,21 +421,21 @@ The bootstrap test replaces every SDK subpath with a fake that records its call,
 
 ## Host and remote checklist
 
-Use this before serving this image in an environment, or before changing `app2`.
+Use this before serving this image in an environment, or before changing `dashboard`.
 
 **Serving this shell**
 
 - [ ] Serve `index.html` for extension-less client-side routes only, as `platform-reactcommon` `examples/cloudfront/spa-rewrite.js` does (this image's nginx config follows it). Missing config, remote, asset and API files must stay 404.
 - [ ] Serve this environment's `/config/runtime.json` and `/remotes/manifest.json`, revalidated. Cache `/assets/` as immutable.
-- [ ] Route `/api` to the platform API (PUB-1 and P-35 must exist), `/otel` and `/csp-report` to the collector, and `/remotes/app2/` to the dashboard's files, all on the shell's origin.
+- [ ] Route `/api` to the platform API (PUB-1 and P-35 must exist), `/otel` and `/csp-report` to the collector, and `/remotes/dashboard/` to the dashboard's files, all on the shell's origin.
 - [ ] Send the platform's CSP with the Trusted Types policies (`platform-reactcommon/examples/cloudfront`), with the IdP origin in `form-action` (the global sign-out POSTs to Keycloak), and HSTS. From CloudFront, or until it exists by mounting `nginx/security.d/csp.conf` and `hsts.conf`; never both.
 - [ ] Run `SMOKE_MODE=live npm run test-smoke` against the environment.
 - [ ] Keep `GET /healthz` if the orchestrator probes the image. The tarball alone does not include that location.
 - [ ] Register `{origin}/auth/callback` as a redirect URI, and the origin as a post-logout redirect, on the Keycloak client in every workspace realm.
 
-**Being the `app2` remote**
+**Being the `dashboard` remote**
 
-- [ ] Build with `pluginPlatform({ role: 'remote', name: 'app2', exposes: { './App': … } })` (Rsbuild), or `platformRspackConfig` / `platformWebpackConfig` with the same options. A Vite ES-module remote does not load.
+- [ ] Build with `pluginPlatform({ role: 'remote', name: 'dashboard', exposes: { './App': … } })` (Rsbuild), or `platformRspackConfig` / `platformWebpackConfig` with the same options. A Vite ES-module remote does not load.
 - [ ] List the entry in the manifest with `version`, `ownerDomain` and, outside local, dev and test, `integrity` (mfe-dashboard's build writes `remote-manifest-entry.json`).
 - [ ] Pass `npm run test-contract` here with the remote's build (`REMOTE_DIST`).
 - [ ] Take no props from the shell. Read the user, workspace, sign-out and session context through the SDK hooks (`useCurrentUser`, `useWorkspace`, `useSignOut`, `useSessionContext`).

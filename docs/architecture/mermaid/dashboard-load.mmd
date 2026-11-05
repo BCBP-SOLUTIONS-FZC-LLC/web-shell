@@ -2,10 +2,10 @@ sequenceDiagram
     participant App as App.tsx
     participant Boundary as RemoteBoundary
     participant MFE as frontend-sdk /mfe
-    participant Remote as app2 ./App
+    participant Remote as dashboard ./App
 
     App->>Boundary: /t/slug/dashboard/*
-    Boundary->>MFE: loadRemote('app2', './App')
+    Boundary->>MFE: loadRemote('dashboard', './App')
     Note over MFE: entry from /remotes/manifest.json<br/>kill switch, allowed origin, integrity, timeout, retries
     alt remoteEntry.js loads and ./App renders
         MFE-->>Boundary: component

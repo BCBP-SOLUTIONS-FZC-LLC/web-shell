@@ -1,6 +1,6 @@
 # web-shell
 
-The browser shell for the BCBP micro-frontend platform. It runs the platform SDK's start-up sequence once for the whole page: identity, runtime config, telemetry, the Keycloak session, the workspace, permissions and flags. Then it renders the dashboard as a Module Federation remote (`app2`) inside this origin. The sign-in page and the session screens (signed out, session ended and so on) belong to the shell. Remotes initialise nothing; they read the shell's state through the SDK's hooks.
+The browser shell for the BCBP micro-frontend platform. It runs the platform SDK's start-up sequence once for the whole page: identity, runtime config, telemetry, the Keycloak session, the workspace, permissions and flags. Then it renders the dashboard as a Module Federation remote (`dashboard`) inside this origin. The sign-in page and the session screens (signed out, session ended and so on) belong to the shell. Remotes initialise nothing; they read the shell's state through the SDK's hooks.
 
 **Repository:** `github.com/BCBP-SOLUTIONS-FZC-LLC/web-shell`
 **Runtime:** Node.js 26 · Rsbuild 2 (Rspack) · React 19.3 · `@bcbp-solutions-fzc-llc/frontend-sdk` `1.0.0-alpha.5` · private npm package `web-shell` (`"private": true`) · production image is nginx on port **8080**
@@ -13,10 +13,10 @@ The browser shell for the BCBP micro-frontend platform. It runs the platform SDK
 
 | This shell owns | Lives elsewhere |
 |---|---|
-| The SDK bootstrap (`src/bootstrap.tsx`) and the routes of the signed-in app: `/t/<slug>/dashboard/*` renders the dashboard remote | Dashboard pages, navigation inside the dashboard and dashboard data (`mfe-dashboard`, loaded as `app2`) |
+| The SDK bootstrap (`src/bootstrap.tsx`) and the routes of the signed-in app: `/t/<slug>/dashboard/*` renders the dashboard remote | Dashboard pages, navigation inside the dashboard and dashboard data (`mfe-dashboard`, loaded as `dashboard`) |
 | The email sign-in page and the session screens. The SDK does Authorization Code + PKCE against the workspace's Keycloak realm and keeps tokens in memory | Credentials, password policy, MFA and token issuance (Keycloak). This repo ships a local realm and theme for development |
 | The IAM ports: PUB-1 (email or slug → realm) and P-35 (session context), over the SDK's `ApiClient` | The IAM APIs themselves, tenant membership, roles and audit |
-| The shell value remotes read through SDK hooks: the user, workspace, session context and sign-out (`PlatformProvider`) | Any other remote. Only `app2` is in the local manifest |
+| The shell value remotes read through SDK hooks: the user, workspace, session context and sign-out (`PlatformProvider`) | Any other remote. Only `dashboard` is in the local manifest |
 | Static hosting of `index.html`, hashed `/assets/`, `/config/runtime.json`, `/remotes/manifest.json`, `/version.json` and `GET /healthz` | Cluster deploy and each environment's runtime config and remote manifest. Publishing a tag pushes an image; it does not roll a cluster |
 
 Everything environment-specific is read at run time from `/config/runtime.json`. Only the identity environment and build version are compiled into the bundle.
@@ -45,7 +45,7 @@ Only an authenticated session renders the app. Before that, the bootstrap mounts
 
 | Path | Signed in |
 |---|---|
-| `/t/<slug>/dashboard/*` | `app2` `./App` inside `RemoteBoundary` |
+| `/t/<slug>/dashboard/*` | `dashboard` `./App` inside `RemoteBoundary` |
 | anything else under `/t/<slug>/` | Redirect to `/t/<slug>/dashboard` |
 | `/auth/callback` | Handled by the SDK, then moved to the page the user opened |
 
@@ -70,11 +70,11 @@ Sign-out is global by default: the Keycloak session ends, every tab drops its to
 |---|---|
 | Host | `shell` (`rsbuild.config.ts`, `pluginPlatform({ role: 'shell' })`) |
 | Remote entries | `/remotes/manifest.json`: `{ "<name>": { "entry", "version", "ownerDomain", "integrity" } }`. `integrity` is required outside `local`, `dev` and `test` |
-| Remote the shell renders | `app2`, module `./App` |
-| Props this shell passes to `app2` `./App` | None. The remote uses `useCurrentUser()` and `useSignOut()` |
+| Remote the shell renders | `dashboard`, module `./App` |
+| Props this shell passes to `dashboard` `./App` | None. The remote uses `useCurrentUser()` and `useSignOut()` |
 | Shared | `react`, `react-dom` (and their JSX and client entries), `@opentelemetry/api`, every SDK subpath. Strict singletons; a remote takes the SDK from the shell (`import: false`) |
 
-A remote must be built with `@bcbp-solutions-fzc-llc/webpack-preset` (`role: 'remote'`); a Vite ES-module remote does not load through the SDK's `loadRemote`. `mfe-dashboard` is built that way (Rsbuild, `pluginPlatform({ role: 'remote', name: 'app2' })`), and it must not be built against a newer SDK than this shell's: upgrade the shell first.
+A remote must be built with `@bcbp-solutions-fzc-llc/webpack-preset` (`role: 'remote'`); a Vite ES-module remote does not load through the SDK's `loadRemote`. `mfe-dashboard` is built that way (Rsbuild, `pluginPlatform({ role: 'remote', name: 'dashboard' })`), and it must not be built against a newer SDK than this shell's: upgrade the shell first.
 
 ### nginx paths
 
@@ -170,7 +170,7 @@ The dev server stands in for what CloudFront and the platform APIs provide (`con
 | Path | Dev server answer |
 |---|---|
 | `/config/runtime.json` | `config/runtime.local.json` (Keycloak `http://localhost:8080`, client `app1`, environment `local`) |
-| `/remotes/manifest.json` | `config/remotes.local.json` (`app2` at `http://localhost:5002/remoteEntry.js`) |
+| `/remotes/manifest.json` | `config/remotes.local.json` (`dashboard` at `http://localhost:5002/remoteEntry.js`) |
 | `GET /api/v1/public/tenants/resolve` | Any identifier → realm `tenant-bcbp` |
 | `GET /api/v1/me/session-context` | Slug `bcbp`, roles `member`, `tenant_owner` (the signup owner; `DEV_ROLES=member,tenant_admin` overrides), 401 without a bearer token |
 | `POST /otel/*` | `204`, dropped |
@@ -227,7 +227,7 @@ Port **8080** is Keycloak in this compose file and also the port the shell image
 |---|---|---|
 | Unit | `test/unit/` | PUB-1 and P-35 mappings and ports, the entry point, remember-email, consent, the screen host, `BrandLogo`, the session-context retry, the navigator adapter, the dev server's platform middleware |
 | Integration | `test/integration/` | Both login layouts and the carousel, the session screens, `App` routes, and the bootstrap's order and branches; axe-core over every shell screen (`accessibility.test.tsx`) |
-| End to end | `test/e2e/` | The real bootstrap, screens, `App` and SDK against a fake Keycloak (PKCE) and network: email → PUB-1 → sign-in → the `app2` remote under `/t/<slug>/`, deep links, role-map permissions in the remote, deny-all, a failing remote, global sign-out, the device clock |
+| End to end | `test/e2e/` | The real bootstrap, screens, `App` and SDK against a fake Keycloak (PKCE) and network: email → PUB-1 → sign-in → the `dashboard` remote under `/t/<slug>/`, deep links, role-map permissions in the remote, deny-all, a failing remote, global sign-out, the device clock |
 | Smoke | `test/smoke/` | `npm run test-smoke` against the served image (CI) or a deployment: the SPA rule, Cache-Control, script integrity, 404s, and the runtime files validated by the SDK. See [test/smoke/README.md](./test/smoke/README.md) |
 | Browser | `test/browser/` | `npm run test-browser` after a build: the production bundle in Chromium, Firefox and WebKit under the production CSP and Trusted Types, with a fake Keycloak on a second origin: fonts, PKCE sign-in, the remote with integrity, `navigate()`, the sign-out form POST, the start-up failure report, colour contrast |
 | Dashboard contract | `test/browser/dashboard.spec.ts`, CI `dashboard-contract` | The real mfe-dashboard build (`REMOTE_DIST`) in this shell, three engines, production CSP: integrity, share scope and CSS, the role map reaching it, its navigation, its Logout through the shell's form POST. Informational in CI |
@@ -334,7 +334,7 @@ docker run --rm -p 18080:8080 \
   web-shell:local
 ```
 
-**Without CloudFront** (until it is available): the load balancer or ingress routes `/api`, `/otel`, `/csp-report` and `/remotes/app2/` on the same origin, and the image gets the CSP and HSTS as mounted files. See [docs/hosting-without-cloudfront.md](./docs/hosting-without-cloudfront.md); remove those mounts when CloudFront arrives.
+**Without CloudFront** (until it is available): the load balancer or ingress routes `/api`, `/otel`, `/csp-report` and `/remotes/dashboard/` on the same origin, and the image gets the CSP and HSTS as mounted files. See [docs/hosting-without-cloudfront.md](./docs/hosting-without-cloudfront.md); remove those mounts when CloudFront arrives.
 
 Two stages, both digest-pinned: `node:26-bookworm` runs `npm ci` and `npm run build`, then deletes the source maps; `nginxinc/nginx-unprivileged:1.31-alpine` serves `/usr/share/nginx/html` as uid 101. The CI smoke job fails the image above 200 MB, requires `/healthz`, `/` (a document that contains `id="app"`), `/config/runtime.json` and `/version.json` to return 200, fails when the image contains a `.map` file, and then runs the smoke suite against the container (`npm run test-smoke`, [test/smoke/README.md](./test/smoke/README.md)). To run it locally: `docker run -d --rm -p 127.0.0.1:18080:8080 web-shell:local`, then `SMOKE_BASE_URL=http://127.0.0.1:18080 npm run test-smoke`.
 
@@ -350,7 +350,7 @@ Two stages, both digest-pinned: `node:26-bookworm` runs `npm ci` and `npm run bu
 
 | Endpoint | Returns | Meaning |
 |---|---|---|
-| `GET /healthz` | `200` and `ok` | nginx is serving. It does not check Keycloak, the IAM APIs or `app2` |
+| `GET /healthz` | `200` and `ok` | nginx is serving. It does not check Keycloak, the IAM APIs or `dashboard` |
 
 ---
 
@@ -374,9 +374,9 @@ Two stages, both digest-pinned: `node:26-bookworm` runs `npm ci` and `npm run bu
 | `GET /api/v1/public/tenants/resolve?identifier=` (PUB-1) | The email sign-in screen, and workspace switching. No token |
 | `GET /api/v1/me/session-context` (P-35) | Once after sign-in; on a network error, timeout, 429 or 5xx again after 1 s, 2 s, 4 s. Until it answers the app renders with deny-all permissions |
 
-### Dashboard remote (`app2`)
+### Dashboard remote (`dashboard`)
 
-The shell loads `app2`'s entry from `/remotes/manifest.json` in the browser and renders its `./App` with no props; the remote reads the user and sign-out from the SDK. A missing or failing remote stays inside its boundary; the shell keeps running.
+The shell loads `dashboard`'s entry from `/remotes/manifest.json` in the browser and renders its `./App` with no props; the remote reads the user and sign-out from the SDK. A missing or failing remote stays inside its boundary; the shell keeps running.
 
 ### Telemetry
 
@@ -389,7 +389,7 @@ Traces, logs and metrics are exported over OTLP/HTTP to `telemetry.otlpBaseUrl` 
 | Concern | Where it lives |
 |---|---|
 | Passwords, MFA, user registration, token issuance | Keycloak |
-| Dashboard layout, tickets, user management screens | `mfe-dashboard` (`app2`) |
+| Dashboard layout, tickets, user management screens | `mfe-dashboard` (remote `dashboard`) |
 | Tenant resolution, session context, authorization decisions | IAM services and the gateway. UI permissions here are hints |
 | Each environment's runtime config, remote manifest and CSP headers | The deploy pipeline and CloudFront |
 | Notifications and live updates | Not implemented in this repository |

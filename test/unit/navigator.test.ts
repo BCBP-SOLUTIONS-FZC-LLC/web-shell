@@ -13,8 +13,8 @@ describe('shellNavigator', () => {
   it('routes a path under the basename through the router, keeping query and hash', () => {
     const router = vi.fn()
     const nav = shellNavigator(router, '/t/acme')
-    nav('app2', '/t/acme/dashboard/members?tab=2#top')
-    nav('app2', '/t/acme', { replace: true })
+    nav('dashboard', '/t/acme/dashboard/members?tab=2#top')
+    nav('dashboard', '/t/acme', { replace: true })
     expect(router.mock.calls).toEqual([
       ['/dashboard/members?tab=2#top', {}],
       ['/', { replace: true }],
@@ -25,8 +25,8 @@ describe('shellNavigator', () => {
   it('loads any other path in full: another workspace, or a prefix look-alike', () => {
     const router = vi.fn()
     const nav = shellNavigator(router, '/t/acme')
-    nav('app2', '/t/other/dashboard')
-    nav('app2', '/t/acme-two/dashboard', { replace: true })
+    nav('dashboard', '/t/other/dashboard')
+    nav('dashboard', '/t/acme-two/dashboard', { replace: true })
     expect(router).not.toHaveBeenCalled()
     const origin = window.location.origin
     expect(assigned).toEqual([`assign ${origin}/t/other/dashboard`, `replace ${origin}/t/acme-two/dashboard`])

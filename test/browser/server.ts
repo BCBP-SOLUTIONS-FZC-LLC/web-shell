@@ -11,8 +11,8 @@
 //   global sign-out POSTs a form to.
 //
 // With REMOTE_DIST set to a built mfe-dashboard's dist/ (the dashboard contract run, CI `Dashboard
-// contract`), the manifest's app2 is that real build instead of the stub: its remoteEntry.js and
-// chunks served under /remotes/app2/<version>/, with the integrity its build wrote to
+// contract`), the manifest's `dashboard` is that real build instead of the stub: its remoteEntry.js and
+// chunks served under /remotes/dashboard/<version>/, with the integrity its build wrote to
 // remote-manifest-entry.json.
 //
 // HTTPS with a throwaway self-signed certificate: the production CSP has upgrade-insecure-requests,
@@ -30,6 +30,8 @@ const DIST = join(ROOT, 'dist')
 const BUILD_DIR = join(import.meta.dirname, '.build')
 export const CLIENT = 'tender-web'
 export const EMAIL = 'ada@acme.test'
+/** The remote this shell loads (src/App.tsx DASHBOARD_REMOTE): manifest key, container `__platform_mfe_<name>`, path. */
+export const REMOTE = 'dashboard'
 const REALM = 'tenant-acme'
 
 /** The platform CSP (platform-reactcommon examples/cloudfront/csp.mjs buildCsp, alpha.4). */
@@ -69,7 +71,7 @@ function certificate(): { key: Buffer; cert: Buffer } {
 }
 
 /**
- * The remote's entry: defines __platform_mfe_app2 as remoteEntry.js does, and builds the dashboard
+ * The remote's entry: defines __platform_mfe_dashboard as remoteEntry.js does, and builds the dashboard
  * from the shell's shared React and SDK (no bundle of its own), reading the user, navigation and
  * sign-out through SDK hooks.
  */
@@ -79,7 +81,7 @@ const REMOTE_ENTRY = `(() => {
     const versions = scope[name]
     return (await versions[Object.keys(versions)[0]].get())()
   }
-  window.__platform_mfe_app2 = {
+  window.__platform_mfe_dashboard = {
     init(s) { scope = s },
     async get(module) {
       if (module !== './App') throw new Error('Module "' + module + '" does not exist in container.')
@@ -95,7 +97,7 @@ const REMOTE_ENTRY = `(() => {
         return h('main', null,
           h('h1', null, 'Dashboard for ' + (user && user.name) + ' in ' + (workspace && workspace.slug)),
           canManage ? h('button', { type: 'button' }, 'Invite') : null,
-          h('button', { type: 'button', onClick: () => nav.navigate('app2', '/t/' + workspace.slug + '/dashboard/members') }, 'Members'),
+          h('button', { type: 'button', onClick: () => nav.navigate('dashboard', '/t/' + workspace.slug + '/dashboard/members') }, 'Members'),
           h('button', { type: 'button', onClick: () => void signOut() }, 'Sign out'))
       }
       return () => ({ default: Dashboard })
@@ -139,8 +141,13 @@ function remoteBuild(): { dir: string; base: string; version: string; integrity:
   const dir = normalize(dist.startsWith('/') ? dist : join(ROOT, dist))
   const entryFile = join(dir, 'remote-manifest-entry.json')
   if (!existsSync(entryFile)) throw new Error(`test/browser: REMOTE_DIST=${dist} has no remote-manifest-entry.json; build mfe-dashboard first.`)
-  const { app2 } = JSON.parse(readFileSync(entryFile, 'utf8')) as { app2: { version: string; integrity: string } }
-  return { dir, base: `/remotes/app2/${app2.version}/`, version: app2.version, integrity: app2.integrity }
+  const entries = Object.entries(JSON.parse(readFileSync(entryFile, 'utf8')) as Record<string, { version: string; integrity: string }>)
+  const [name, entry] = entries[0] ?? []
+  // The shell loads REMOTE (src/App.tsx DASHBOARD_REMOTE); a build named otherwise cannot load.
+  if (entries.length !== 1 || name !== REMOTE || !entry) {
+    throw new Error(`test/browser: REMOTE_DIST's build names its remote ${JSON.stringify(entries.map(([n]) => n))}; this shell loads "${REMOTE}". Rebuild the matching mfe-dashboard, or rename on both sides together.`)
+  }
+  return { dir, base: `/remotes/${REMOTE}/${entry.version}/`, version: entry.version, integrity: entry.integrity }
 }
 
 const listen = (s: Server) =>
@@ -166,13 +173,13 @@ export async function startServers(): Promise<{ app: string; idp: string; close:
     auth: { ...config.auth, idpOrigin: idp, clientId: CLIENT },
     remotes: { ...config.remotes, retries: 0 },
   }
-  const entryPath = '/remotes/app2/1.0.0/remoteEntry.js'
+  const entryPath = `/remotes/${REMOTE}/1.0.0/remoteEntry.js`
   const integrity = `sha384-${createHash('sha384').update(REMOTE_ENTRY).digest('base64')}`
   /** The real dashboard build (REMOTE_DIST), or undefined for the stub. */
   const real = remoteBuild()
   const manifest = real
-    ? { app2: { entry: `${real.base}remoteEntry.js`, version: real.version, ownerDomain: 'portal', integrity: real.integrity } }
-    : { app2: { entry: entryPath, version: '1.0.0', ownerDomain: 'portal', integrity } }
+    ? { [REMOTE]: { entry: `${real.base}remoteEntry.js`, version: real.version, ownerDomain: 'portal', integrity: real.integrity } }
+    : { [REMOTE]: { entry: entryPath, version: '1.0.0', ownerDomain: 'portal', integrity } }
   const headers = {
     'Content-Security-Policy': buildCsp(idp),
     'Reporting-Endpoints': 'csp="/csp-report"',

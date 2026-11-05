@@ -23,7 +23,7 @@ graph TD
     end
 
     subgraph remote["Remote, loaded in the browser"]
-        app2["app2 ./App\nSDK hooks, no props"]
+        dashboard["dashboard ./App\nSDK hooks, no props"]
     end
 
     subgraph build["Build, not imported by src/"]
@@ -49,7 +49,7 @@ graph TD
     screens --> screen
     login --> logo
     app --> sdkmods
-    app --> app2
+    app --> dashboard
     iam --> sdkmods
     rsbuild --> devplat
     docker --> nginx

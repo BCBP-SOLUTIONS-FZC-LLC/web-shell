@@ -14,6 +14,7 @@
 
 | Date | Change |
 |---|---|
+| 2026-11-05 | Remote renamed `app2` → `dashboard` (breaking; pairs with mfe-dashboard `v0.3.0`) |
 | 2026-11-05 | SDK `1.0.0-alpha.5` (optional `auth.signInUrl` for standalone remotes; host-page docs). Checked against mfe-dashboard `v0.1.1` (alpha.4) |
 | 2026-11-05 | Docs aligned with `main` after #25–#27: status, layout, hosting until CloudFront, release workflow, compatibility, open items |
 | 2026-11-05 | Release workflow fixed before its first run (#27): provenance via `imagetools`, release notes, `BUILD_VERSION` without `v`, source maps artifact |
@@ -91,7 +92,7 @@ The shell implements only what the SDK leaves to a shell: the screens, the two I
 | Credentials, MFA, token issuance, realms | Keycloak |
 | PKCE, token handling, refresh, idle timeout, cross-tab sign-out, workspace cache | SDK `/auth` |
 | Tenant resolution, session context, roles, authorization decisions | IAM services, the gateway (AuthZ Enrichment) |
-| Dashboard screens, user management | `mfe-dashboard` (remote `app2`) |
+| Dashboard screens, user management | `mfe-dashboard` (remote `dashboard`) |
 | Each environment's `/config/runtime.json`, `/remotes/manifest.json`, CSP and security headers | Deploy pipeline, CloudFront |
 | Cluster rollout | Operators. A tag publishes an image; nothing deploys it |
 
@@ -112,7 +113,7 @@ The shell implements only what the SDK leaves to a shell: the screens, the two I
 src/
   index.ts                  async boundary → bootstrap(); showUnavailable on a throw
   bootstrap.tsx             the only module that wires platform/ and renders #app
-  App.tsx                   BrowserRouter (basename /t/<slug>), /dashboard/* → RemoteBoundary app2 ./App
+  App.tsx                   BrowserRouter (basename /t/<slug>), /dashboard/* → RemoteBoundary dashboard ./App
   platform/
     iam.ts                  toWorkspace, toSessionContext, workspaceResolver, sessionContextSource
     permissions.ts          IAM_ROLES, permissions (role → action:resource)
@@ -221,11 +222,11 @@ Keys are IAM's closed role set: `member`, `tenant_owner`, `tenant_admin`, `tende
 
 | Item | Value |
 |---|---|
-| Remote | `app2`, module `./App`, default export a component |
-| Container global | `window.__platform_mfe_app2` (preset `containerName`, SDK alpha.4); a remote built with an older preset defines `app2` and fails as `incompatible` |
+| Remote | `dashboard`, module `./App`, default export a component |
+| Container global | `window.__platform_mfe_dashboard` (preset `containerName`, SDK alpha.4); a remote built with an older preset defines `dashboard` and fails as `incompatible` |
 | Props | None |
-| Entry | `/remotes/manifest.json` `{ "app2": { entry, version, ownerDomain, integrity? } }`; `integrity` required outside `local`, `dev`, `test` |
-| Build | `@bcbp-solutions-fzc-llc/webpack-preset` remote (`pluginPlatform({ role: 'remote', name: 'app2', exposes: { './App': … } })` or the webpack/Rspack equivalents), SDK `import: false` |
+| Entry | `/remotes/manifest.json` `{ "dashboard": { entry, version, ownerDomain, integrity? } }`; `integrity` required outside `local`, `dev`, `test` |
+| Build | `@bcbp-solutions-fzc-llc/webpack-preset` remote (`pluginPlatform({ role: 'remote', name: 'dashboard', exposes: { './App': … } })` or the webpack/Rspack equivalents), SDK `import: false` |
 | Route template | `/t/:slug/dashboard` (`useRouteTemplate` in `App.tsx`) |
 
 ---
@@ -307,7 +308,7 @@ Here (a remote's `useSignOut()`) or in another tab (`BroadcastChannel('platform-
 
 ### 6.7 Dashboard load
 
-`/dashboard/*` → `useRouteTemplate('/t/:slug/dashboard')`, `<RemoteBoundary remote="app2" module="./App" fallback="Loading dashboard…">`. The SDK's `loadRemote`: kill switch (`remotes.killSwitch`, flag `remote.app2.disabled`), entry origin (page or `remotes.allowedOrigins`), classic `<script>` with `integrity`, timeout `remotes.loadTimeoutMs`, `retries`, container from `window.__platform_mfe_app2`, share-scope init. Any failure stays inside the boundary ("Something went wrong." / "Try again"); "Try again" asks the container again without a reload.
+`/dashboard/*` → `useRouteTemplate('/t/:slug/dashboard')`, `<RemoteBoundary remote="dashboard" module="./App" fallback="Loading dashboard…">`. The SDK's `loadRemote`: kill switch (`remotes.killSwitch`, flag `remote.dashboard.disabled`), entry origin (page or `remotes.allowedOrigins`), classic `<script>` with `integrity`, timeout `remotes.loadTimeoutMs`, `retries`, container from `window.__platform_mfe_dashboard`, share-scope init. Any failure stays inside the boundary ("Something went wrong." / "Try again"); "Try again" asks the container again without a reload.
 
 ---
 
@@ -322,7 +323,7 @@ Here (a remote's `useSignOut()`) or in another tab (`BroadcastChannel('platform-
 | Manifest | degrade | `error` log; the boundary shows its error |
 | Remote load or render | degrade | Boundary message, "Try again" |
 | Telemetry export | ignore | SDK queues; nothing beyond `essential` without consent |
-| `/healthz` | liveness only | Constant `ok`; does not check Keycloak, IAM or `app2` |
+| `/healthz` | liveness only | Constant `ok`; does not check Keycloak, IAM or `dashboard` |
 
 ---
 
@@ -438,13 +439,13 @@ Vitest 5, happy-dom at `http://localhost:5001/`, Testing Library. `vitest.config
 |---|---|---|---|
 | Unit | `test/unit/` | partly (`createTestPlatform`, `mockApi`, `roleMapAuthorizer`) | PUB-1/P-35 mappings against the SDK's contract cases, the entry point, remember-email, consent, the role map, the screen host, `BrandLogo`, the login variant, the dev middleware (node env, real HTTP) |
 | Integration | `test/integration/` | no (`vi.mock` recording fakes) | The bootstrap's exact order and every branch, login layouts and carousel (only current and next photo fetched), session screens (alerts, dialog focus), `App` routes and the missing-context notice, axe-core over every shell screen (`accessibility.test.tsx`, colour contrast excluded) |
-| End to end | `test/e2e/shell.test.tsx` | yes | Email → PUB-1 → PKCE → callback → `app2` under `/t/acme/dashboard`; tokens never stored; deep link; role map reaching the remote; deny-all; failing remote and Try again; global sign-out (form POST to Keycloak) with no silent sign-in after; device clock; unknown email |
+| End to end | `test/e2e/shell.test.tsx` | yes | Email → PUB-1 → PKCE → callback → `dashboard` under `/t/acme/dashboard`; tokens never stored; deep link; role map reaching the remote; deny-all; failing remote and Try again; global sign-out (form POST to Keycloak) with no silent sign-in after; device clock; unknown email |
 | Smoke | `test/smoke/deployment.test.ts` | yes (config and manifest validation) | Against `SMOKE_BASE_URL`: the SPA rule, Cache-Control, entry integrity, no maps, 404s, `/healthz`; `image` mode adds nginx's baseline headers, gzip, no version, dotfile 404s; `live` mode adds CloudFront's CSP (including `form-action` allowing the IdP), HSTS and nosniff |
 
-E2E seams (`test/fixtures/`): `FakeKeycloak` (authorize via `approve()`, token endpoint with PKCE check and refresh rotation), `FakeNetwork` (route table on the page origin; `/otel` → 204), `FakeBroadcastChannel`. Only the remote's entry `<script>` is stubbed: it defines `window.__platform_mfe_app2` exposing a dashboard built on SDK hooks. A page load clears `globalThis[Symbol.for('@bcbp-solutions-fzc-llc/frontend-sdk')]`, resets modules, and imports the bootstrap again; storage is kept.
+E2E seams (`test/fixtures/`): `FakeKeycloak` (authorize via `approve()`, token endpoint with PKCE check and refresh rotation), `FakeNetwork` (route table on the page origin; `/otel` → 204), `FakeBroadcastChannel`. Only the remote's entry `<script>` is stubbed: it defines `window.__platform_mfe_dashboard` exposing a dashboard built on SDK hooks. A page load clears `globalThis[Symbol.for('@bcbp-solutions-fzc-llc/frontend-sdk')]`, resets modules, and imports the bootstrap again; storage is kept.
 
 | Browser | `test/browser/shell.spec.ts` (Playwright) | the production build | Chromium, Firefox, WebKit over HTTPS with the production CSP and Trusted Types (`server.ts`), a fake Keycloak on a second origin, a remote stub on the shared SDK: fonts and hashed images with no third-party request, PKCE sign-in and the remote with integrity, `navigate()` without a reload, the sign-out form POST under `form-action`, the start-up failure at `/otel`, axe colour contrast (the logotype is exempt, WCAG 1.4.3). Any CSP report fails the test |
-| Dashboard contract | `test/browser/dashboard.spec.ts` (`REMOTE_DIST`) | the production build | A real mfe-dashboard build served as `app2` with its own `remote-manifest-entry.json` integrity: it loads with its CSS and no CSP violation, every image it shows loads, the role map reaches it, its `NavLink` stays in the page, its Logout POSTs to Keycloak through the shell. A wrong integrity fails it |
+| Dashboard contract | `test/browser/dashboard.spec.ts` (`REMOTE_DIST`) | the production build | A real mfe-dashboard build served as `dashboard` with its own `remote-manifest-entry.json` integrity: it loads with its CSS and no CSP violation, every image it shows loads, the role map reaches it, its `NavLink` stays in the page, its Logout POSTs to Keycloak through the shell. A wrong integrity fails it |
 
 ---
 
@@ -474,7 +475,7 @@ Every `npm ci` reads `@bcbp-solutions-fzc-llc/*` from GitHub Packages with `GITH
 | SDK | Pinned exactly; the shell shares it as `1.0.0-alpha.5` under the preset's range `^1.0.0-0`. It loads remotes built on alpha.4 (`^1.0.0-alpha.4`) and alpha.5 |
 | Remotes | A remote built with the preset requires `^<its SDK version>`: it must not be newer than the shell's. **Upgrade the shell first**, then remotes. A release that changes the shell–remote contract is the exception (alpha.4 changed the container global): the shell and every remote deploy together. `npm run test-contract` checks a pairing |
 | React | Strict singleton `^19.0.0` from the preset; the shell ships 19.3 |
-| `mfe-dashboard` (`app2`) | Rsbuild remote with `pluginPlatform({ role: 'remote', name: 'app2' })`, async-only chunk splitting, reads the user and sign-out through SDK hooks, takes no props. alpha.4 from its `main` and tag `v0.1.0` on. Contract suite (`dashboard.spec.ts`) on 2026-11-05 against `main` `e1b04c3` and branch `0be083c` (v0.1.1 prep): 9/9 in three engines (loads with its CSS and integrity, role map reaches it, `NavLink` without a reload, Logout through the shell's form POST). Its `v0.1.0` tag has no published release (its provenance step failed); `v0.1.1` is pending. An alpha.3 build does not load in this shell |
+| `mfe-dashboard` (remote `dashboard`) | Rsbuild remote with `pluginPlatform({ role: 'remote', name: 'dashboard' })`, async-only chunk splitting, reads the user and sign-out through SDK hooks, takes no props. alpha.4 from its `main` and tag `v0.1.0` on. Contract suite (`dashboard.spec.ts`) on 2026-11-05 against `main` `e1b04c3` and branch `0be083c` (v0.1.1 prep): 9/9 in three engines (loads with its CSS and integrity, role map reaches it, `NavLink` without a reload, Logout through the shell's form POST). Its `v0.1.0` tag has no published release (its provenance step failed); `v0.1.1` is pending. An alpha.3 build does not load in this shell |
 | Keycloak | Each workspace realm registers `{origin}/auth/callback` and the origin as post-logout redirect for the client |
 
 Details: [VERSIONING.md](../../VERSIONING.md).
@@ -491,7 +492,7 @@ Details: [VERSIONING.md](../../VERSIONING.md).
 | 6 | PUB-1 and P-35 must exist behind `/api` in every environment; they are stubbed only in dev | IAM |
 | 7 | No cluster deploy; each environment serves its own runtime config and manifest (with the remote's integrity) and registers its redirect URIs in each realm | operators |
 | 8 | Tender permissions in the role map are provisional | Tender Service |
-| 9 | No CloudFront until next month: environments route `/api`, `/otel`, `/csp-report`, `/remotes/app2/` at the ingress and mount the CSP (IdP in `form-action`) and HSTS ([hosting-without-cloudfront.md](../hosting-without-cloudfront.md)); remove the mounts when CloudFront arrives | operators |
+| 9 | No CloudFront until next month: environments route `/api`, `/otel`, `/csp-report`, `/remotes/dashboard/` at the ingress and mount the CSP (IdP in `form-action`) and HSTS ([hosting-without-cloudfront.md](../hosting-without-cloudfront.md)); remove the mounts when CloudFront arrives | operators |
 | 10 | Keycloak realms need SMTP and "Forgot password" enabled for the reset flow (§6.1a); unconfirmed | Keycloak ops |
 | 11 | The `WebShellStartupFailures` alert ([runbook](../runbook-startup-failure.md)) is an example; it must be deployed to the Loki ruler | operators |
 | 12 | First release: add `## [0.1.0]` to the CHANGELOG, set `package.json` `version`, tag `v0.1.0` (release workflow never run), then `SMOKE_MODE=live` against the environment | this repo |
