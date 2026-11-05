@@ -42,6 +42,8 @@ Pull requests that change the shell, its dependencies, or the image add an entry
 
 ### Changed
 
+- **Release tags only on a signed image (`2026-11-05`).** `release.yml` pushes the image by digest (`push-by-digest`), scans and builds the SBOM from that digest, exports provenance, signs and verifies it, and only then adds `X.Y.Z`, `X.Y`, `X` and `latest` (`.github/scripts/tag-signed-image.sh`, from mfe-dashboard #22: `imagetools create` for metadata-action's tags, then each must resolve to the signed digest). Before, the tags were pushed first, so a failed scan, provenance export or signature left them on an unscanned or unsigned image, as happened to mfe-dashboard's `v0.1.0`. Checked with actionlint, shellcheck and a stubbed `docker` (matching digest, another digest, no tags); not yet run on GitHub Actions.
+
 - **The release workflow, checked before its first run (`2026-11-05`).** mfe-dashboard's `v0.1.0` release failed at "Export SLSA provenance" with the same script this repository had; three more release steps differed from it:
   - `export-image-provenance.sh` read a Cosign attestation that does not exist: `build-push-action` (`provenance: mode=max`) stores provenance as a BuildKit attestation in the image index. It now reads it with `docker buildx imagetools inspect` (checked against `web-shell:main`). Without this the first tag would have pushed an image and stopped before signing it or opening the Release.
   - `extract-release-notes.sh` piped `tee` into `true`, which could cut the notes short on a closed pipe; plain redirects now (a 3 000-line section extracted whole).

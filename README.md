@@ -298,7 +298,7 @@ Every `npm ci` reads `@bcbp-solutions-fzc-llc/*` from GitHub Packages with `GITH
 - **`validate-test.yml`** — `npm ci`, `npm run test:coverage`, the 95% coverage gate, then `npm run build`.
 - **`validate-quality.yml`** — ESLint (`--max-warnings 0`) and `npm run typecheck`. Workflow files must use literal operators and LF line endings, `Dockerfile` `FROM` lines must be digest-pinned, `.dockerignore` must exist, and `npm audit --omit=dev --audit-level=high` must pass.
 - **`changelog-check.yml`** — a pull request that touches `src/`, `package.json`, `package-lock.json`, `Dockerfile`, `nginx/`, `rsbuild.config.ts`, `config/**`, `public/config/**`, or `index.html` must also update `CHANGELOG.md`.
-- **`release.yml`** — tag `vX.Y.Z` or `vX.Y.Z-*`, or a manual run with a tag input. Re-validates, requires a matching changelog section, packs `web-shell_<tag>_dist.tar.gz` (source maps removed), pushes the semver image tags, scans, attaches the SBOM and SLSA provenance, signs with Cosign, and opens the GitHub Release. Tagging does not deploy a cluster.
+- **`release.yml`** — tag `vX.Y.Z` or `vX.Y.Z-*`, or a manual run with a tag input. Re-validates, requires a matching changelog section, packs `web-shell_<tag>_dist.tar.gz` (source maps removed), pushes the image by digest only, scans it, attaches the SBOM and SLSA provenance, signs with Cosign, and only then adds the semver tags and `latest` (`tag-signed-image.sh`), so a failed step leaves an untagged digest and moves no tag; then it opens the GitHub Release. Tagging does not deploy a cluster.
 
 Image tag rules, the Cosign identity, and the maintainer steps are in [VERSIONING.md](./VERSIONING.md).
 

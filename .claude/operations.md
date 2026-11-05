@@ -38,7 +38,7 @@ Runbooks: `docs/runbook-coverage-gate.md`, `docs/runbook-image-scan.md`, `docs/r
 
 ## Release
 
-`vX.Y.Z[-*]` tag → `release.yml`: re-validate, `## [X.Y.Z]` changelog section, `web-shell_<tag>_dist.tar.gz`, semver image tags, scan, SBOM, SLSA, Cosign, GitHub Release. Tagging never deploys. See `VERSIONING.md`.
+`vX.Y.Z[-*]` tag → `release.yml`: re-validate, `## [X.Y.Z]` changelog section, `web-shell_<tag>_dist.tar.gz`, image by digest, scan, SBOM, SLSA, Cosign, then the semver tags and `latest` on the signed digest, GitHub Release. Tagging never deploys. See `VERSIONING.md`.
 
 ## SDK upgrade checklist
 
