@@ -29,3 +29,8 @@ docker.local.env
 
 # Claude Code: personal settings
 .claude/settings.local.json
+
+# Real-browser suite (Playwright)
+test-results/
+playwright-report/
+test/browser/.build/

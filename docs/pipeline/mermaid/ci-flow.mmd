@@ -1,9 +1,10 @@
 flowchart LR
-    test["validate-test\nVitest and 95% gate\nnpm run build"]
+    test["validate-test\nVitest and 95% gate\nnpm run build, size budget"]
     quality["validate-quality\nESLint, tsc, pin, LF, npm audit"]
     build["build-image\nHadolint then Buildx cache"]
     trivy["trivy\nCRITICAL HIGH UNKNOWN"]
     smoke["smoke\nsize, startup gate, no .map\nnpm run test-smoke"]
+    browser["browser\nChromium, Firefox, WebKit\nproduction CSP"]
     summary["pr-summary\npull requests only"]
     push["push\nmain and master only\nGHCR and Cosign"]
 
@@ -16,7 +17,9 @@ flowchart LR
     build --> summary
     trivy --> summary
     smoke --> summary
+    browser --> summary
     test --> push
     quality --> push
     trivy --> push
     smoke --> push
+    browser --> push

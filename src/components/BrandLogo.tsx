@@ -1,3 +1,6 @@
+// Bundled, so the file is content-hashed under /assets/ and cached immutably.
+import logo from '../assets/images/logo.png'
+
 type BrandLogoProps = {
   className?: string
   size?: number
@@ -7,7 +10,7 @@ type BrandLogoProps = {
 export function BrandLogo({ className = '', size = 52 }: BrandLogoProps) {
   return (
     <img
-      src="/image/logo.png"
+      src={logo}
       alt="Beyond Code"
       width={size}
       height={size}

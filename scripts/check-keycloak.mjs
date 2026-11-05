@@ -20,7 +20,7 @@ for (const base of bases) {
 console.error('')
 console.error('Nothing is listening on port 8080 (or realm "tenant-bcbp" is missing).')
 console.error('1. Open Docker Desktop — engine must be running.')
-console.error('2. From app1: npm run keycloak:dev:detach')
+console.error('2. From web-shell: npm run keycloak:dev:detach')
 console.error('3. Watch logs: npm run keycloak:logs')
 console.error('4. Wait until: npm run keycloak:status')
 process.exit(1)

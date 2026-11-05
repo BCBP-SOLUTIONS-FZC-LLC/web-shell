@@ -20,11 +20,12 @@ Node on every job is **26**. Every `npm ci` reads `@bcbp-solutions-fzc-llc/*` fr
 
 ```mermaid
 flowchart LR
-    test["validate-test\nVitest and 95% gate\nnpm run build"]
+    test["validate-test\nVitest and 95% gate\nnpm run build, size budget"]
     quality["validate-quality\nESLint, tsc, pin, LF, npm audit"]
     build["build-image\nHadolint then Buildx cache"]
     trivy["trivy\nCRITICAL HIGH UNKNOWN"]
     smoke["smoke\nsize, startup gate, no .map\nnpm run test-smoke"]
+    browser["browser\nChromium, Firefox, WebKit\nproduction CSP"]
     summary["pr-summary\npull requests only"]
     push["push\nmain and master only\nGHCR and Cosign"]
 
@@ -37,10 +38,12 @@ flowchart LR
     build --> summary
     trivy --> summary
     smoke --> summary
+    browser --> summary
     test --> push
     quality --> push
     trivy --> push
     smoke --> push
+    browser --> push
 ```
 
 Source: [`mermaid/ci-flow.mmd`](mermaid/ci-flow.mmd).
@@ -49,11 +52,12 @@ Source: [`mermaid/ci-flow.mmd`](mermaid/ci-flow.mmd).
 
 | Job | Gate |
 |---|---|
-| `validate-test` | `npm ci`, `npm run test:coverage`, [`.github/scripts/coverage-gate.mjs`](../../.github/scripts/coverage-gate.mjs) at 95% for statements, branches, functions, and lines, upload `coverage/`, then `npm run build` (`tsc` and `rsbuild build`). See [the coverage runbook](../runbook-coverage-gate.md) |
+| `validate-test` | `npm ci`, `npm run test:coverage`, [`.github/scripts/coverage-gate.mjs`](../../.github/scripts/coverage-gate.mjs) at 95% for statements, branches, functions, and lines, upload `coverage/`, then `npm run build` (`tsc` and `rsbuild build`) and `npm run budget` ([`.github/scripts/bundle-budget.mjs`](../../.github/scripts/bundle-budget.mjs): entry 12 KB, JS+CSS 300 KB, largest file 85 KB gzip, images 2.7 MB). See [the coverage runbook](../runbook-coverage-gate.md) |
 | `validate-quality` | `npm run lint -- --max-warnings 0` and `npm run typecheck`. No HTML entities in workflows or scripts. LF in `.github/scripts`, `.github/workflows`, `Dockerfile`, and `nginx/`. Every `FROM` is `image:tag@sha256:…`. `.dockerignore` exists. `npm audit --omit=dev --audit-level=high` |
 | `build-image` | Hadolint on `Dockerfile`, then a `linux/amd64` build tagged `web-shell-ci-test` and stored in the Actions cache. Build args: `BUILD_VERSION` and `SOURCE_DATE_EPOCH`; secret `npm_token`. `PLATFORM_ENVIRONMENT` keeps its default, `prod` |
 | `trivy` | Reloads that cached image. Fails on unfixed **CRITICAL**, **HIGH**, or **UNKNOWN**. SARIF is uploaded and does not fail the job by itself. CycloneDX SBOM is an artifact named `sbom-<sha>`. Allowlist file: [`.trivyignore`](../../.trivyignore). See [the image runbook](../runbook-image-scan.md) |
 | `smoke` | Same cached image, then Node 26 and `npm ci` (`NODE_AUTH_TOKEN`). [`.github/scripts/smoke-tests.sh`](../../.github/scripts/smoke-tests.sh): at most 200 MB, `GET /healthz` contains `ok`, `GET /` is 200 and contains `id="app"`, `GET /config/runtime.json` and `GET /version.json` are 200, no `.map` file is in the image, then `npm run test-smoke` with `SMOKE_MODE=image` against the container ([test/smoke](../../test/smoke/README.md): SPA rule, Cache-Control, integrity, 404s, SDK-validated runtime files) |
+| `browser` | Node 26, `npm ci`, `npx playwright install --with-deps`, `npm run build`, `npm run test-browser` ([test/browser](../../test/browser/README.md)): Chromium, Firefox and WebKit under the production CSP. The report is uploaded on failure. Gates `push` |
 | `pr-summary` | [`.github/scripts/pr-summary.js`](../../.github/scripts/pr-summary.js) posts one comment. The coverage cell uses the `pct` output of `validate-test` |
 | `push` | Push events on `main` or `master` only. Publishes `ghcr.io/bcbp-solutions-fzc-llc/web-shell` with the branch tag and `sha-<short>`, `provenance` and `sbom` on the build, then Cosign keyless sign and verify. The verify identity is `refs/heads/main` or `refs/heads/master` |
 

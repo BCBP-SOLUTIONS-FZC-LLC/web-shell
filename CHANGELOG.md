@@ -30,7 +30,7 @@ Pull requests that change the shell, its dependencies, or the image add an entry
   - `.github/workflows/release.yml` on `vX.Y.Z` and `vX.Y.Z-*` re-validates, requires the changelog section, packs `web-shell_<tag>_dist.tar.gz`, pushes image tags `X.Y.Z`, `X.Y`, and `X` (plus `latest` when the tag has no pre-release suffix), attaches the SBOM and SLSA provenance, signs with Cosign, and opens the GitHub Release. Tagging does not deploy a cluster.
   - Dependabot is enabled for npm, Docker, and GitHub Actions.
 
-- **Test suite.** Vitest 5, happy-dom, Testing Library. `test/unit` covers the IAM port mappings, the entry point, remember-email, consent, the screen host, `BrandLogo`, and the login variant. `test/integration` covers both login layouts, the carousel, the session screens, `App` routing, and the bootstrap order and branches with every SDK subpath replaced by a recording fake. Nothing in the suite calls Keycloak, the IAM APIs, or port 5002.
+- **Test suite.** Vitest 5, happy-dom, Testing Library. `test/unit` covers the IAM port mappings, the entry point, remember-email, consent, the screen host, `BrandLogo`, the session-context retry, and the navigator adapter. `test/integration` covers the login page, the carousel, the session screens, `App` routing, and the bootstrap order and branches with every SDK subpath replaced by a recording fake. Nothing in the suite calls Keycloak, the IAM APIs, or port 5002.
 
 - **Local Keycloak.** `docker-compose.keycloak.yml` runs Keycloak 26.8.1 in `start-dev` and imports realm `tenant-bcbp` (`keycloak/import/tenant-bcbp-realm.json`) with public client `app1` (standard flow, PKCE S256, redirect URIs `http://localhost:5001/*` and `http://127.0.0.1:5001/*`, post-logout redirect `+`) and the `bcbp` login theme. `npm run keycloak:setup` starts it, waits until it is ready, and seeds the local user. Admin console: `http://localhost:8080` (`admin` / `admin`).
 
@@ -41,6 +41,19 @@ Pull requests that change the shell, its dependencies, or the image add an entry
 - **Operator docs.** [README.md](./README.md) (routes, federation, local setup, CI, image), [ARCHITECTURE.md](./ARCHITECTURE.md) (module layout, sign-in and dashboard flows, storage, threat model), [docs/](./docs/README.md) (diagram sources, the CI and release pipeline, runbooks for the coverage gate, the image scan, and a failed tag), [VERSIONING.md](./VERSIONING.md) (SemVer for the image and the runtime contract, tag scheme, Cosign verify, maintainer steps), [CONTRIBUTING.md](./CONTRIBUTING.md) (how to extend the shell and what a pull request must include).
 
 ### Changed
+
+- **Launch hardening (`2026-11-05`).**
+  - **The session context recovers without a reload.** A P-35 failure from a network error, timeout, 429 or 5xx is retried after 1 s, 2 s and 4 s (`src/platform/sessionContext.ts`, as alpha.4's reference shell). When it answers, the authorization subject, the tenant flags and the provider's `context` update live (`src/platform/ShellRoot.tsx`), so the remote's permissions appear and "We couldn't load your permissions" goes away. If that moves the URL under `/t/<slug>/`, the router is rebuilt with the new basename. A sign-out stops the retries, and a sign-out (here or in another tab) during start-up stops it before the app mounts. The provider's `locale` now follows `setLocale`.
+  - **The user's IAM language is used.** `initializeI18n` gets `detect` from the P-35 `locale`, before the browser's languages.
+  - **A remote's `navigate()` stays in the page.** The router is registered as the SDK's navigator (`src/platform/navigator.ts`): a path under `/t/<slug>/` goes through React Router; any other path is a full load. `App.tsx` hands over its `navigate` through `onRouter` and still imports only the SDK's `/react`.
+  - **A failed start is reported.** Any throw after `initializeCore` is logged as the essential error `the app could not start` (to the runtime config's collector, or the default `/otel` when the config never arrived) before the unavailable page, so a broken deploy shows in the platform's logs.
+  - **Real-browser suite** (`test/browser`, `npm run test-browser`, CI `Browser tests`, gates `push`): the production build in Chromium, Firefox and WebKit over HTTPS with the production CSP and Trusted Types, a fake Keycloak on a second origin and a remote stub on the shared SDK. Covers fonts and hashed images with no third-party request, PKCE sign-in, the remote's integrity, `navigate()`, the sign-out form POST under `form-action`, the start-up report, and colour contrast. Contrast: the "BCBP SOLUTIONS" logotype's pink (3.4:1 on white) is exempt as a logo (WCAG 1.4.3) and marked `data-logotype`; nothing else failed.
+  - **Bundle budget** (`npm run budget`, `.github/scripts/bundle-budget.mjs`, in `Validate / Test`): entry 12 KB, all JS and CSS 300 KB, largest file 85 KB (gzip), images 2.7 MB. Today: 8 KB, 247 KB, 67 KB, 2.2 MB.
+  - **Carousel photos and the logo are bundled** from `src/assets/images/` into `/assets/` with a content hash, so they are cached immutably instead of revalidated on every visit. `public/image/` is gone (with the unused `cityscape.jpg`).
+  - **Removed:** the previous login layout `LoginPage1`, `?variant=login1` and `src/pages/loginVariant.ts`.
+  - **Package renamed** from `app1` to `web-shell` (`package.json`; it is not published). The local Keycloak client is still `app1`.
+  - **Dev audit warnings cleared:** `overrides.minimatch` `^11.0.4` (eslint's dependency; GHSA-g3hv-75wg-m249). `npm audit` reports 0.
+  - `@playwright/test` 1.64.1 (dev).
 
 - **Platform SDK `1.0.0-alpha.4` (`2026-11-05`).** `@bcbp-solutions-fzc-llc/frontend-sdk`, `webpack-preset`, and `eslint-plugin` move from `1.0.0-alpha.3` to `1.0.0-alpha.4`, pinned exactly; the preset's new `SdkVersionPlugin` fails the build if they drift. What changes for the shell:
   - **The dashboard must be rebuilt with it, and both must deploy together.** The SDK reads a remote's container from `window.__platform_mfe_<name>` (`__platform_mfe_app2`), not `window.app2`. An `mfe-dashboard` built with the alpha.3 preset defines the old global, and this shell shows "Something went wrong." in its slot.
@@ -89,11 +102,7 @@ Pull requests that change the shell, its dependencies, or the image add an entry
 
 - **Official help and legal URLs.** Privacy Policy, Terms of Service, Trust & Security and "Trouble logging in?" are hidden until their URLs are set in `src/pages/links.ts`; none is published on bcbpsolutions.com yet.
 
-- **No real-browser suite.** Nothing runs the shell in Chromium, Firefox and WebKit under the production CSP (as `platform-reactcommon` `test/browser` does for the SDK). The fonts no longer block it.
-
-- **SDK features not used yet.** `registerNavigator` (a remote's `navigate()` does a full page load) and i18n `detect` with the P-35 `locale`.
-
-- **The IAM endpoints are stubbed locally only.** PUB-1 and P-35 must exist behind `/api` in every real environment. Without P-35 the shell renders with deny-all permissions and logs a warning.
+- **The IAM endpoints are stubbed locally only.** PUB-1 and P-35 must exist behind `/api` in every real environment. Without P-35 the shell renders with deny-all permissions, logs a warning, and retries a transient failure three times in the background.
 
 - **The shipped runtime config is a default.** `public/config/runtime.json` uses the SDK defaults (`https://auth.bcbpsolutions.com`, client `tender-web`). Each environment serves its own `/config/runtime.json` and `/remotes/manifest.json` (CloudFront, or a file mounted over the image's). The image's manifest is `{}`, so the dashboard slot is empty until one is provided.
 

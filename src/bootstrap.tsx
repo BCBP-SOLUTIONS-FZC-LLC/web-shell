@@ -1,7 +1,8 @@
 // The shell bootstrap, in the SDK's order (design doc §C2; platform-reactcommon
 // examples/shell/src/bootstrap.tsx): core → runtime config → consent → tracing, logging, metrics →
-// auth → session context → i18n → remote manifest → render inside <PlatformProvider>.
-// Remotes initialise nothing; they read this state through the SDK's hooks.
+// auth → session context → i18n → remote manifest → render inside <PlatformProvider>, then a
+// background retry of a session context that failed. Remotes initialise nothing; they read this
+// state through the SDK's hooks.
 import { StrictMode } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { initializeCore, setConsentProvider } from '@bcbp-solutions-fzc-llc/frontend-sdk/core'
@@ -28,12 +29,14 @@ import { setTokenSource } from '@bcbp-solutions-fzc-llc/frontend-sdk/http'
 import { roleMapAuthorizer, setAuthorizer, setAuthzSubject } from '@bcbp-solutions-fzc-llc/frontend-sdk/authz'
 import { initializeI18n } from '@bcbp-solutions-fzc-llc/frontend-sdk/i18n'
 import { loadManifest, startVersionPolling } from '@bcbp-solutions-fzc-llc/frontend-sdk/mfe'
+import { registerNavigator } from '@bcbp-solutions-fzc-llc/frontend-sdk/nav'
 import { installTrustedTypesPolicy } from '@bcbp-solutions-fzc-llc/frontend-sdk/security'
-import { installGlobalErrorHandlers, PlatformProvider } from '@bcbp-solutions-fzc-llc/frontend-sdk/react'
+import { installGlobalErrorHandlers } from '@bcbp-solutions-fzc-llc/frontend-sdk/react'
 import App from './App'
 import { getRememberedEmail } from './pages/rememberEmail'
 import { cmp } from './platform/consent'
 import { sessionContextSource, workspaceResolver } from './platform/iam'
+import { shellNavigator } from './platform/navigator'
 import { permissions } from './platform/permissions'
 import {
   askForWorkspace,
@@ -44,23 +47,55 @@ import {
   showWrongWorkspace,
 } from './platform/SessionScreens'
 import { hideScreen } from './platform/screen'
+import { createStore, retrySessionContext } from './platform/sessionContext'
+import { ShellRoot } from './platform/ShellRoot'
 // Self-hosted fonts (Fontsource, SIL OFL 1.1): served from /assets/, as the platform CSP requires
 // (font-src 'self', style-src 'self').
 import '@fontsource-variable/geist'
 import '@fontsource-variable/inter'
 import './index.css'
 
-export async function bootstrap(): Promise<void> {
-  installTrustedTypesPolicy()
-  initializeCore({
-    serviceName: 'web-shell',
-    domain: 'portal',
-    environment: __ENVIRONMENT__,
-    buildVersion: __BUILD_VERSION__,
-  })
+/** Where the platform's telemetry goes when the runtime config could not be read (its default). */
+const DEFAULT_OTLP_BASE_URL = '/otel'
 
+/**
+ * Starts the shell. A failure is reported as an essential error before it reaches index.ts's
+ * "unavailable" page, so a broken deploy shows up in the platform's logs, not only in the user's
+ * console. It goes to the runtime config's collector once that is read, else the default `/otel`.
+ */
+export async function bootstrap(): Promise<void> {
+  let core = false
+  const report = { otlpBaseUrl: DEFAULT_OTLP_BASE_URL }
+  try {
+    installTrustedTypesPolicy()
+    initializeCore({
+      serviceName: 'web-shell',
+      domain: 'portal',
+      environment: __ENVIRONMENT__,
+      buildVersion: __BUILD_VERSION__,
+    })
+    core = true
+    await start(report)
+  } catch (error) {
+    // Without core there is no identity to report under; the console still has it (index.ts).
+    if (core) reportStartupFailure(error, report.otlpBaseUrl)
+    throw error
+  }
+}
+
+function reportStartupFailure(error: unknown, otlpBaseUrl: string): void {
+  try {
+    initializeLogging({ otlpBaseUrl, level: 'error' }) // no-op when already started
+    getLogger().error('the app could not start', { error })
+  } catch {
+    // Reporting must never hide the unavailable page.
+  }
+}
+
+async function start(report: { otlpBaseUrl: string }): Promise<void> {
   const cfg = await loadRuntimeConfig()
   setRuntimeConfig(cfg)
+  report.otlpBaseUrl = cfg.telemetry.otlpBaseUrl
   setConsentProvider(cmp)
 
   const { otlpBaseUrl, sampleRatio, logLevel } = cfg.telemetry
@@ -102,6 +137,10 @@ export async function bootstrap(): Promise<void> {
   }
 
   let app: Root | undefined
+  // Aborted by a sign-out: stops the session-context retry, and the steps below stop instead of
+  // mounting the app for a user who is gone (checked after every await).
+  const signedOutDuringBoot = new AbortController()
+  const signedOut = () => signedOutDuringBoot.signal.aborted
   idp.subscribe((s) => {
     // Expiry happens only during use. Never redirect on our own; the user clicks "Sign in".
     if (s.status === 'expired') {
@@ -118,6 +157,7 @@ export async function bootstrap(): Promise<void> {
     // Signed out here or in another tab: unmount so the previous user's data is not left under
     // the dialog on a shared device. The SDK makes the next sign-in ask for credentials.
     if (s.status === 'anonymous' && s.reason === 'signed-out') {
+      signedOutDuringBoot.abort()
       app?.unmount()
       app = undefined
       showSignedOut(() => idp.login({ workspace: s.workspace ?? session.workspace }))
@@ -125,47 +165,87 @@ export async function bootstrap(): Promise<void> {
   })
 
   // Roles, plan and flags are not in the token. Without them: deny-all, platform flags only.
-  const context = await sessionContextSource.load().catch((error: unknown) => {
-    getLogger().warn('session context unavailable', { error })
-    return undefined
-  })
   setAuthorizer(roleMapAuthorizer(permissions))
-  setAuthzSubject(context && { roles: context.roles, tenantId: context.tenantId })
-  if (context) {
-    setFlagProvider(sessionContextFlagProvider(context))
+  const context = createStore(
+    await sessionContextSource.load().catch((error: unknown) => {
+      getLogger().warn('session context unavailable', { error })
+      return undefined
+    }),
+  )
+  if (signedOut()) return
+  const applyContext = () => {
+    const c = context.get()
+    setAuthzSubject(c && { roles: c.roles, tenantId: c.tenantId })
+    if (!c) return
+    setFlagProvider(sessionContextFlagProvider(c))
     // Cache the workspace with its slug (trial tokens carry none) and move the URL to /t/<slug>/.
-    rememberWorkspace({ ...session.workspace, slug: context.slug })
+    rememberWorkspace({ ...session.workspace, slug: c.slug })
   }
-  await initializeI18n({ defaultLocale: cfg.i18n.defaultLocale, supported: cfg.i18n.supportedLocales })
+  applyContext()
+  // The user's IAM locale first (P-35), else the browser's languages, else the default.
+  await initializeI18n({
+    defaultLocale: cfg.i18n.defaultLocale,
+    supported: cfg.i18n.supportedLocales,
+    detect: () => context.get()?.locale,
+  })
+  if (signedOut()) return
   await loadManifest().catch((error: unknown) => getLogger().error('manifest load failed', { error }))
+  if (signedOut()) return
   startVersionPolling()
 
   // Route under /t/<slug> only when the URL is there (rememberWorkspace moved it, or the user opened it).
-  const slug = slugFromPath(window.location.pathname, cfg.auth)
-  const basename = slug ? `${cfg.auth.workspacePathPrefix}${slug}` : undefined
+  const routerBasename = () => {
+    const slug = slugFromPath(window.location.pathname, cfg.auth)
+    return slug ? `${cfg.auth.workspacePathPrefix}${slug}` : undefined
+  }
+  const shell = {
+    user: session.user,
+    workspace: session.workspace,
+    switchWorkspace: async (identifier: string) => {
+      const w = await workspaceResolver.resolve(identifier)
+      if (!w) {
+        showWorkspaceNotFound()
+        return
+      }
+      await idp.switchWorkspace(w)
+    },
+    signOut: (o?: { global?: boolean }) => idp.logout(o),
+  }
+  let basename = routerBasename()
+  const render = () => {
+    const base = basename
+    // A remote's navigate() goes through this router when the path is under its basename.
+    const onRouter = (navigate: (to: string, o?: { replace?: boolean }) => void) =>
+      registerNavigator(shellNavigator(navigate, base))
+    app?.render(
+      <StrictMode>
+        <ShellRoot context={context} shell={shell}>
+          {/* Keyed by the basename: a router whose basename changes is a new router. */}
+          <App key={base ?? '/'} {...(base ? { basename: base } : {})} onRouter={onRouter} />
+        </ShellRoot>
+      </StrictMode>,
+    )
+  }
   hideScreen()
   app = createRoot(document.getElementById('app')!)
-  app.render(
-    <StrictMode>
-      <PlatformProvider
-        shell={{
-          user: session.user,
-          workspace: session.workspace,
-          context,
-          locale: document.documentElement.lang,
-          switchWorkspace: async (identifier) => {
-            const w = await workspaceResolver.resolve(identifier)
-            if (!w) {
-              showWorkspaceNotFound()
-              return
-            }
-            await idp.switchWorkspace(w)
-          },
-          signOut: (o) => idp.logout(o),
-        }}
-      >
-        <App {...(basename ? { basename } : {})} />
-      </PlatformProvider>
-    </StrictMode>,
-  )
+  render()
+
+  // A transient failure (network, timeout, 429, 5xx) is retried 3 times (1 s, 2 s, 4 s); on success
+  // the subject, flags and provider get the context. A sign-out stops the retries.
+  if (!context.get()) {
+    const retried = await retrySessionContext((signal) => sessionContextSource.load(signal), {
+      signal: signedOutDuringBoot.signal,
+      onError: (error, attempt) => getLogger().warn('session context unavailable', { error, attempt }),
+    })
+    if (retried && !signedOut()) {
+      context.set(retried)
+      applyContext()
+      // rememberWorkspace may have moved the URL under /t/<slug>/: route from there.
+      const moved = routerBasename()
+      if (moved !== basename) {
+        basename = moved
+        render()
+      }
+    }
+  }
 }

@@ -1,4 +1,4 @@
-# Start local Keycloak (Docker). Run from app1 folder in PowerShell or Windows Terminal.
+# Start local Keycloak (Docker). Run from the web-shell folder in PowerShell or Windows Terminal.
 $ErrorActionPreference = 'Stop'
 $ProjectRoot = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 $ComposeFile = Join-Path $ProjectRoot 'docker-compose.keycloak.yml'

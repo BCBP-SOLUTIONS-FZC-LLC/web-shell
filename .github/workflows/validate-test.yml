@@ -1,5 +1,5 @@
 # Reusable workflow — test gate.
-# Unit · integration · e2e, then a 95% coverage gate, then the production build.
+# Unit · integration · e2e, then a 95% coverage gate, then the production build and its size budget.
 # Called by ci.yml and release.yml. Gates trivy and smoke.
 name: Validate / Test
 
@@ -69,3 +69,6 @@ jobs:
 
       - name: Typecheck and production build
         run: npm run build
+
+      - name: Bundle size budget
+        run: npm run -s budget

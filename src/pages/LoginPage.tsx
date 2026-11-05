@@ -1,6 +1,16 @@
 import { useEffect, useState } from 'react'
 import { useEmailSignIn, type LoginPageProps } from './useEmailSignIn'
 import { BrandLogo } from '../components/BrandLogo'
+import logo from '../assets/images/logo.png'
+import image1 from '../assets/images/image1.jpg'
+import image2 from '../assets/images/image2.jpg'
+import image3 from '../assets/images/image3.jpg'
+import image4 from '../assets/images/image4.jpg'
+import image5 from '../assets/images/image5.jpg'
+import image6 from '../assets/images/image6.jpg'
+import image7 from '../assets/images/image7.jpg'
+import image8 from '../assets/images/image8.jpg'
+import image9 from '../assets/images/image9.jpg'
 import { ForgotPasswordButton, HelpLink, LegalFooter } from './PageLinks'
 
 const FEATURES = [
@@ -11,47 +21,47 @@ const FEATURES = [
 
 const SLIDES = [
   {
-    image: '/image/image1.jpg',
+    image: image1,
     title: ['Next-Gen System, Built for You.', 'Supercharged and Limitless.'],
     body: 'Access your unified workspace with automated governance, low-latency telemetry, and institutional-grade access controls.',
   },
   {
-    image: '/image/image2.jpg',
+    image: image2,
     title: ['Airside programs, held to the plan.'],
     body: 'Coordinate gates, works, and contractors from one workspace while the apron stays in motion.',
   },
   {
-    image: '/image/image3.jpg',
+    image: image3,
     title: ['Port calls, coordinated end to end.'],
     body: 'Track berth work, cargo, and contractors together so the quay stays on schedule.',
   },
   {
-    image: '/image/image4.jpg',
+    image: image4,
     title: ['Road corridors, delivered on grade.'],
     body: 'Keep earthworks, paving, and lane closures aligned so every kilometer stays on the critical path.',
   },
   {
-    image: '/image/image5.jpg',
+    image: image5,
     title: ['Bridge spans, raised with precision.'],
     body: 'Orchestrate foundations, decks, and lifting windows so each span lands safely and on time.',
   },
   {
-    image: '/image/image6.jpg',
+    image: image6,
     title: ['High-voltage lines, laid with care.'],
     body: 'Plan stringing, clearances, and outages in one view so transmission work stays energized and safe.',
   },
   {
-    image: '/image/image7.jpg',
+    image: image7,
     title: ['Refinery builds, sequenced to startup.'],
     body: 'Align modules, turnarounds, and commissioning so process units reach mechanical completion together.',
   },
   {
-    image: '/image/image8.jpg',
+    image: image8,
     title: ['Chemical plants, built to operate.'],
     body: 'Coordinate piping, utilities, and HSE gates so every unit is ready when production begins.',
   },
   {
-    image: '/image/image9.jpg',
+    image: image9,
     title: ['Village programs, built for people.'],
     body: 'Track housing, water, and civic works together so communities see progress that lasts.',
   },
@@ -222,14 +232,15 @@ export default function LoginPage({ onContinue, onForgotPassword, notice = null 
         <div className="flex flex-1 flex-col justify-center px-8 py-12 sm:px-12">
           <div className="mb-10 flex items-center gap-3">
             <img
-              src="/image/logo.png"
+              src={logo}
               alt=""
               aria-hidden
               width={64}
               height={64}
               className="h-16 w-16 object-contain mix-blend-multiply"
             />
-            <div className="leading-none">
+            {/* The brand logotype: exempt from text contrast (WCAG 1.4.3), so its pink stays the brand's. */}
+            <div className="leading-none" data-logotype>
               <p className="text-[1.65rem] font-extrabold tracking-wide text-[#1a1a2e]">BCBP</p>
               <p className="mt-1 text-sm font-semibold tracking-[0.28em] text-[#ff2d9a]">SOLUTIONS</p>
             </div>

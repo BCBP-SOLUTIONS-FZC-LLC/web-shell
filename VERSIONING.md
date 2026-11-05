@@ -1,6 +1,6 @@
 # Versioning and releases
 
-This repository is a **deployed micro-frontend shell**, not an npm library other apps install — `package.json` is `"private": true` and its `name` (`app1`) is a leftover identifier, not something another package can `npm install`. What gets versioned here is the **container image** (`ghcr.io/bcbp-solutions-fzc-llc/web-shell`) and the **static bundle** attached to the GitHub Release, plus the runtime contract hosts, the dashboard remote (`app2`), and operators depend on. Versions are published with **Git tags** and described in [CHANGELOG.md](./CHANGELOG.md).
+This repository is a **deployed micro-frontend shell**, not an npm library other apps install — `package.json` is `"private": true` and its `name` (`web-shell`) is only an identifier, not something another package can `npm install`. What gets versioned here is the **container image** (`ghcr.io/bcbp-solutions-fzc-llc/web-shell`) and the **static bundle** attached to the GitHub Release, plus the runtime contract hosts, the dashboard remote (`app2`), and operators depend on. Versions are published with **Git tags** and described in [CHANGELOG.md](./CHANGELOG.md).
 
 This document follows the same SemVer / image-tag / maintainer-process layout as [`iam-org-membership/VERSIONING.md`](https://github.com/BCBP-SOLUTIONS-FZC-LLC/iam-org-membership/blob/main/VERSIONING.md). There is no Helm chart in this repo, so the deploy step of that service's release workflow is not part of this one.
 
@@ -26,7 +26,7 @@ This shell has no package for another app to import from npm. Its public contrac
 | Routes `/t/<slug>/dashboard/*` (remote dashboard), the catch-all redirect to `/dashboard`, and the callback path `/auth/callback` | Copy, theme class names, the login-page feature list, and the session screens' wording |
 | `/config/runtime.json` keys the shell relies on (the SDK schema) and the `/remotes/manifest.json` format; the IAM endpoints it calls (PUB-1, P-35); build args `PLATFORM_ENVIRONMENT` and `BUILD_VERSION` | The default `public/config/runtime.json` the image ships. Each environment serves its own |
 | Image listen port **8080**, `GET /healthz` (plain `ok`), `GET /` (shell document), `GET /config/runtime.json`, `GET /remotes/manifest.json` and `GET /version.json` (no-cache), hashed files under `/assets/` | nginx config comments, cache headers on files other than the ones named here |
-| `package.json` `version` once a tag exists — it must match the Git tag without the `v` | The npm package name `app1`. It is not published |
+| `package.json` `version` once a tag exists — it must match the Git tag without the `v` | The npm package name `web-shell`. It is not published |
 
 `/config/runtime.json` is served to every browser. It is public. Do not put secrets in it.
 

@@ -1,4 +1,4 @@
-# Local Keycloak for app1 login (requires Docker Desktop)
+# Local Keycloak for the web-shell login (requires Docker Desktop)
 # Start: npm run keycloak:dev
 # Admin console: http://localhost:8080 (admin / admin)
 services:

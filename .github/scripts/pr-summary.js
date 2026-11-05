@@ -18,6 +18,7 @@ const rows = [
   ['Image build + Dockerfile lint', 'build-image'],
   ['Trivy CVE scan', 'trivy'],
   ['Smoke tests', 'smoke'],
+  ['Browser tests (Chromium · Firefox · WebKit)', 'browser'],
 ];
 
 const table = rows
