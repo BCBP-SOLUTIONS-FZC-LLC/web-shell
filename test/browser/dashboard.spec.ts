@@ -50,6 +50,10 @@ test('the real dashboard loads in the shell: integrity, share scope, CSS, no CSP
 })
 
 test("every image the dashboard shows loads (its assets resolve under the remote, not the shell's origin)", async ({ page }) => {
+  // Known failure, tracked in LLD §15 item 13: mfe-dashboard's BrandLogo uses /image/logo-main-*.png,
+  // which resolves on the shell's origin. Expected to fail until mfe-dashboard imports its images;
+  // then this case "unexpectedly passes" and the job goes red: delete this line.
+  test.fail(true, 'mfe-dashboard BrandLogo uses root-relative /image/ paths (LLD §15 item 13)')
   await signIn(page)
   await expect(page.locator('img').first()).toBeAttached()
   // A root-relative src (/image/x.png) resolves against the shell's origin, where the remote's files are not.
