@@ -443,7 +443,7 @@ Vitest 5, happy-dom at `http://localhost:5001/`, Testing Library. `vitest.config
 E2E seams (`test/fixtures/`): `FakeKeycloak` (authorize via `approve()`, token endpoint with PKCE check and refresh rotation), `FakeNetwork` (route table on the page origin; `/otel` → 204), `FakeBroadcastChannel`. Only the remote's entry `<script>` is stubbed: it defines `window.__platform_mfe_app2` exposing a dashboard built on SDK hooks. A page load clears `globalThis[Symbol.for('@bcbp-solutions-fzc-llc/frontend-sdk')]`, resets modules, and imports the bootstrap again; storage is kept.
 
 | Browser | `test/browser/shell.spec.ts` (Playwright) | the production build | Chromium, Firefox, WebKit over HTTPS with the production CSP and Trusted Types (`server.ts`), a fake Keycloak on a second origin, a remote stub on the shared SDK: fonts and hashed images with no third-party request, PKCE sign-in and the remote with integrity, `navigate()` without a reload, the sign-out form POST under `form-action`, the start-up failure at `/otel`, axe colour contrast (the logotype is exempt, WCAG 1.4.3). Any CSP report fails the test |
-| Dashboard contract | `test/browser/dashboard.spec.ts` (`REMOTE_DIST`) | the production build | A real mfe-dashboard build served as `app2` with its own `remote-manifest-entry.json` integrity: it loads with its CSS and no CSP violation, the role map reaches it, its `NavLink` stays in the page, its Logout POSTs to Keycloak through the shell. A wrong integrity fails it |
+| Dashboard contract | `test/browser/dashboard.spec.ts` (`REMOTE_DIST`) | the production build | A real mfe-dashboard build served as `app2` with its own `remote-manifest-entry.json` integrity: it loads with its CSS and no CSP violation, every image it shows loads, the role map reaches it, its `NavLink` stays in the page, its Logout POSTs to Keycloak through the shell. A wrong integrity fails it |
 
 ---
 
@@ -486,11 +486,12 @@ Details: [VERSIONING.md](../../VERSIONING.md).
 |---|---|---|
 | 1 | Official Privacy, Terms, Trust & Security and Help URLs: set them in `src/pages/links.ts` (hidden until then; none exists on bcbpsolutions.com) | product / legal |
 | 3 | Consent is essential only in v1 (decision). A consent manager would call `cmp.accept()` | product |
-| 5 | mfe-dashboard: `v0.1.0` has no published release; release `v0.1.1` (alpha.4, contract 9/9) with this shell, with its `PUBLIC_APP1_URL` repository variable set | `mfe-dashboard` |
+| 5 | mfe-dashboard `v0.1.1` (alpha.4) is published (its `v0.1.0` never was) and deploys together with this shell's first release | `mfe-dashboard` |
 | 6 | PUB-1 and P-35 must exist behind `/api` in every environment; they are stubbed only in dev | IAM |
 | 7 | No cluster deploy; each environment serves its own runtime config and manifest (with the remote's integrity) and registers its redirect URIs in each realm | operators |
+| 8 | Tender permissions in the role map are provisional | Tender Service |
 | 9 | No CloudFront until next month: environments route `/api`, `/otel`, `/csp-report`, `/remotes/app2/` at the ingress and mount the CSP (IdP in `form-action`) and HSTS ([hosting-without-cloudfront.md](../hosting-without-cloudfront.md)); remove the mounts when CloudFront arrives | operators |
 | 10 | Keycloak realms need SMTP and "Forgot password" enabled for the reset flow (§6.1a); unconfirmed | Keycloak ops |
 | 11 | The `WebShellStartupFailures` alert ([runbook](../runbook-startup-failure.md)) is an example; it must be deployed to the Loki ruler | operators |
 | 12 | First release: add `## [0.1.0]` to the CHANGELOG, set `package.json` `version`, tag `v0.1.0` (release workflow never run), then `SMOKE_MODE=live` against the environment | this repo |
-| 8 | Tender permissions in the role map are provisional | Tender Service |
+| 13 | mfe-dashboard's `BrandLogo` uses root-relative `/image/logo-main-*.png` and `/image/logo.png`, which resolve on the shell's origin: inside the shell the sidebar logo is broken (contract case "every image" fails). Fix there: import the images so they ship under `/remotes/app2/<version>/` | `mfe-dashboard` |
