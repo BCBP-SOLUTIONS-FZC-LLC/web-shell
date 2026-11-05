@@ -395,7 +395,7 @@ This is the platform's SPA rule (`platform-reactcommon` `examples/cloudfront/spa
 
 ### 10.2 Image
 
-Builder `node:26-bookworm@sha256:…`: `npm ci` with the `npm_token` secret, `npm run build`, delete `*.map`. Runtime `nginxinc/nginx-unprivileged:1.31-alpine@sha256:…`, `apk upgrade`, `dist/` as uid 101. Ships `public/config/runtime.json` and `{}` as the manifest; an environment serves its own over those paths (CloudFront or a mount).
+Builder `node:26-bookworm@sha256:…`: `npm ci` with the `npm_token` secret, `npm run build`, delete `*.map`. Runtime `nginxinc/nginx-unprivileged:1.31-alpine@sha256:…`, `apk upgrade`, `dist/` as uid 101. Ships `public/config/runtime.json` and `{}` as the manifest; an environment serves its own over those paths (CloudFront or a mount). Until CloudFront is available, environments follow [hosting-without-cloudfront.md](../hosting-without-cloudfront.md): path routing at the ingress, and the CSP and HSTS mounted under `/etc/nginx/security.d/`.
 
 ### 10.3 Dev server (`config/dev-platform.mjs`)
 

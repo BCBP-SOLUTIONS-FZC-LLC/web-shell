@@ -82,7 +82,8 @@ if curl -sI "http://127.0.0.1:${PORT}/" | grep -qi '^content-security-policy:'; 
   exit 1
 fi
 CSP_CID=$(docker run -d --rm -p "127.0.0.1:${CSP_PORT}:8080" \
-  -v "${PWD}/nginx/security.d/csp.conf.example:/etc/nginx/security.d/csp.conf:ro" "${IMAGE}")
+  -v "${PWD}/nginx/security.d/csp.conf.example:/etc/nginx/security.d/csp.conf:ro" \
+  -v "${PWD}/nginx/security.d/hsts.conf.example:/etc/nginx/security.d/hsts.conf:ro" "${IMAGE}")
 csp_ready=0
 for _ in $(seq 1 30); do
   if curl -sf "http://127.0.0.1:${CSP_PORT}/healthz" | grep -q 'ok'; then
@@ -101,13 +102,17 @@ for path in / /t/acme/dashboard "${asset}"; do
     exit 1
   fi
 done
+if ! curl -sI "http://127.0.0.1:${CSP_PORT}/" | grep -qi '^strict-transport-security: max-age=63072000'; then
+  echo "::error file=nginx/security.d/hsts.conf.example,title=HSTS::A mounted hsts.conf did not add Strict-Transport-Security"
+  exit 1
+fi
 echo "::endgroup::"
 
 {
   echo "### Smoke test results"
   echo "- ✅ Startup gate: \`/healthz\`, \`/\`, \`/config/runtime.json\` and \`/version.json\` returned 200; no source maps in the image"
   echo "- ✅ Smoke suite (\`test/smoke\`): SPA rule, Cache-Control, script integrity, 404s, and the runtime files validated by the SDK"
-  echo "- ✅ CSP: none by default; a mounted \`security.d/csp.conf\` adds the platform CSP on every location"
+  echo "- ✅ CSP and HSTS: none by default; mounted \`security.d/csp.conf\` and \`hsts.conf\` add them on every location"
   echo "- 📦 Image size (linux/amd64): **${mb} MB** (limit: ${MAX_MB} MB)"
   echo "- 🔍 [Security (Trivy SARIF results)](https://github.com/${GITHUB_REPOSITORY}/security/code-scanning)"
 } >> "$GITHUB_STEP_SUMMARY"

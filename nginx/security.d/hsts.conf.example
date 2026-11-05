@@ -1,0 +1,6 @@
+# HSTS for an environment that serves this image WITHOUT CloudFront in front, over HTTPS (TLS ends at
+# the load balancer or ingress). Behind CloudFront, mount nothing: CloudFront sends it. Same value as
+# platform-reactcommon examples/cloudfront/csp.mjs. includeSubDomains applies to every subdomain of
+# the host, and browsers remember it for max-age (2 years): use it only on hosts that are HTTPS-only.
+# Mount read-only as /etc/nginx/security.d/hsts.conf (docs/hosting-without-cloudfront.md).
+add_header Strict-Transport-Security "max-age=63072000; includeSubDomains; preload" always;
