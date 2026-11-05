@@ -5,6 +5,7 @@ The browser shell for the BCBP micro-frontend platform. It runs the platform SDK
 **Repository:** `github.com/BCBP-SOLUTIONS-FZC-LLC/web-shell`
 **Runtime:** Node.js 26 · Rsbuild 2 (Rspack) · React 19.3 · `@bcbp-solutions-fzc-llc/frontend-sdk` `1.0.0-alpha.4` · private npm package `web-shell` (`"private": true`) · production image is nginx on port **8080**
 **Contract:** Module Federation host `shell`, built with `@bcbp-solutions-fzc-llc/webpack-preset`. It provides React, React DOM, the OTel API and every SDK subpath to remotes, and exposes nothing. Versioning of the image and that contract is in [VERSIONING.md](./VERSIONING.md).
+**Status:** not tagged or deployed. `main` passes every CI job; the release workflow has never run. Compatible with mfe-dashboard `v0.1.0`+ (alpha.4, checked by the contract suite). Until CloudFront exists (next month) environments follow [docs/hosting-without-cloudfront.md](./docs/hosting-without-cloudfront.md). What is still open: [LLD §15](./docs/lld/web-shell-lld.md#15-open-items).
 
 ---
 
@@ -290,15 +291,15 @@ The image takes `PLATFORM_ENVIRONMENT`, `BUILD_VERSION` and `SOURCE_DATE_EPOCH` 
 
 ## CI
 
-Five workflow files. Markdown-only pushes do not run `ci.yml`. Job order and the failure runbooks are in [docs/pipeline](./docs/pipeline/README.md).
+Five workflow files, eight `ci.yml` jobs. Markdown-only pushes do not run `ci.yml`. Job order and the failure runbooks are in [docs/pipeline](./docs/pipeline/README.md).
 
 Every `npm ci` reads `@bcbp-solutions-fzc-llc/*` from GitHub Packages with `GITHUB_TOKEN` (`packages: read`). This repository needs read access on each package's page: Package settings → Manage Actions access → Add repository.
 
-- **`ci.yml`** — orchestrator. `validate-test.yml` and `validate-quality.yml` run in parallel with `build-image` (Hadolint, then a Buildx cache build). Trivy and the smoke job follow the image build; the smoke job sets up Node, runs `npm ci`, then `smoke-tests.sh` (size, startup gate, the smoke suite). Pull requests get a status comment. A push to `main` or `master` also pushes `ghcr.io/bcbp-solutions-fzc-llc/web-shell`, tagged with the branch name and `sha-<short>`, and Cosign-signs that digest.
-- **`validate-test.yml`** — `npm ci`, `npm run test:coverage`, the 95% coverage gate, then `npm run build`.
+- **`ci.yml`** — orchestrator. `validate-test.yml` and `validate-quality.yml` run in parallel with `build-image` (Hadolint, then a Buildx cache build). Trivy and the smoke job follow the image build; the smoke job sets up Node, runs `npm ci`, then `smoke-tests.sh` (size, startup gate, the smoke suite, and the mounted CSP and HSTS). `browser` runs the real-browser suite (Chromium, Firefox, WebKit) and gates the image push. `dashboard-contract` builds mfe-dashboard (`vars.DASHBOARD_REF`, default `main`) and runs this shell with it; it reports but does not gate. Pull requests get a status comment, failures included. A push to `main` or `master` also pushes `ghcr.io/bcbp-solutions-fzc-llc/web-shell`, tagged with the branch name and `sha-<short>`, and Cosign-signs that digest.
+- **`validate-test.yml`** — `npm ci`, `npm run test:coverage`, the 95% coverage gate, `npm run build`, then the bundle budget (`npm run budget`).
 - **`validate-quality.yml`** — ESLint (`--max-warnings 0`) and `npm run typecheck`. Workflow files must use literal operators and LF line endings, `Dockerfile` `FROM` lines must be digest-pinned, `.dockerignore` must exist, and `npm audit --omit=dev --audit-level=high` must pass.
 - **`changelog-check.yml`** — a pull request that touches `src/`, `package.json`, `package-lock.json`, `Dockerfile`, `nginx/`, `rsbuild.config.ts`, `config/**`, `public/config/**`, or `index.html` must also update `CHANGELOG.md`.
-- **`release.yml`** — tag `vX.Y.Z` or `vX.Y.Z-*`, or a manual run with a tag input. Re-validates, requires a matching changelog section, packs `web-shell_<tag>_dist.tar.gz` (source maps removed), pushes the semver image tags, scans, attaches the SBOM and SLSA provenance, signs with Cosign, and opens the GitHub Release. Tagging does not deploy a cluster.
+- **`release.yml`** — tag `vX.Y.Z` or `vX.Y.Z-*`, or a manual run with a tag input. Re-validates, requires a matching changelog section, packs `web-shell_<tag>_dist.tar.gz` (source maps removed; kept as the workflow artifact `sourcemaps-<tag>`), pushes the semver image tags, scans, attaches the SBOM and SLSA provenance, signs with Cosign, and opens the GitHub Release. It has not run yet. Tagging does not deploy a cluster.
 
 Image tag rules, the Cosign identity, and the maintainer steps are in [VERSIONING.md](./VERSIONING.md).
 

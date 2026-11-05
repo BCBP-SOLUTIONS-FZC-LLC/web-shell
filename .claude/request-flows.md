@@ -42,7 +42,7 @@ Typed email → PUB-1 (generic message on failure) → `location.assign({idpOrig
 
 ## Dashboard load
 
-`/t/<slug>/dashboard/*` → `RemoteBoundary('app2', './App')` → SDK `loadRemote`: kill switch, entry origin, `<script integrity>`, timeout, retries, `window.app2.init(shareScope)`, `get('./App')`. Failure → boundary "Something went wrong." / "Try again" (asks the container again, no reload).
+`/t/<slug>/dashboard/*` → `RemoteBoundary('app2', './App')` → SDK `loadRemote`: kill switch, entry origin, `<script integrity>`, timeout, retries, `window.__platform_mfe_app2.init(shareScope)`, `get('./App')`. Failure → boundary "Something went wrong." / "Try again" (asks the container again, no reload).
 
 ## APIs the shell calls
 
