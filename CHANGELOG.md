@@ -52,6 +52,8 @@ First release. The shell runs the platform SDK's start-up once per page, owns si
 
 ### Changed
 
+- **A final session-context answer is not asked again (`2026-11-05`).** The bootstrap retried P-35 once after 1 s even when the first answer was final (401, 403, 404: the endpoint missing in an environment); it now starts the background retry only after a transient failure (network, timeout, 429, 5xx). Found through an e2e flake (about 1 in 10 full runs in CI): that stray request from one simulated page reached the next test, applied its context and cached the workspace, so the next sign-in skipped the email screen. 0 in 15 full runs after the fix; an 8-second idle probe sees no request leak.
+
 - **Browser jobs run in Playwright's container (`2026-11-05`).** `Browser tests` and `Dashboard contract` now run in `mcr.microsoft.com/playwright:v1.64.1-noble` (digest-pinned): the browsers, their system libraries and Node 26 come with the image. Before, `npx playwright install --with-deps` fetched 114 MB through apt; on two `main` runs the Ubuntu mirror served it at 86 kB/s (22 min), `Browser tests` hit its 20-minute limit and the image push was skipped. A first step fails clearly if the image lacks the browsers of the installed `@playwright/test`: bump the tag and digest together with it. Checked: the browser suite passes inside the image (18/18).
 
 - **Dashboard contract: the image case is a normal check again (`2026-11-05`).** mfe-dashboard #23 imports its logos, so they load inside the shell; the `test.fail()` marker is removed (the case passed "unexpectedly" against the dashboard's `main` `25745a4`, as intended) and LLD §15 item 13 is closed.

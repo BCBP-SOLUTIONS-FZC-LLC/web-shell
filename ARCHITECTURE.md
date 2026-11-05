@@ -336,7 +336,7 @@ Remotes that need storage use `storage(appId)` from `/storage`, which is namespa
 | Silent restore | Keycloak SSO session | degrade | `anonymous`; the sign-in flow runs |
 | Resolve the email | PUB-1 | stop on that screen | One generic message. The user can retry |
 | Leave for Keycloak | Browser navigation | stop | The shell is gone until Keycloak redirects back |
-| Session context | P-35 | degrade, then recover | Warning log. Deny-all permissions and platform flags until it answers; a network error, timeout, 429 or 5xx is retried after 1 s, 2 s, 4 s and applied live (the router moves under `/t/<slug>/` then). A notice with Reload says some actions are hidden |
+| Session context | P-35 | degrade, then recover | Warning log. Deny-all permissions and platform flags until it answers; a network error, timeout, 429 or 5xx is retried after 1 s, 2 s, 4 s and applied live (a final 401, 403 or 404 is not asked again) (the router moves under `/t/<slug>/` then). A notice with Reload says some actions are hidden |
 | Remote manifest | `/remotes/manifest.json` | degrade | Error log. The app renders; `RemoteBoundary` shows its error |
 | Dashboard load or render | `app2` remote | degrade | Boundary message with "Try again". The rest of the shell keeps running |
 | Telemetry export | `/otel` | ignore | Bounded queues in the SDK. v1 exports `essential` only (errors and essential warnings), by decision |
