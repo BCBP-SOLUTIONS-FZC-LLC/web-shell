@@ -26,6 +26,7 @@ npm test                  # Vitest: unit, integration, e2e
 npm run test:ci           # + coverage gate 95% (100% today)
 npm run build             # tsc + rsbuild build
 npm run budget            # bundle size budget, after a build
+npm run metrics-check     # observability standard for metrics in src/ (docs/observability.md)
 npm run test-browser      # Playwright, Chromium/Firefox/WebKit under the production CSP, after a build
 npm run test-contract     # same, against a real mfe-dashboard build: REMOTE_DIST=../mfe-dashboard/dist
 npm run test-smoke        # needs SMOKE_BASE_URL (test/smoke/README.md)
@@ -53,6 +54,7 @@ Run one test: `npx vitest run test/e2e/shell.test.tsx -t "sign-out"`. Full list:
 - **Registry token never in an image layer** (BuildKit secret `npm_token`). Dockerfile `FROM` lines stay digest-pinned.
 - **Sibling repos are read-only from here:** `../mfe-dashboard` (another session/team owns it) and `../../../XPertSharedLib/react/platform-reactcommon`. Read them; change them in their own PRs.
 - **Diagrams:** edit `docs/architecture/mermaid/*.mmd` and keep the block under its `> Source:` line in `ARCHITECTURE.md` identical (the post-edit hook checks).
+- **Metrics follow the Enterprise Platform Observability Standard** (`docs/observability.md`): only through the SDK meters (`getServiceMeter` for Tier 3 `portal_web_shell_*`, `getDomainMeter` for registry Tier 2); never `platform_*` (SDK-bound after ratification), never a label the SDK injects (`domain`, `service`, `environment`) or an unbounded one; every metric listed in the Inventory. `metrics-check` enforces it in CI.
 - **Coverage gate stays at 95%.** Required checks keep their names: `Validate / Test / test`, `Validate / Quality / quality`, `changelog`, `Smoke tests`.
 
 ## Conventions
