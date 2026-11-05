@@ -27,8 +27,8 @@ Image locally: `docker build --secret id=npm_token,env=NODE_AUTH_TOKEN -t web-sh
 | `Build image (cache)` | Hadolint, Buildx `web-shell-ci-test` (secret `npm_token`) |
 | `Trivy CVE scan` | Unfixed CRITICAL/HIGH/UNKNOWN fail; `.trivyignore` with reason and expiry |
 | `Smoke tests` | Node 26 + `npm ci`, then `smoke-tests.sh`: ≤ 200 MB, `/healthz`, startup gate, `npm run test-smoke` (`SMOKE_MODE=image`) |
-| `Browser tests` | `npx playwright install --with-deps`, build, `npm run test-browser`; report uploaded on failure. Gates push |
-| `Dashboard contract` | Builds mfe-dashboard (`vars.DASHBOARD_REF`, default `main`), runs `test-contract`. Informational |
+| `Browser tests` | In the digest-pinned `mcr.microsoft.com/playwright:v<version>-noble` container (browsers, their libraries and Node 26 preinstalled; nothing from apt), `npm ci`, a check that the image holds this `@playwright/test`'s browsers, build, `npm run test-browser`; report uploaded on failure. Gates push. **Bump the container tag and digest with `@playwright/test`** |
+| `Dashboard contract` | Same container; builds mfe-dashboard (`vars.DASHBOARD_REF`, default `main`), runs `test-contract`. Informational |
 | `PR summary` / `Push image → GHCR` | Comment on PRs / `main`: GHCR tags, Cosign |
 | `changelog` | `CHANGELOG.md` when `src/`, `package*.json`, `Dockerfile`, `nginx/`, `rsbuild.config.ts`, `config/**`, `public/config/**`, `index.html` change |
 
