@@ -41,7 +41,7 @@ Runbooks: `docs/runbook-coverage-gate.md`, `docs/runbook-image-scan.md`, `docs/r
 
 `vX.Y.Z[-*]` tag → `release.yml`: re-validate, `## [X.Y.Z]` changelog section, `web-shell_<tag>_dist.tar.gz` (`BUILD_VERSION` without the `v`), source maps as workflow artifact `sourcemaps-<tag>`, image pushed by digest, scan, SBOM, SLSA provenance (BuildKit attestation, read with `docker buildx imagetools inspect`), Cosign, then the semver tags and `latest` on the signed digest (`tag-signed-image.sh`), GitHub Release. Tagging never deploys. See `VERSIONING.md` and `docs/runbook-release.md`.
 
-The workflow has never run. Its provenance step was the one that failed mfe-dashboard's `v0.1.0`; fixed here before the first tag (#27). Tags are added last (#30), so a failed run leaves only an untagged digest in GHCR and moves no version tag or `latest`: fix the cause, then delete and push the Git tag again (`docs/runbook-release.md`).
+It has run for `v0.1.0` and `v0.2.0` (2026-11-05), both green end to end. Its provenance step was the one that failed mfe-dashboard's `v0.1.0`; fixed here before the first tag (#27). Tags are added last (#30), so a failed run leaves only an untagged digest in GHCR and moves no version tag or `latest`: fix the cause, then delete and push the Git tag again (`docs/runbook-release.md`).
 
 ## SDK upgrade checklist
 
