@@ -42,6 +42,8 @@ Pull requests that change the shell, its dependencies, or the image add an entry
 
 ### Changed
 
+- **Contract: the dashboard's images (`2026-11-05`).** `dashboard.spec.ts` checks that every image the real dashboard renders loads. It fails today in all three engines: mfe-dashboard's `BrandLogo` uses root-relative `/image/logo-main-black.png` (and `-white`, `logo.png`), which resolve on the shell's origin, where web-shell serves no such file, so the sidebar logo is broken inside the shell. The fix is in mfe-dashboard (import the images). Found by signing in through the real local Keycloak 26.8.1, which also confirmed that the alpha.4 sign-out POST ends the SSO session (a `prompt=none` request then answers `login_required`).
+
 - **The release workflow, checked before its first run (`2026-11-05`).** mfe-dashboard's `v0.1.0` release failed at "Export SLSA provenance" with the same script this repository had; three more release steps differed from it:
   - `export-image-provenance.sh` read a Cosign attestation that does not exist: `build-push-action` (`provenance: mode=max`) stores provenance as a BuildKit attestation in the image index. It now reads it with `docker buildx imagetools inspect` (checked against `web-shell:main`). Without this the first tag would have pushed an image and stopped before signing it or opening the Release.
   - `extract-release-notes.sh` piped `tee` into `true`, which could cut the notes short on a closed pipe; plain redirects now (a 3 000-line section extracted whole).

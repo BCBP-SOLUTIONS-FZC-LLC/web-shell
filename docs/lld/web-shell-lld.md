@@ -440,7 +440,7 @@ Vitest 5, happy-dom at `http://localhost:5001/`, Testing Library. `vitest.config
 E2E seams (`test/fixtures/`): `FakeKeycloak` (authorize via `approve()`, token endpoint with PKCE check and refresh rotation), `FakeNetwork` (route table on the page origin; `/otel` → 204), `FakeBroadcastChannel`. Only the remote's entry `<script>` is stubbed: it defines `window.__platform_mfe_app2` exposing a dashboard built on SDK hooks. A page load clears `globalThis[Symbol.for('@bcbp-solutions-fzc-llc/frontend-sdk')]`, resets modules, and imports the bootstrap again; storage is kept.
 
 | Browser | `test/browser/shell.spec.ts` (Playwright) | the production build | Chromium, Firefox, WebKit over HTTPS with the production CSP and Trusted Types (`server.ts`), a fake Keycloak on a second origin, a remote stub on the shared SDK: fonts and hashed images with no third-party request, PKCE sign-in and the remote with integrity, `navigate()` without a reload, the sign-out form POST under `form-action`, the start-up failure at `/otel`, axe colour contrast (the logotype is exempt, WCAG 1.4.3). Any CSP report fails the test |
-| Dashboard contract | `test/browser/dashboard.spec.ts` (`REMOTE_DIST`) | the production build | A real mfe-dashboard build served as `app2` with its own `remote-manifest-entry.json` integrity: it loads with its CSS and no CSP violation, the role map reaches it, its `NavLink` stays in the page, its Logout POSTs to Keycloak through the shell. A wrong integrity fails it |
+| Dashboard contract | `test/browser/dashboard.spec.ts` (`REMOTE_DIST`) | the production build | A real mfe-dashboard build served as `app2` with its own `remote-manifest-entry.json` integrity: it loads with its CSS and no CSP violation, every image it shows loads, the role map reaches it, its `NavLink` stays in the page, its Logout POSTs to Keycloak through the shell. A wrong integrity fails it |
 
 ---
 
@@ -487,3 +487,4 @@ Details: [VERSIONING.md](../../VERSIONING.md).
 | 6 | PUB-1 and P-35 must exist behind `/api` in every environment; they are stubbed only in dev | IAM |
 | 7 | No cluster deploy; each environment serves its own runtime config and manifest | operators |
 | 8 | Tender permissions in the role map are provisional | Tender Service |
+| 13 | mfe-dashboard's `BrandLogo` uses root-relative `/image/logo-main-*.png` and `/image/logo.png`, which resolve on the shell's origin: inside the shell the sidebar logo is broken (contract case "every image" fails). Fix there: import the images so they ship under `/remotes/app2/<version>/` | `mfe-dashboard` |
