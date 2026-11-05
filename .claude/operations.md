@@ -34,11 +34,13 @@ Image locally: `docker build --secret id=npm_token,env=NODE_AUTH_TOKEN -t web-sh
 
 Registry: every `npm ci` uses `GITHUB_TOKEN` with `packages: read`. A 403 `read_package` means the package's "Manage Actions access" lacks this repository (frontend-sdk, webpack-preset, eslint-plugin each). Granting it is a settings change: ask the user.
 
-Runbooks: `docs/runbook-coverage-gate.md`, `docs/runbook-image-scan.md`, `docs/runbook-release.md`; job graph `docs/pipeline/README.md`.
+Runbooks: `docs/runbook-coverage-gate.md`, `docs/runbook-image-scan.md`, `docs/runbook-release.md`, `docs/runbook-startup-failure.md` (alert `WebShellStartupFailures`); hosting before CloudFront: `docs/hosting-without-cloudfront.md`; job graph `docs/pipeline/README.md`.
 
 ## Release
 
-`vX.Y.Z[-*]` tag → `release.yml`: re-validate, `## [X.Y.Z]` changelog section, `web-shell_<tag>_dist.tar.gz`, image by digest, scan, SBOM, SLSA, Cosign, then the semver tags and `latest` on the signed digest, GitHub Release. Tagging never deploys. See `VERSIONING.md`.
+`vX.Y.Z[-*]` tag → `release.yml`: re-validate, `## [X.Y.Z]` changelog section, `web-shell_<tag>_dist.tar.gz` (`BUILD_VERSION` without the `v`), source maps as workflow artifact `sourcemaps-<tag>`, image pushed by digest, scan, SBOM, SLSA provenance (BuildKit attestation, read with `docker buildx imagetools inspect`), Cosign, then the semver tags and `latest` on the signed digest (`tag-signed-image.sh`), GitHub Release. Tagging never deploys. See `VERSIONING.md` and `docs/runbook-release.md`.
+
+The workflow has never run. Its provenance step was the one that failed mfe-dashboard's `v0.1.0`; fixed here before the first tag (#27). Tags are added last (#30), so a failed run leaves only an untagged digest in GHCR and moves no version tag or `latest`: fix the cause, then delete and push the Git tag again (`docs/runbook-release.md`).
 
 ## SDK upgrade checklist
 
@@ -46,13 +48,13 @@ Runbooks: `docs/runbook-coverage-gate.md`, `docs/runbook-image-scan.md`, `docs/r
 2. `npm install --save-exact` all three packages to the same version.
 3. lint, typecheck, `test:ci`, build; check the bundle shares the new version (`grep -o '1\.0\.0-alpha\.[0-9]*' dist/assets/*.js | sort | uniq -c`).
 4. Update the version in README, ARCHITECTURE, VERSIONING, the LLD header, `.claude/CLAUDE.md`, and add a CHANGELOG entry.
-5. Merge before any remote moves to that version.
+5. Merge before any remote moves to that version. Exception: a release that changes the shell–remote contract (alpha.4's container global) ships the shell and every remote together; check with `REMOTE_DIST=<dashboard dist> npm run test-contract`.
 
 ## Claude Code settings and hooks
 
 | File | What |
 |---|---|
-| `.claude/settings.json` | Allowed read-only and test commands; the two hooks |
+| `.claude/settings.json` | **Not installed.** Without it the two hooks below do not run. A proposed version (read-only and test commands allowed; both hooks wired) was written outside the repo; adding it is the user's decision |
 | `.claude/hooks/guard.sh` (PreToolUse) | Blocks edits to `../mfe-dashboard`, `platform-reactcommon`, `node_modules/`, `dist/`, `coverage/`, `.env`, `docker.local.env` |
 | `.claude/hooks/post-edit.sh` (PostToolUse) | ESLint on an edited `*.ts/tsx/js/mjs` (exit 2 shows problems); for `docs/architecture/mermaid/*.mmd` or `ARCHITECTURE.md`, checks each embedded diagram equals its source (`check-diagrams.mjs`) |
 | `.claude/agents/invariant-reviewer.md` | Read-only review of a diff against the Critical Rules |

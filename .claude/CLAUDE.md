@@ -8,7 +8,7 @@ A **private Rsbuild application** (npm name `web-shell`, `"private": true`, `0.0
 
 Node 26, TypeScript `~6.0.3` (typescript-eslint has no TS 7 support), React 19.3, Rsbuild 2 (Rspack), Tailwind 4 + daisyUI. Platform packages from **GitHub Packages** (`.npmrc`, `NODE_AUTH_TOKEN` with `read:packages`): `@bcbp-solutions-fzc-llc/frontend-sdk`, `webpack-preset`, `eslint-plugin`, all **`1.0.0-alpha.4`, pinned exactly, on one version**.
 
-**Status:** never tagged or deployed; everything is `[Unreleased]` in `CHANGELOG.md`. Open items: [LLD §15](../docs/lld/web-shell-lld.md#15-open-items) (official legal/help URLs for `src/pages/links.ts`, mfe-dashboard still on alpha.3, IAM endpoints and environments). v1 decisions: essential-only consent; fonts self-hosted; Forgot password → Keycloak reset.
+**Status:** code on `main` is release-ready; never tagged or deployed (everything is `[Unreleased]`). The release workflow has never run (its provenance step was fixed in #27). mfe-dashboard `main`/`v0.1.0`+ is on alpha.4 and passes the contract suite; its own release is pending (`v0.1.1`). CloudFront arrives next month; until then environments follow `docs/hosting-without-cloudfront.md`. Open items: [LLD §15](../docs/lld/web-shell-lld.md#15-open-items). v1 decisions: essential-only consent; fonts self-hosted; Forgot password → Keycloak reset.
 
 **The shell owns:** `src/bootstrap.tsx` (SDK order, session branches, render), `src/App.tsx` (routes under `/t/<slug>/`, `RemoteBoundary` for `app2` `./App`), `src/platform/` (PUB-1 and P-35 ports, role map, consent stand-in, session screens and their host), `src/pages/` (login layouts, remember-email), `rsbuild.config.ts`, `config/dev-platform.mjs` (dev stand-ins), `nginx/default.conf`, `Dockerfile`.
 
@@ -49,7 +49,7 @@ Run one test: `npx vitest run test/e2e/shell.test.tsx -t "sign-out"`. Full list:
 - **CSP-safe:** no inline script or style (`inlineScripts`/`inlineStyles: false`), no `eval`, no runtime CSS-in-JS. Never add a third-party origin to `index.html`; fonts are self-hosted (`@fontsource-variable/*`).
 - **No dead or invented links.** Help and legal URLs live only in `src/pages/links.ts` and render only when set; never guess an official URL.
 - **nginx SPA rule:** only extension-less paths get `index.html`; `/api`, `/otel`, `/csp-report`, `/config`, `/remotes`, `/assets` and any missing file with an extension stay 404. Unhashed files are `no-cache`, `/assets/` immutable. Change `test/smoke/deployment.test.ts` with it.
-- **SDK upgrades:** all three packages together, exact pins, **shell before remotes** (a remote must not be built against a newer SDK than the shell's). Add a CHANGELOG entry.
+- **SDK upgrades:** all three packages together, exact pins, **shell before remotes** (a remote must not be built against a newer SDK than the shell's), unless the release changes the shell–remote contract (alpha.4): then they deploy together. Run `npm run test-contract` against the dashboard's build. Add a CHANGELOG entry.
 - **Registry token never in an image layer** (BuildKit secret `npm_token`). Dockerfile `FROM` lines stay digest-pinned.
 - **Sibling repos are read-only from here:** `../mfe-dashboard` (another session/team owns it) and `../../../XPertSharedLib/react/platform-reactcommon`. Read them; change them in their own PRs.
 - **Diagrams:** edit `docs/architecture/mermaid/*.mmd` and keep the block under its `> Source:` line in `ARCHITECTURE.md` identical (the post-edit hook checks).

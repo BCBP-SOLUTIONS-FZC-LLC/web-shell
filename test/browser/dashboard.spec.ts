@@ -49,6 +49,29 @@ test('the real dashboard loads in the shell: integrity, share scope, CSS, no CSP
   expect(await page.evaluate(() => (window as unknown as { __violations: string[] }).__violations)).toEqual([])
 })
 
+test("every image the dashboard shows loads (its assets resolve under the remote, not the shell's origin)", async ({ page }) => {
+  // Known failure, tracked in LLD §15 item 13: mfe-dashboard's BrandLogo uses /image/logo-main-*.png,
+  // which resolves on the shell's origin. Expected to fail until mfe-dashboard imports its images;
+  // then this case "unexpectedly passes" and the job goes red: delete this line.
+  test.fail(true, 'mfe-dashboard BrandLogo uses root-relative /image/ paths (LLD §15 item 13)')
+  await signIn(page)
+  await expect(page.locator('img').first()).toBeAttached()
+  // A root-relative src (/image/x.png) resolves against the shell's origin, where the remote's files are not.
+  const broken = await page.evaluate(async () => {
+    const imgs = [...document.querySelectorAll('img')]
+    const settled = (i: HTMLImageElement) =>
+      new Promise<void>((r) => {
+        if (i.complete) return r()
+        i.addEventListener('load', () => r(), { once: true })
+        i.addEventListener('error', () => r(), { once: true })
+        setTimeout(r, 5_000)
+      })
+    await Promise.all(imgs.map(settled))
+    return imgs.filter((i) => i.naturalWidth === 0).map((i) => `${i.alt || '(no alt)'}: ${i.getAttribute('src')}`)
+  })
+  expect(broken).toEqual([])
+})
+
 test("the shell's role map reaches the dashboard, and its navigation stays in the page", async ({ page }) => {
   await signIn(page)
   await page.evaluate(() => ((window as unknown as { __samePage: boolean }).__samePage = true))
@@ -63,7 +86,11 @@ test("the dashboard's Logout signs out globally through the shell (form POST to 
   await signIn(page)
   await page.getByRole('button', { name: 'Logout' }).first().click()
   await expect(page.getByRole('heading', { name: 'You are signed out' })).toBeVisible()
+  // The dialog shows as soon as the SDK reports the sign-out, before the form POST reaches
+  // Keycloak and the browser comes back: wait for the POST, not for the dialog.
+  await expect.poll(async () => (await state(page)).logouts.length).toBe(1)
   const { logouts } = await state(page)
-  expect(logouts).toHaveLength(1)
   expect(logouts[0]).toMatchObject({ client_id: 'tender-web', post_logout_redirect_uri: `${APP}/` })
+  await expect(page).toHaveURL(`${APP}/`)
+  await expect(page.getByRole('heading', { name: 'You are signed out' })).toBeVisible()
 })
