@@ -10,7 +10,7 @@ import {
 } from '@bcbp-solutions-fzc-llc/frontend-sdk/react'
 
 /** The remote that renders the dashboard, as named in /remotes/manifest.json. */
-export const DASHBOARD_REMOTE = 'app2'
+export const DASHBOARD_REMOTE = 'dashboard'
 
 function Loading({ children }: { children: string }) {
   return (

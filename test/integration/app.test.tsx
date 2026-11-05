@@ -30,7 +30,7 @@ describe('App', () => {
     expect(remote).toHaveAttribute('data-module', './App')
     expect(screen.getByTestId('fallback')).toHaveTextContent('Loading dashboard…')
     expect(routeTemplate).toHaveBeenCalledWith('/t/:slug/dashboard')
-    // app2 reads the user and sign-out from the SDK (useCurrentUser, useSignOut).
+    // The dashboard remote reads the user and sign-out from the SDK (useCurrentUser, useSignOut).
     expect(boundaryProps).toHaveBeenLastCalledWith(undefined)
   })
 

@@ -8,7 +8,9 @@ Pull requests that change the shell, its dependencies, or the image add an entry
 
 ## [Unreleased]
 
-Nothing yet.
+### Changed
+
+- **Breaking: the dashboard remote is `dashboard`, not `app2` (`2026-11-05`).** Requested by mfe-dashboard (its #26): `app2` was the starter template's name. The shell now loads `dashboard` (`src/App.tsx` `DASHBOARD_REMOTE`): manifest key `dashboard`, container global `__platform_mfe_dashboard`, kill-switch name and flag `remote.dashboard.disabled`, `mfe` log label, hosting path `/remotes/dashboard/<version>/`. **This shell cannot load mfe-dashboard `v0.2.0` or earlier (`app2`); it pairs with `v0.3.0`.** Release them together and switch each environment's manifest key (and any `killSwitch` entry) at the same deploy. `config/remotes.local.json`, the tests and the docs follow. The contract suite's server now reads the remote's name from the build's `remote-manifest-entry.json` and fails with a plain message when it differs from the shell's. Checked: contract 12/12 against mfe-dashboard's rename branch (`b6d06df`); against `v0.2.0` it reports the name mismatch.
 
 ## [0.1.0] - 2026-11-05
 

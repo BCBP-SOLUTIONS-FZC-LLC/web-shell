@@ -209,7 +209,7 @@ describe('bootstrap, signed in', () => {
 
   it("registers the router as the SDK's navigator, inside the /t/<slug> basename", async () => {
     await act(() => bootstrap())
-    navigator!('app2', '/t/acme/dashboard/members?tab=1')
+    navigator!('dashboard', '/t/acme/dashboard/members?tab=1')
     expect(routerNavigate).toHaveBeenCalledWith('/dashboard/members?tab=1', {})
   })
 
@@ -250,7 +250,7 @@ describe('bootstrap, signed in', () => {
     // The app mounted at the root; the late context moved the URL under /t/acme/, so the router
     // is rebuilt with that basename and the navigator follows it.
     expect(screen.getByRole('main')).toHaveTextContent('app at /t/acme')
-    navigator!('app2', '/t/acme/dashboard/members')
+    navigator!('dashboard', '/t/acme/dashboard/members')
     expect(routerNavigate).toHaveBeenLastCalledWith('/dashboard/members', {})
   })
 

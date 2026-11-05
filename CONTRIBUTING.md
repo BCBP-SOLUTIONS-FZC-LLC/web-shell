@@ -34,7 +34,7 @@ npm run build             # tsc and the production bundle
 
 The dev server serves `/config/runtime.json` and `/remotes/manifest.json` from `config/`, and stubs PUB-1 and P-35 so sign-in works with only Keycloak running (`config/dev-platform.mjs`). `DEV_API_URL=https://… npm run dev` proxies `/api` to a real API instead.
 
-The dashboard remote is a separate repo. Start `mfe-dashboard` so `http://localhost:5002/remoteEntry.js` is served (it builds as remote `app2` with the preset's Rsbuild plugin); otherwise `/t/bcbp/dashboard` shows the remote boundary's error. Tests never fetch that port: the integration tests replace `RemoteBoundary`, and the e2e suite stubs the remote's entry script.
+The dashboard remote is a separate repo. Start `mfe-dashboard` so `http://localhost:5002/remoteEntry.js` is served (it builds as remote `dashboard` with the preset's Rsbuild plugin); otherwise `/t/bcbp/dashboard` shows the remote boundary's error. Tests never fetch that port: the integration tests replace `RemoteBoundary`, and the e2e suite stubs the remote's entry script.
 
 Local ports: shell **5001**, Keycloak **8080**, dashboard **5002**. The production image also listens on **8080**. Map it to another host port when Keycloak is already running (`docker run -p 18080:8080`).
 
@@ -104,7 +104,7 @@ docs/lld/web-shell-lld.md ← Low-level design (the contract)
 1. Add the remote to `config/remotes.local.json` for development. Each environment's `/remotes/manifest.json` comes from the deploy pipeline.
 2. Render it with `<RemoteBoundary remote="<name>" module="./<Module>" props={…} />`. The remote must be built with `@bcbp-solutions-fzc-llc/webpack-preset` (`role: 'remote'`).
 3. The shared map comes from the preset; do not add entries in `rsbuild.config.ts`. Bumping the SDK raises the version remotes require; see [VERSIONING.md](./VERSIONING.md).
-4. `app2` `./App` gets no props (`src/App.tsx`). Data a remote needs from the shell goes into the `PlatformProvider` shell value and is read through SDK hooks, never props. Update the federation table in `README.md`.
+4. `dashboard` `./App` gets no props (`src/App.tsx`). Data a remote needs from the shell goes into the `PlatformProvider` shell value and is read through SDK hooks, never props. Update the federation table in `README.md`.
 
 ### Adding a runtime config key or a build constant
 
@@ -145,7 +145,7 @@ These tests pin behavior other repos and the login flow depend on. Change them o
 - **`test/integration/bootstrap.test.tsx`** — the exact SDK initialisation order, no automatic login after a logout or a device-clock refusal, the app never renders for a wrong-workspace login, deny-all without a session context, and the app unmounts on sign-out.
 - **`test/unit/iam.test.ts`** — the PUB-1 → `Workspace` and P-35 → `SessionContext` ports, through the real `ApiClient` (`createTestPlatform`, `mockApi`), against the SDK's contract cases in `@bcbp-solutions-fzc-llc/frontend-sdk/contracts`; PUB-1 is called without a token.
 - **`test/integration/session-screens.test.tsx`** — "not found" and "unreachable" show the same message.
-- **`test/integration/app.test.tsx`** — `/dashboard/*` renders `app2` `./App` with no props, under the workspace basename.
+- **`test/integration/app.test.tsx`** — `/dashboard/*` renders `dashboard` `./App` with no props, under the workspace basename.
 - **`test/e2e/shell.test.tsx`** — the whole sign-in with the real SDK: PKCE to the realm PUB-1 names, tokens never stored, the URL under `/t/<slug>/`, the remote reading the user and permissions through SDK hooks, and no silent sign-in after a global sign-out.
 - **`test/smoke/deployment.test.ts`** — what nginx (and CloudFront, live) must serve: only extension-less paths get `index.html`, the runtime files are uncached and pass the SDK's validation, hashed assets are immutable and match their integrity.
 
@@ -181,7 +181,7 @@ The text report prints uncovered lines. Cover the branch you changed. The gate i
 | What changed | Documents to update |
 |---|---|
 | Route, sign-in step, or storage key | `README.md` (routes, sign-in, storage table), `docs/lld/web-shell-lld.md` (§5, §6, §9.3), `.claude/request-flows.md` |
-| Remote, `app2` props, or SDK version | `src/App.tsx`, `config/remotes.local.json`, `README.md` federation table, `VERSIONING.md` when the bump class changes |
+| Remote, `dashboard` props, or SDK version | `src/App.tsx`, `config/remotes.local.json`, `README.md` federation table, `VERSIONING.md` when the bump class changes |
 | Runtime config key or build constant | `public/config/runtime.json`, `config/runtime.local.json`, `src/globals.d.ts`, `README.md` configuration tables, Dockerfile `ARG` and the workflow build-args when the image must bake it |
 | nginx path or listen port | `nginx/default.conf`, `test/smoke/deployment.test.ts`, `README.md` nginx table, LLD §10.1, `.claude/architecture.md`, PR deployment notes |
 | SDK version | `package.json` (all three, exact), README, ARCHITECTURE, VERSIONING, LLD header, `.claude/CLAUDE.md`, CHANGELOG (`.claude/operations.md` checklist) |

@@ -4,13 +4,13 @@ This file provides guidance to Claude Code when working with **web-shell**, the 
 
 ## What This Repo Is
 
-A **private Rsbuild application** (npm name `web-shell`, `"private": true`, `0.0.0`) that ships as a static bundle in an nginx image (`ghcr.io/bcbp-solutions-fzc-llc/web-shell`, port 8080, uid 101). It runs the platform SDK's start-up sequence once per page, owns the sign-in and session screens and the IAM ports, and hosts the dashboard remote `app2` (`mfe-dashboard`) through Module Federation. It exposes nothing.
+A **private Rsbuild application** (npm name `web-shell`, `"private": true`, `0.0.0`) that ships as a static bundle in an nginx image (`ghcr.io/bcbp-solutions-fzc-llc/web-shell`, port 8080, uid 101). It runs the platform SDK's start-up sequence once per page, owns the sign-in and session screens and the IAM ports, and hosts the dashboard remote `dashboard` (`mfe-dashboard`) through Module Federation. It exposes nothing.
 
 Node 26, TypeScript `~6.0.3` (typescript-eslint has no TS 7 support), React 19.3, Rsbuild 2 (Rspack), Tailwind 4 + daisyUI. Platform packages from **GitHub Packages** (`.npmrc`, `NODE_AUTH_TOKEN` with `read:packages`): `@bcbp-solutions-fzc-llc/frontend-sdk`, `webpack-preset`, `eslint-plugin`, all **`1.0.0-alpha.5`, pinned exactly, on one version**.
 
 **Status:** code on `main` is release-ready; never tagged or deployed (everything is `[Unreleased]`). The release workflow has never run (its provenance step was fixed in #27). mfe-dashboard `main`/`v0.1.0`+ is on alpha.4 and passes the contract suite; its own release is pending (`v0.1.1`). CloudFront arrives next month; until then environments follow `docs/hosting-without-cloudfront.md`. Open items: [LLD §15](../docs/lld/web-shell-lld.md#15-open-items). v1 decisions: essential-only consent; fonts self-hosted; Forgot password → Keycloak reset.
 
-**The shell owns:** `src/bootstrap.tsx` (SDK order, session branches, render), `src/App.tsx` (routes under `/t/<slug>/`, `RemoteBoundary` for `app2` `./App`), `src/platform/` (PUB-1 and P-35 ports, role map, consent stand-in, session screens and their host), `src/pages/` (login layouts, remember-email), `rsbuild.config.ts`, `config/dev-platform.mjs` (dev stand-ins), `nginx/default.conf`, `Dockerfile`.
+**The shell owns:** `src/bootstrap.tsx` (SDK order, session branches, render), `src/App.tsx` (routes under `/t/<slug>/`, `RemoteBoundary` for `dashboard` `./App`), `src/platform/` (PUB-1 and P-35 ports, role map, consent stand-in, session screens and their host), `src/pages/` (login layouts, remember-email), `rsbuild.config.ts`, `config/dev-platform.mjs` (dev stand-ins), `nginx/default.conf`, `Dockerfile`.
 
 **Does NOT own:** PKCE, tokens, refresh, idle timeout, cross-tab sign-out, workspace cache, telemetry, remote loading, chunk integrity, the shared map (all SDK / preset, in `platform-reactcommon`); Keycloak; IAM APIs and roles; dashboard screens (`mfe-dashboard`); each environment's runtime config, manifest and CSP (deploy pipeline, CloudFront).
 

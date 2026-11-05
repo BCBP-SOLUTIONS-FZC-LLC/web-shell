@@ -1,6 +1,6 @@
 # Versioning and releases
 
-This repository is a **deployed micro-frontend shell**, not an npm library other apps install — `package.json` is `"private": true` and its `name` (`web-shell`) is only an identifier, not something another package can `npm install`. What gets versioned here is the **container image** (`ghcr.io/bcbp-solutions-fzc-llc/web-shell`) and the **static bundle** attached to the GitHub Release, plus the runtime contract hosts, the dashboard remote (`app2`), and operators depend on. Versions are published with **Git tags** and described in [CHANGELOG.md](./CHANGELOG.md).
+This repository is a **deployed micro-frontend shell**, not an npm library other apps install — `package.json` is `"private": true` and its `name` (`web-shell`) is only an identifier, not something another package can `npm install`. What gets versioned here is the **container image** (`ghcr.io/bcbp-solutions-fzc-llc/web-shell`) and the **static bundle** attached to the GitHub Release, plus the runtime contract hosts, the dashboard remote (`dashboard`), and operators depend on. Versions are published with **Git tags** and described in [CHANGELOG.md](./CHANGELOG.md).
 
 This document follows the same SemVer / image-tag / maintainer-process layout as [`iam-org-membership/VERSIONING.md`](https://github.com/BCBP-SOLUTIONS-FZC-LLC/iam-org-membership/blob/main/VERSIONING.md). There is no Helm chart in this repo, so the deploy step of that service's release workflow is not part of this one.
 
@@ -10,7 +10,7 @@ We use [SemVer 2.0.0](https://semver.org/): `MAJOR.MINOR.PATCH` (e.g. `v1.2.3`).
 
 | Bump | When you change | Examples |
 |------|-----------------|----------|
-| **MAJOR** | Breaking change in the runtime contract (§ below) | Removing or renaming a prop the shell passes to `app2`, moving to an SDK major (or an alpha `N`) that refuses remotes built against the current one, removing a route, changing the redirect path or the `/t/<slug>/` prefix, requiring a new runtime config key, removing `/healthz` or `/`, changing the image listen port |
+| **MAJOR** | Breaking change in the runtime contract (§ below) | Removing or renaming a prop the shell passes to `dashboard`, moving to an SDK major (or an alpha `N`) that refuses remotes built against the current one, removing a route, changing the redirect path or the `/t/<slug>/` prefix, requiring a new runtime config key, removing `/healthz` or `/`, changing the image listen port |
 | **MINOR** | New backward-compatible capability | An SDK minor bump within the same major (remotes built against the older minor still load), a new optional runtime config key, a new route that does not remove an existing one, a new remote |
 | **PATCH** | Backward-compatible fix | Sign-in or routing bug fix, visual fix that does not change the federation contract, dependency bump with no observable behavior change, documentation-only correction |
 
@@ -21,7 +21,7 @@ This shell has no package for another app to import from npm. Its public contrac
 | In scope (SemVer applies) | Out of scope (may change without MAJOR) |
 |---------------------------|------------------------------------------|
 | The shell's SDK version (`@bcbp-solutions-fzc-llc/frontend-sdk`, shared as a strict singleton). A remote requires at least the SDK version it was built against | Internal file layout under `src/`, component names, CSS class names |
-| `app2` `./App` gets no props: the remote reads the signed-in user (`useCurrentUser`) and sign-out (`useSignOut`) from the SDK this shell provides through `PlatformProvider` (`user`, `signOut`) | The dashboard's own UI. That remote is versioned in its own repository |
+| `dashboard` `./App` gets no props: the remote reads the signed-in user (`useCurrentUser`) and sign-out (`useSignOut`) from the SDK this shell provides through `PlatformProvider` (`user`, `signOut`) | The dashboard's own UI. That remote is versioned in its own repository |
 | Shared singletons from `@bcbp-solutions-fzc-llc/webpack-preset`: `react` and `react-dom` `^19.0.0`, `@opentelemetry/api` `~1.10.0`, every SDK subpath | Patch-level upgrades inside those ranges |
 | Routes `/t/<slug>/dashboard/*` (remote dashboard), the catch-all redirect to `/dashboard`, and the callback path `/auth/callback` | Copy, theme class names, the login-page feature list, and the session screens' wording |
 | `/config/runtime.json` keys the shell relies on (the SDK schema) and the `/remotes/manifest.json` format; the IAM endpoints it calls (PUB-1, P-35); build args `PLATFORM_ENVIRONMENT` and `BUILD_VERSION` | The default `public/config/runtime.json` the image ships. Each environment serves its own |
@@ -48,7 +48,7 @@ This shell has no formal support-window policy yet, since nothing is running in 
 
 ## Consume a release
 
-Do not add this repository as an npm dependency. Run the **shell image** (or serve the static bundle from the GitHub Release), serve the environment's `/config/runtime.json` and `/remotes/manifest.json` over the defaults, and let the SDK load `app2` from the manifest.
+Do not add this repository as an npm dependency. Run the **shell image** (or serve the static bundle from the GitHub Release), serve the environment's `/config/runtime.json` and `/remotes/manifest.json` over the defaults, and let the SDK load `dashboard` from the manifest.
 
 ### Pull and verify the image
 
@@ -149,7 +149,7 @@ When cutting a tagged release:
    - `docker` — builds the `linux/amd64` image and pushes it **by digest only**, fails the release on unfixed CRITICAL/HIGH CVEs, writes a CycloneDX SBOM and SLSA provenance, signs with Cosign, verifies the signature, and only then adds the semver tags and `latest` (see the tag scheme above; `.github/scripts/tag-signed-image.sh` checks every tag resolves to the signed digest). A failure before that leaves an untagged digest: no version tag or `latest` moves.
    - `publish` — creates the GitHub Release from the CHANGELOG section and attaches the tarball, checksums, SBOM, and provenance. It runs only after `build` and `docker` succeed.
 
-7. **Notify consumers** — whoever hosts the shell image, and the dashboard remote (`app2`) if the SDK version or the `PlatformProvider` shell value (`user`, `signOut`, `workspace`, `context`) changed. Call out any new required runtime config key.
+7. **Notify consumers** — whoever hosts the shell image, and the dashboard remote (`dashboard`) if the SDK version or the `PlatformProvider` shell value (`user`, `signOut`, `workspace`, `context`) changed. Call out any new required runtime config key.
 
 ### Pre-release tags (optional)
 

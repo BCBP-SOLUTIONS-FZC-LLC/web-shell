@@ -8,7 +8,7 @@ Condensed from [ARCHITECTURE.md](../ARCHITECTURE.md) and the [LLD](../docs/lld/w
 |---|---|
 | `src/index.ts` | `import('./bootstrap')` (Module Federation async boundary); `showUnavailable` replaces `#app` on a throw |
 | `src/bootstrap.tsx` | SDK start-up order, session branches, `idp.subscribe`, render inside `ShellRoot`, P-35 background retry, start-up failure report (`the app could not start`), `registerNavigator` |
-| `src/App.tsx` | `BrowserRouter` (basename `/t/<slug>` when the URL has one, keyed by it); `/dashboard/*` → `RemoteBoundary remote="app2" module="./App"`; `*` → `/dashboard`; `onRouter` hands `navigate` to the bootstrap; update banner and missing-context notice |
+| `src/App.tsx` | `BrowserRouter` (basename `/t/<slug>` when the URL has one, keyed by it); `/dashboard/*` → `RemoteBoundary remote="dashboard" module="./App"`; `*` → `/dashboard`; `onRouter` hands `navigate` to the bootstrap; update banner and missing-context notice |
 | `src/platform/iam.ts` | `toWorkspace` (PUB-1), `toSessionContext` (P-35), `workspaceResolver`, `sessionContextSource` over a lazy `createApiClient()` |
 | `src/platform/permissions.ts` | `IAM_ROLES`, `permissions` (role → `action:resource`) |
 | `src/platform/consent.ts` | `cmp`: `essential` only (v1 decision); `accept()` unused |
@@ -70,7 +70,7 @@ No CSP or HSTS in the image. CloudFront sends the platform's; until it exists (n
 |---|---|
 | `test/unit` | `iam.test.ts` uses `createTestPlatform` + `mockApi` and the SDK's `contracts/*-cases.json`; `dev-platform.test.ts` is `@vitest-environment node` with real HTTP |
 | `test/integration` | `bootstrap.test.tsx` replaces every SDK subpath with recording fakes (`vi.mock`) and asserts the order |
-| `test/e2e/shell.test.tsx` | Real bootstrap and SDK. `load(path)` = unmount roots, clear `globalThis[Symbol.for('@bcbp-solutions-fzc-llc/frontend-sdk')]`, `vi.resetModules()`, import the bootstrap again. Needs `server.deps.inline` for the SDK in `vitest.config.ts`. Stubs: the remote's entry `<script>` (defines `window.__platform_mfe_app2`), `location.assign/replace` (recorded), `HTMLFormElement#submit` (the sign-out POST, recorded), `createRoot` (tracked) |
+| `test/e2e/shell.test.tsx` | Real bootstrap and SDK. `load(path)` = unmount roots, clear `globalThis[Symbol.for('@bcbp-solutions-fzc-llc/frontend-sdk')]`, `vi.resetModules()`, import the bootstrap again. Needs `server.deps.inline` for the SDK in `vitest.config.ts`. Stubs: the remote's entry `<script>` (defines `window.__platform_mfe_dashboard`), `location.assign/replace` (recorded), `HTMLFormElement#submit` (the sign-out POST, recorded), `createRoot` (tracked) |
 | `test/fixtures` | `FakeKeycloak` (`approve()`, token endpoint, PKCE check, refresh rotation, `now` for clock skew), `FakeNetwork` (`on('GET /path', …)`, `sent(path)`), `FakeBroadcastChannel` |
 | `test/smoke` | `vitest.smoke.config.ts`; `SMOKE_BASE_URL` required; `SMOKE_MODE` `image` (localhost default) or `live` (CSP incl. `form-action`, HSTS, nosniff) |
 | `test/browser/shell.spec.ts` | Production build in Chromium, Firefox, WebKit over HTTPS with the production CSP; fake Keycloak on a second origin; a stub remote on the shared SDK. 6 cases × 3 engines. Not in `npm test` |

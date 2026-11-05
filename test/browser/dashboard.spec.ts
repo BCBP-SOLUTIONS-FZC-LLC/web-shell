@@ -42,7 +42,7 @@ test('the real dashboard loads in the shell: integrity, share scope, CSS, no CSP
   expect(page.url()).toBe(`${APP}/t/acme/dashboard`)
   // The remote's own stylesheet applied (its CSS chunk loaded under style-src 'self' and its integrity).
   const remoteCss = await page.evaluate(() =>
-    [...document.querySelectorAll('link[rel="stylesheet"]')].map((l) => (l as HTMLLinkElement).href).filter((h) => h.includes('/remotes/app2/')),
+    [...document.querySelectorAll('link[rel="stylesheet"]')].map((l) => (l as HTMLLinkElement).href).filter((h) => h.includes('/remotes/dashboard/')),
   )
   expect(remoteCss.length).toBeGreaterThan(0)
   expect(failed).toEqual([])
