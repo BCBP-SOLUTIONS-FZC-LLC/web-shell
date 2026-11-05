@@ -41,7 +41,8 @@ This shell has no package for another app to import from npm. Its public contrac
 
 | Version | Status | Image tag | Notes |
 |---------|--------|-----------|-------|
-| `v0.1.0` | **Current** (pre-1.0) | `0.1.0`, `0.1`, `0`, `latest` | First release; SDK `1.0.0-alpha.5`. [CHANGELOG § 0.1.0](CHANGELOG.md). No support window: pre-1.0, so a minor may break compatibility (see below) |
+| `v0.2.0` | **Current** (pre-1.0) | `0.2.0`, `0.2`, `0`, `latest` | Remote renamed `dashboard` (breaking): pairs with mfe-dashboard `v0.3.0`+. [CHANGELOG § 0.2.0](CHANGELOG.md). No support window: pre-1.0, so a minor may break compatibility (see below) |
+| `v0.1.0` | Superseded | `0.1.0`, `0.1` | First release; SDK `1.0.0-alpha.5`; remote `app2`: pairs with mfe-dashboard `v0.1.1`–`v0.2.0` only. Release commit `861fdb5` |
 | `< v0.1.0` | — | — | No tagged Git releases |
 
 This shell has no formal support-window policy yet, since nothing is running in production against a tagged release. Once a `v1.0.0` ships, this section will define how long a superseded major line receives security-only fixes.
