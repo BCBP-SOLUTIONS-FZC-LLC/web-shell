@@ -26,6 +26,7 @@ flowchart LR
     trivy["trivy\nCRITICAL HIGH UNKNOWN"]
     smoke["smoke\nsize, startup gate, no .map\nnpm run test-smoke"]
     browser["browser\nChromium, Firefox, WebKit\nproduction CSP"]
+    contract["dashboard-contract\nreal mfe-dashboard build\ninformational"]
     summary["pr-summary\npull requests only"]
     push["push\nmain and master only\nGHCR and Cosign"]
 
@@ -39,6 +40,7 @@ flowchart LR
     trivy --> summary
     smoke --> summary
     browser --> summary
+    contract --> summary
     test --> push
     quality --> push
     trivy --> push
@@ -48,7 +50,7 @@ flowchart LR
 
 Source: [`mermaid/ci-flow.mmd`](mermaid/ci-flow.mmd).
 
-`build-image` does not wait for the test job. Trivy and smoke wait for both the test job and the image. A test failure still skips the scan and the smoke run. `validate-quality` does not block those two. It does block `push`. The summary comment is skipped when any upstream job fails (`if` on the job).
+`build-image` does not wait for the test job. Trivy and smoke wait for both the test job and the image. A test failure still skips the scan and the smoke run. `validate-quality` does not block those two. It does block `push`. The summary comment is posted whatever the results (`if: always()`), failures included. `dashboard-contract` builds mfe-dashboard (`vars.DASHBOARD_REF`, default `main`) and runs the shell with that real remote in three browsers; it reports in the summary but never blocks `push`, since that repository's `main` moves on its own.
 
 | Job | Gate |
 |---|---|
@@ -58,6 +60,7 @@ Source: [`mermaid/ci-flow.mmd`](mermaid/ci-flow.mmd).
 | `trivy` | Reloads that cached image. Fails on unfixed **CRITICAL**, **HIGH**, or **UNKNOWN**. SARIF is uploaded and does not fail the job by itself. CycloneDX SBOM is an artifact named `sbom-<sha>`. Allowlist file: [`.trivyignore`](../../.trivyignore). See [the image runbook](../runbook-image-scan.md) |
 | `smoke` | Same cached image, then Node 26 and `npm ci` (`NODE_AUTH_TOKEN`). [`.github/scripts/smoke-tests.sh`](../../.github/scripts/smoke-tests.sh): at most 200 MB, `GET /healthz` contains `ok`, `GET /` is 200 and contains `id="app"`, `GET /config/runtime.json` and `GET /version.json` are 200, no `.map` file is in the image, then `npm run test-smoke` with `SMOKE_MODE=image` against the container ([test/smoke](../../test/smoke/README.md): SPA rule, Cache-Control, integrity, 404s, SDK-validated runtime files) |
 | `browser` | Node 26, `npm ci`, `npx playwright install --with-deps`, `npm run build`, `npm run test-browser` ([test/browser](../../test/browser/README.md)): Chromium, Firefox and WebKit under the production CSP. The report is uploaded on failure. Gates `push` |
+| `dashboard-contract` | Checks out `BCBP-SOLUTIONS-FZC-LLC/mfe-dashboard` into `.remote/`, `npm ci` both, builds the dashboard (`BUILD_VERSION=contract-<sha>`), Playwright browsers, `npm run build`, then `REMOTE_DIST=.remote/mfe-dashboard/dist npm run test-contract` ([`dashboard.spec.ts`](../../test/browser/dashboard.spec.ts)). Informational |
 | `pr-summary` | [`.github/scripts/pr-summary.js`](../../.github/scripts/pr-summary.js) posts one comment. The coverage cell uses the `pct` output of `validate-test` |
 | `push` | Push events on `main` or `master` only. Publishes `ghcr.io/bcbp-solutions-fzc-llc/web-shell` with the branch tag and `sha-<short>`, `provenance` and `sbom` on the build, then Cosign keyless sign and verify. The verify identity is `refs/heads/main` or `refs/heads/master` |
 

@@ -17,6 +17,7 @@
     "test-e2e": "vitest run test/e2e",
     "test-smoke": "vitest run --config vitest.smoke.config.ts",
     "test-browser": "playwright test",
+    "test-contract": "playwright test test/browser/dashboard.spec.ts",
     "hooks:install": "node scripts/install-hooks.mjs",
     "preview": "rsbuild preview",
     "keycloak:dev": "node scripts/keycloak-compose.mjs up",

@@ -42,6 +42,12 @@ Pull requests that change the shell, its dependencies, or the image add an entry
 
 ### Changed
 
+- **Release checks (`2026-11-05`).**
+  - **Dashboard contract** (`test/browser/dashboard.spec.ts`, `npm run test-contract`, CI `Dashboard contract`): this shell's production build with a **real** mfe-dashboard build (`REMOTE_DIST`; CI builds `BCBP-SOLUTIONS-FZC-LLC/mfe-dashboard` at `vars.DASHBOARD_REF`, default `main`) in Chromium, Firefox and WebKit under the production CSP: the remote's integrity, share scope and CSS, the shell's role map reaching it (`User management`), its navigation without a reload, and its Logout through the shell's form POST to Keycloak. A wrong integrity fails it. Informational: it reports in the PR summary but does not gate `push`. Run against mfe-dashboard `main` (`e1b04c3`, alpha.4): 9/9 passed.
+  - **Optional per-environment CSP in the image.** `nginx/default.conf` includes `/etc/nginx/security.d/*.conf` (empty in the image). An environment served without CloudFront mounts `nginx/security.d/csp.conf.example` there; behind CloudFront nothing is mounted. Nothing is written at start, so a read-only root filesystem works. The smoke job checks both: no CSP by default, the platform CSP on every location with the file mounted.
+  - **Start-up failure runbook** (`docs/runbook-startup-failure.md`): the `the app could not start` record, an example Loki alert (`WebShellStartupFailures`) for ops to deploy, and a diagnosis table.
+  - The PR summary is posted on failures too (`if: always()`).
+
 - **Launch hardening (`2026-11-05`).**
   - **The session context recovers without a reload.** A P-35 failure from a network error, timeout, 429 or 5xx is retried after 1 s, 2 s and 4 s (`src/platform/sessionContext.ts`, as alpha.4's reference shell). When it answers, the authorization subject, the tenant flags and the provider's `context` update live (`src/platform/ShellRoot.tsx`), so the remote's permissions appear and "We couldn't load your permissions" goes away. If that moves the URL under `/t/<slug>/`, the router is rebuilt with the new basename. A sign-out stops the retries, and a sign-out (here or in another tab) during start-up stops it before the app mounts. The provider's `locale` now follows `setLocale`.
   - **The user's IAM language is used.** `initializeI18n` gets `detect` from the P-35 `locale`, before the browser's languages.
@@ -106,7 +112,7 @@ Pull requests that change the shell, its dependencies, or the image add an entry
 
 - **The shipped runtime config is a default.** `public/config/runtime.json` uses the SDK defaults (`https://auth.bcbpsolutions.com`, client `tender-web`). Each environment serves its own `/config/runtime.json` and `/remotes/manifest.json` (CloudFront, or a file mounted over the image's). The image's manifest is `{}`, so the dashboard slot is empty until one is provided.
 
-- **No CSP headers yet.** The bundle is CSP-safe (Trusted Types policy, no `eval`, no inline script), but `nginx/default.conf` sets no `Content-Security-Policy`. The platform's headers come from CloudFront (`platform-reactcommon/examples/cloudfront`), whose `form-action` must include the IdP origin for the global sign-out.
+- **The CSP comes from CloudFront.** The image sends none by default. CloudFront's policy (`platform-reactcommon/examples/cloudfront`) must include the IdP origin in `form-action` for the global sign-out. An environment without CloudFront mounts `nginx/security.d/csp.conf.example`.
 
 - **`mfe-dashboard` is still on alpha.3.** Until it is rebuilt with the alpha.4 preset, this shell cannot load it, locally or deployed.
 

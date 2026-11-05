@@ -34,3 +34,6 @@ docker.local.env
 test-results/
 playwright-report/
 test/browser/.build/
+
+# Dashboard contract: mfe-dashboard checked out by CI
+.remote/

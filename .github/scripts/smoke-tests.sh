@@ -5,12 +5,16 @@ set -euo pipefail
 IMAGE="${IMAGE:-web-shell-ci-test}"
 MAX_MB="${MAX_MB:-200}"
 PORT="${PORT:-18080}"
+CSP_PORT="${CSP_PORT:-18081}"
 CID=""
+CSP_CID=""
 
 cleanup() {
-  if [ -n "${CID}" ]; then
-    docker rm -f "${CID}" >/dev/null 2>&1 || true
-  fi
+  for c in "${CID}" "${CSP_CID}"; do
+    if [ -n "${c}" ]; then
+      docker rm -f "${c}" >/dev/null 2>&1 || true
+    fi
+  done
 }
 trap cleanup EXIT
 
@@ -70,10 +74,40 @@ if ! SMOKE_BASE_URL="http://127.0.0.1:${PORT}" SMOKE_MODE=image npm run -s test-
 fi
 echo "::endgroup::"
 
+echo "::group::Per-environment CSP (nginx/security.d)"
+# The image sends no CSP (CloudFront does; two would both be enforced). An environment without
+# CloudFront mounts nginx/security.d/csp.conf.example as /etc/nginx/security.d/csp.conf.
+if curl -sI "http://127.0.0.1:${PORT}/" | grep -qi '^content-security-policy:'; then
+  echo "::error file=nginx/default.conf,title=CSP::The image sends a CSP by default; it must come from CloudFront or a mounted security.d file"
+  exit 1
+fi
+CSP_CID=$(docker run -d --rm -p "127.0.0.1:${CSP_PORT}:8080" \
+  -v "${PWD}/nginx/security.d/csp.conf.example:/etc/nginx/security.d/csp.conf:ro" "${IMAGE}")
+csp_ready=0
+for _ in $(seq 1 30); do
+  if curl -sf "http://127.0.0.1:${CSP_PORT}/healthz" | grep -q 'ok'; then
+    csp_ready=1
+    break
+  fi
+  sleep 1
+done
+asset=$(grep -o 'src="/assets/[^"]*\.js"' /tmp/web-shell-index.html | head -1 | cut -d'"' -f2)
+for path in / /t/acme/dashboard "${asset}"; do
+  csp=$(curl -sI "http://127.0.0.1:${CSP_PORT}${path}" | grep -i '^content-security-policy:' || true)
+  echo "GET ${path} (csp.conf mounted) -> ${csp:0:80}…"
+  if [ "${csp_ready}" -ne 1 ] || ! echo "${csp}" | grep -q "form-action 'self' https://"; then
+    echo "::error file=nginx/security.d/csp.conf.example,title=CSP::A mounted csp.conf did not add the platform CSP (with the IdP in form-action) on ${path}"
+    docker logs "${CSP_CID}" || true
+    exit 1
+  fi
+done
+echo "::endgroup::"
+
 {
   echo "### Smoke test results"
   echo "- ✅ Startup gate: \`/healthz\`, \`/\`, \`/config/runtime.json\` and \`/version.json\` returned 200; no source maps in the image"
   echo "- ✅ Smoke suite (\`test/smoke\`): SPA rule, Cache-Control, script integrity, 404s, and the runtime files validated by the SDK"
+  echo "- ✅ CSP: none by default; a mounted \`security.d/csp.conf\` adds the platform CSP on every location"
   echo "- 📦 Image size (linux/amd64): **${mb} MB** (limit: ${MAX_MB} MB)"
   echo "- 🔍 [Security (Trivy SARIF results)](https://github.com/${GITHUB_REPOSITORY}/security/code-scanning)"
 } >> "$GITHUB_STEP_SUMMARY"

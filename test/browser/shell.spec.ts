@@ -11,6 +11,9 @@ const APP = process.env.BROWSER_APP_URL!
 const IDP = process.env.BROWSER_IDP_URL!
 const EMAIL = 'ada@acme.test'
 
+// The stub remote's cases; the real dashboard's are in dashboard.spec.ts (REMOTE_DIST).
+test.skip(!!process.env.REMOTE_DIST, 'REMOTE_DIST: the dashboard contract run')
+
 const state = async (page: Page): Promise<State> => (await page.request.get(`${APP}/__test/state`)).json()
 
 /** securitypolicyviolation events in every document the page loads (an init script runs before CSP applies). */

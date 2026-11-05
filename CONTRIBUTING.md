@@ -129,6 +129,7 @@ docs/lld/web-shell-lld.md ← Low-level design (the contract)
 | End to end | `test/e2e/` | No | The real shell and SDK against `test/fixtures/` fakes (Keycloak, network, BroadcastChannel); only the remote's entry script is stubbed |
 | Smoke | `test/smoke/`, CI `smoke` job | Image or deployment | `.github/scripts/smoke-tests.sh`: image ≤ 200 MB and the startup gate, then `npm run test-smoke` against the container (SPA rule, Cache-Control, integrity, 404s, SDK-validated runtime files). [test/smoke/README.md](./test/smoke/README.md) |
 | Browser | `test/browser/`, CI `browser` job | `dist/` | Playwright over HTTPS with the production CSP: fonts, sign-in, the remote with integrity, `navigate()`, sign-out POST, start-up report, contrast |
+| Dashboard contract | `test/browser/dashboard.spec.ts`, CI `dashboard-contract` | A built mfe-dashboard `dist/` (`REMOTE_DIST`) | The real remote in this shell: integrity, CSS, role map, navigation, Logout |
 
 Run one file:
 

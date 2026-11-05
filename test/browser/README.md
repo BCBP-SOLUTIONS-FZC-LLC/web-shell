@@ -32,3 +32,21 @@ npx playwright install chromium firefox webkit   # once, if the browsers are mis
 After every case, any report the browser sent to `/csp-report` fails it.
 
 Tests run one at a time (`workers: 1`): they share the fake Keycloak session and the recorders, and reset them in `beforeEach`.
+
+## Dashboard contract (`dashboard.spec.ts`)
+
+With `REMOTE_DIST` set to a built mfe-dashboard `dist/` (it must contain `remote-manifest-entry.json`, which the dashboard's `npm run build` writes), the server serves that build as `app2` under `/remotes/app2/<version>/` with its own integrity, and `shell.spec.ts` is skipped:
+
+```bash
+git clone --depth 1 https://github.com/BCBP-SOLUTIONS-FZC-LLC/mfe-dashboard.git /tmp/mfe-dashboard
+(cd /tmp/mfe-dashboard && npm ci && npm run build)
+npm run build && REMOTE_DIST=/tmp/mfe-dashboard/dist npm run test-contract
+```
+
+| Case | Locks |
+|---|---|
+| Loads | The real remote renders "Dashboard" with its own stylesheet, no failed `/remotes/` request, no CSP violation |
+| Role map and navigation | An owner sees "User management" (the shell's role map through SDK hooks); its `NavLink` opens the page without a reload |
+| Logout | The dashboard's Logout signs out through the shell: the form POST reaches Keycloak, "You are signed out" |
+
+CI's `Dashboard contract` job builds `BCBP-SOLUTIONS-FZC-LLC/mfe-dashboard` at `vars.DASHBOARD_REF` (default `main`) and runs this. It is informational: it does not gate `push`.

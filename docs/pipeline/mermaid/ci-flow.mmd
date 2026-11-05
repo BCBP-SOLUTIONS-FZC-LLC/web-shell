@@ -5,6 +5,7 @@ flowchart LR
     trivy["trivy\nCRITICAL HIGH UNKNOWN"]
     smoke["smoke\nsize, startup gate, no .map\nnpm run test-smoke"]
     browser["browser\nChromium, Firefox, WebKit\nproduction CSP"]
+    contract["dashboard-contract\nreal mfe-dashboard build\ninformational"]
     summary["pr-summary\npull requests only"]
     push["push\nmain and master only\nGHCR and Cosign"]
 
@@ -18,6 +19,7 @@ flowchart LR
     trivy --> summary
     smoke --> summary
     browser --> summary
+    contract --> summary
     test --> push
     quality --> push
     trivy --> push

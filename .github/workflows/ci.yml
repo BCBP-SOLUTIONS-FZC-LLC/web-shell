@@ -8,6 +8,7 @@
 #                       └────────────────┤──► push       (push events only, needs quality too)
 #   validate-quality ───────────────────┤
 #   browser ────────────────────────────┘
+#   dashboard-contract ──► pr-summary   (informational: never gates push)
 #
 # build-image lints the Dockerfile (Hadolint + .dockerignore check) as its
 # first steps, before the expensive build — a lint failure never starts the
@@ -15,8 +16,10 @@
 # validate-test runs the typecheck and production build and gates trivy/smoke.
 # validate-quality gates push/release only (audit + supply-chain checks).
 # browser runs the production build in Chromium, Firefox and WebKit under the production CSP
-# (test/browser); it gates push.
-# pr-summary posts a status table on pull_request events (skipped if upstream jobs fail).
+# (test/browser); it gates push. dashboard-contract builds mfe-dashboard (vars.DASHBOARD_REF, default
+# main) and runs test/browser/dashboard.spec.ts against it: the real remote in this shell.
+# It reports but does not gate push, since that repository's main moves on its own.
+# pr-summary posts a status table on pull_request events, failures included.
 #
 # paths-ignore skips this entire pipeline for commits that only touch Markdown.
 # A commit that touches both docs and code still runs normally (paths-ignore
@@ -285,11 +288,74 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
+  dashboard-contract:
+    name: Dashboard contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+          token: ${{ secrets.CI_REPO_READ_TOKEN || github.token }}
+
+      # Public repository: the default token reads it.
+      - name: Checkout mfe-dashboard
+        uses: actions/checkout@v7.0.1
+        with:
+          repository: BCBP-SOLUTIONS-FZC-LLC/mfe-dashboard
+          ref: ${{ vars.DASHBOARD_REF || 'main' }}
+          path: .remote/mfe-dashboard
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7.1.0
+        with:
+          node-version: 26
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            .remote/mfe-dashboard/package-lock.json
+
+      - name: Install dependencies (shell and dashboard)
+        run: |
+          npm ci
+          npm ci --prefix .remote/mfe-dashboard
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build the dashboard remote
+        run: npm run build --prefix .remote/mfe-dashboard
+        env:
+          BUILD_VERSION: contract-${{ github.sha }}
+
+      - name: Install browsers (Chromium, Firefox, WebKit)
+        run: npx playwright install --with-deps chromium firefox webkit
+
+      - name: Production build
+        run: npm run build
+
+      - name: Dashboard contract tests
+        run: npm run -s test-contract
+        env:
+          REMOTE_DIST: .remote/mfe-dashboard/dist
+
+      - name: Upload Playwright report
+        uses: actions/upload-artifact@v7.0.2
+        if: failure()
+        with:
+          name: playwright-contract-report-${{ github.sha }}
+          path: |
+            playwright-report
+            test-results
+          if-no-files-found: ignore
+          retention-days: 14
+
   pr-summary:
     name: PR summary
     runs-on: ubuntu-latest
-    needs: [validate-test, validate-quality, build-image, trivy, smoke, browser]
-    if: github.event_name == 'pull_request'
+    needs: [validate-test, validate-quality, build-image, trivy, smoke, browser, dashboard-contract]
+    if: always() && github.event_name == 'pull_request'
     timeout-minutes: 5
     permissions:
       contents: read

@@ -27,6 +27,7 @@ npm run test:ci           # + coverage gate 95% (100% today)
 npm run build             # tsc + rsbuild build
 npm run budget            # bundle size budget, after a build
 npm run test-browser      # Playwright, Chromium/Firefox/WebKit under the production CSP, after a build
+npm run test-contract     # same, against a real mfe-dashboard build: REMOTE_DIST=../mfe-dashboard/dist
 npm run test-smoke        # needs SMOKE_BASE_URL (test/smoke/README.md)
 ```
 
@@ -44,7 +45,7 @@ Run one test: `npx vitest run test/e2e/shell.test.tsx -t "sign-out"`. Full list:
 - **No login without a click** after a logout, a device-clock refusal or an expiry. The app is **unmounted** before "You are signed out". A wrong-workspace login never renders.
 - **Remotes get no props.** Data a remote needs goes into the `PlatformProvider` shell value and is read through SDK hooks.
 - **Role map keys are IAM's closed set** (`member`, `tenant_owner`, `tenant_admin`, `tender_admin`); department levels are never roles. UI hints only.
-- **CSP `form-action` must allow the IdP origin** (SDK alpha.4 signs out globally with a form POST to Keycloak); CloudFront owns the CSP, smoke `live` checks it.
+- **CSP `form-action` must allow the IdP origin** (SDK alpha.4 signs out globally with a form POST to Keycloak); CloudFront owns the CSP, smoke `live` checks it. The image sends none; `nginx/security.d/csp.conf.example` is mounted only where no CloudFront fronts it (never both).
 - **CSP-safe:** no inline script or style (`inlineScripts`/`inlineStyles: false`), no `eval`, no runtime CSS-in-JS. Never add a third-party origin to `index.html`; fonts are self-hosted (`@fontsource-variable/*`).
 - **No dead or invented links.** Help and legal URLs live only in `src/pages/links.ts` and render only when set; never guess an official URL.
 - **nginx SPA rule:** only extension-less paths get `index.html`; `/api`, `/otel`, `/csp-report`, `/config`, `/remotes`, `/assets` and any missing file with an extension stay 404. Unhashed files are `no-cache`, `/assets/` immutable. Change `test/smoke/deployment.test.ts` with it.
