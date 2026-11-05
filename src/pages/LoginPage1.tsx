@@ -1,6 +1,7 @@
 /** Previous login layout. Switch back to this screen with `ACTIVE_LOGIN = 'login1'`. */
 import { useEmailSignIn, type LoginPageProps } from './useEmailSignIn'
 import { BrandLogo } from '../components/BrandLogo'
+import { ForgotPasswordButton, HelpLink, LegalFooter } from './PageLinks'
 
 const FEATURES = [
   { dotClass: 'bg-[#ff2d9a]', label: '95% Accuracy Forecasting' },
@@ -42,12 +43,12 @@ function PanelLayers({ clip, mirrored = false }: { clip: string; mirrored?: bool
   )
 }
 
-export default function LoginPage({ onContinue, notice = null }: LoginPageProps) {
-  const { email, setEmail, remember, setRemember, submitting, error, handleSubmit } =
-    useEmailSignIn(onContinue)
+export default function LoginPage({ onContinue, onForgotPassword, notice = null }: LoginPageProps) {
+  const { email, setEmail, remember, setRemember, submitting, error, handleSubmit, handleForgotPassword } =
+    useEmailSignIn(onContinue, onForgotPassword)
 
   return (
-    <div className="relative min-h-dvh overflow-hidden bg-[#030d1b] font-sans text-white">
+    <main className="relative min-h-dvh overflow-hidden bg-[#030d1b] font-sans text-white">
       {/* Full-bleed cityscape; center band stays visible between mirrored panels */}
       <div
         className="absolute inset-0 z-0 bg-[url('/image/cityscape.jpg')] bg-cover bg-center bg-no-repeat"
@@ -112,21 +113,16 @@ export default function LoginPage({ onContinue, notice = null }: LoginPageProps)
           <div className="w-full shrink-0 rounded-xl bg-white px-7 pb-7 pt-[1.65rem] text-gray-900 shadow-login-card">
             <div className="mb-[1.15rem] flex items-start justify-between gap-3">
               <h2 className="m-0 text-[0.98rem] font-bold text-[#1a1a2e]">Login to your account</h2>
-              <a
-                href="#help"
-                className="mt-0.5 shrink-0 whitespace-nowrap text-[0.68rem] font-medium text-aura-secondary no-underline hover:underline"
-              >
-                Trouble logging in?
-              </a>
+              <HelpLink className="mt-0.5 shrink-0 whitespace-nowrap text-[0.68rem] font-medium text-aura-secondary no-underline hover:underline" />
             </div>
             <form onSubmit={handleSubmit}>
               {notice ? (
-                <p className="mb-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                <p role="alert" className="mb-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
                   {notice}
                 </p>
               ) : null}
               {error ? (
-                <div className="mb-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                <div role="alert" className="mb-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
                   <p>{error}</p>
                 </div>
               ) : null}
@@ -154,12 +150,11 @@ export default function LoginPage({ onContinue, notice = null }: LoginPageProps)
                   />
                   <span>Remember Email</span>
                 </label>
-                <a
-                  href="#forgot"
+                <ForgotPasswordButton
+                  onClick={handleForgotPassword}
+                  disabled={submitting}
                   className="text-[0.72rem] font-medium text-aura-secondary no-underline hover:underline"
-                >
-                  Forgot your password?
-                </a>
+                />
               </div>
               <button
                 type="submit"
@@ -170,21 +165,13 @@ export default function LoginPage({ onContinue, notice = null }: LoginPageProps)
               </button>
             </form>
           </div>
-          <footer className="flex flex-wrap items-center justify-center gap-x-1.5 gap-y-1 text-[0.65rem]">
-            <a href="#privacy" className="text-white/90 no-underline hover:underline">
-              Privacy Policy
-            </a>
-            <span className="text-white/50">|</span>
-            <a href="#terms" className="text-white/90 no-underline hover:underline">
-              Terms of service
-            </a>
-            <span className="text-white/50">|</span>
-            <a href="#trust" className="text-white/90 no-underline hover:underline">
-              Trust &amp; Security
-            </a>
-          </footer>
+          <LegalFooter
+            className="flex flex-wrap items-center justify-center gap-x-1.5 gap-y-1 text-[0.65rem]"
+            linkClassName="text-white/90 no-underline hover:underline"
+            separator="text-white/50"
+          />
         </div>
       </div>
-    </div>
+    </main>
   )
 }

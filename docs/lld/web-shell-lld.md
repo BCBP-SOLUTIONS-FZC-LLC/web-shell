@@ -14,6 +14,8 @@
 
 | Date | Change |
 |---|---|
+| 2026-11-04 | Launch decisions: self-hosted fonts, Forgot password → Keycloak reset, links shown only with official URLs, essential-only consent for v1, update banner |
+| 2026-11-04 | Production-readiness fixes: login photo weight, nginx gzip and baseline headers, dotfile 404s, accessibility, missing-context notice, Try again |
 | 2026-11-04 | First LLD. Describes `main` after the move to the SDK on Rsbuild (#16), app2 on SDK hooks (#17), the IAM role map (#18), the audit follow-ups (#19), SDK `1.0.0-alpha.3` (#20) and the e2e and smoke suites (#21) |
 
 ### Table of Contents
@@ -66,8 +68,10 @@ The shell implements only what the SDK leaves to a shell: the screens, the two I
 | Signed-in routes and the dashboard `RemoteBoundary` | `src/App.tsx` |
 | IAM ports: PUB-1 → `Workspace`, P-35 → `SessionContext` | `src/platform/iam.ts` |
 | Session screens: email sign-in, signed out, session ended, device clock, wrong workspace, workspace not found | `src/platform/SessionScreens.tsx`, `src/platform/screen.tsx` |
-| Login layouts, email form, remember-email | `src/pages/*` |
-| Consent stand-in | `src/platform/consent.ts` |
+| Login layouts, email form, remember-email, help and legal links (`links.ts`, `PageLinks.tsx`) | `src/pages/*` |
+| Password reset hand-off to Keycloak | `src/platform/passwordReset.ts` |
+| Update and missing-permissions notices | `src/App.tsx` (`useAppUpdate`, `useSessionContext`) |
+| Consent (v1: essential only) | `src/platform/consent.ts` |
 | Role → UI permission map | `src/platform/permissions.ts` |
 | Build (`shell` host), `/version.json` | `rsbuild.config.ts` |
 | Dev-only platform stand-ins | `config/dev-platform.mjs` |
@@ -260,6 +264,10 @@ Keys are IAM's closed role set: `member`, `tenant_owner`, `tenant_admin`, `tende
 
 Then `idp.login({ workspace, loginHint? })`. The hint is the typed email, or the remembered email for a known workspace. `returnUrl` defaults to the current page in the SDK, and after a sign-out the SDK adds `prompt=login` itself; the shell passes neither.
 
+### 6.1a Forgot password
+
+"Forgot your password?" needs the typed email (an empty field shows "Enter your work email first…"). PUB-1 resolves it (failures show `WORKSPACE_NOT_FOUND`), then `location.assign(passwordResetUrl(workspace))`: `{auth.idpOrigin}/realms/{realm}/login-actions/reset-credentials?client_id={auth.clientId}`. Keycloak e-mails the reset link; the realm must have `resetPasswordAllowed`. No sign-in is started.
+
 ### 6.2 Callback
 
 Keycloak redirects to `{origin}{auth.redirectPath}` (`/auth/callback`). The SDK checks `iss` and `state`, exchanges the code with the PKCE verifier, keeps the tokens in memory, and moves the URL back to the page the user opened. The bootstrap continues at step 9.
@@ -280,6 +288,10 @@ Here (a remote's `useSignOut()`) or in another tab (`BroadcastChannel('platform-
 
 `switchWorkspace(identifier)` from the shell value: PUB-1; not found → `showWorkspaceNotFound()`; else `idp.switchWorkspace(w)`.
 
+### 6.6a New version
+
+`startVersionPolling()` (§5 step 16) polls `/version.json`. When `useAppUpdate().available` turns true, `App` shows "A new version is available." with Reload (`role="status"`, top of the page). The reload is never forced.
+
 ### 6.7 Dashboard load
 
 `/dashboard/*` → `useRouteTemplate('/t/:slug/dashboard')`, `<RemoteBoundary remote="app2" module="./App" fallback="Loading dashboard…">`. The SDK's `loadRemote`: kill switch (`remotes.killSwitch`, flag `remote.app2.disabled`), entry origin (page or `remotes.allowedOrigins`), classic `<script>` with `integrity`, timeout `remotes.loadTimeoutMs`, `retries`, container from `window.app2`, share-scope init. Any failure stays inside the boundary ("Something went wrong." / "Try again"); "Try again" asks the container again without a reload.
@@ -290,10 +302,10 @@ Here (a remote's `useSignOut()`) or in another tab (`BroadcastChannel('platform-
 
 | Step | Posture | Result |
 |---|---|---|
-| Identity, `/config/runtime.json` | fatal | "The app is unavailable right now." + `console.error` |
+| Identity, `/config/runtime.json` | fatal | "The app is unavailable right now." with Try again (reload) + `console.error` |
 | Silent restore | degrade | Signed-out flow |
 | PUB-1 | stop on the screen | One generic message; retry |
-| P-35 | degrade | Deny-all, platform flags, no `/t/<slug>/` move, `warn` log |
+| P-35 | degrade | Deny-all, platform flags, no `/t/<slug>/` move, `warn` log; `App` shows "We couldn't load your permissions…" with Reload (`role="status"`) |
 | Manifest | degrade | `error` log; the boundary shows its error |
 | Remote load or render | degrade | Boundary message, "Try again" |
 | Telemetry export | ignore | SDK queues; nothing beyond `essential` without consent |
@@ -314,7 +326,8 @@ Here (a remote's `useSignOut()`) or in another tab (`BroadcastChannel('platform-
 | Shared device | App unmounted before "You are signed out" | `idp.subscribe` handler; e2e |
 | Remote code | Runs in this origin; manifest-only entries, allowed origins, integrity outside local/dev/test | SDK `/mfe` |
 | Script integrity | sha384 on the entry and every lazy chunk | Preset `ChunkIntegrityPlugin`; smoke checks the entry |
-| CSP | Bundle is `script-src 'self'` and Trusted Types safe; headers come from CloudFront | Preset output, `inlineScripts: false`; smoke `live` mode checks headers |
+| CSP | Bundle is `script-src 'self'` and Trusted Types safe; fonts and styles are same-origin (`font-src 'self'`, `style-src 'self'`); headers come from CloudFront | Preset output, `inlineScripts: false`, self-hosted fonts; smoke `live` mode checks headers |
+| Outbound links | Help and legal links open in a new tab with `rel="noopener noreferrer"`; unset links are not rendered | `PageLinks.tsx` |
 | Generic errors | The email screen never says which input failed | `WORKSPACE_NOT_FOUND` |
 | Image | uid 101, digest-pinned bases, registry token as BuildKit secret, no source maps | `Dockerfile`; smoke checks `.map` |
 
@@ -358,15 +371,17 @@ Validated strictly by the SDK (unknown keys rejected). Schema: SDK LLD §12.1.
 
 | Location | Behaviour |
 |---|---|
+| server | `server_tokens off`; gzip (css, js, json, svg, text, html) with `Vary`; on every response (`add_header_inherit merge`): `nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `X-Frame-Options: DENY`, `Cross-Origin-Opener-Policy: same-origin`, `Permissions-Policy` |
 | `= /healthz` | `200 ok`, no access log |
 | `= /config/runtime.json`, `= /remotes/manifest.json`, `= /version.json` | `no-cache`, 404 when absent |
 | `= /index.html` | `no-cache` |
 | `^~ /assets/` | `public, max-age=31536000, immutable`; 404 when absent |
+| `~ /\.` (dotfiles) | 404 |
 | `~ ^/(api\|otel\|csp-report\|config\|remotes\|assets)(/\|$)` | 404 when absent; never `index.html` |
 | `~ \.[^/]*$` (any path with an extension) | `no-cache`; 404 when absent |
 | `/` | `no-cache`; `try_files $uri /index.html` |
 
-This is the platform's SPA rule (`platform-reactcommon` `examples/cloudfront/spa-rewrite.js`): only extension-less paths are app routes. nginx sets no CSP; CloudFront does.
+This is the platform's SPA rule (`platform-reactcommon` `examples/cloudfront/spa-rewrite.js`): only extension-less paths are app routes. nginx sets no CSP or HSTS: CloudFront does, and a second CSP here would be enforced alongside it.
 
 ### 10.2 Image
 
@@ -388,7 +403,7 @@ None of it reaches the bundle or the image.
 
 ## 11. Observability
 
-Identity: `service.name` `web-shell`, domain `portal`, environment `__ENVIRONMENT__`, version `__BUILD_VERSION__`. Telemetry goes to same-origin `/otel` and is consent-gated; the stand-in CMP grants `essential` only, so only `error` and essential `warn` logs leave the page today.
+Identity: `service.name` `web-shell`, domain `portal`, environment `__ENVIRONMENT__`, version `__BUILD_VERSION__`. Telemetry goes to same-origin `/otel` and is consent-gated. v1 grants `essential` only (decision: no analytics consent manager), so only `error` and essential `warn` logs leave the page.
 
 | Event | Level | When |
 |---|---|---|
@@ -407,9 +422,9 @@ Vitest 5, happy-dom at `http://localhost:5001/`, Testing Library. `vitest.config
 | Layer | Path | Real SDK | What it locks |
 |---|---|---|---|
 | Unit | `test/unit/` | partly (`createTestPlatform`, `mockApi`, `roleMapAuthorizer`) | PUB-1/P-35 mappings against the SDK's contract cases, the entry point, remember-email, consent, the role map, the screen host, `BrandLogo`, the login variant, the dev middleware (node env, real HTTP) |
-| Integration | `test/integration/` | no (`vi.mock` recording fakes) | The bootstrap's exact order and every branch, login layouts and carousel, session screens, `App` routes |
+| Integration | `test/integration/` | no (`vi.mock` recording fakes) | The bootstrap's exact order and every branch, login layouts and carousel (only current and next photo fetched), session screens (alerts, dialog focus), `App` routes and the missing-context notice, axe-core over every shell screen (`accessibility.test.tsx`, colour contrast excluded) |
 | End to end | `test/e2e/shell.test.tsx` | yes | Email → PUB-1 → PKCE → callback → `app2` under `/t/acme/dashboard`; tokens never stored; deep link; role map reaching the remote; deny-all; failing remote and Try again; global sign-out with no silent sign-in after; device clock; unknown email |
-| Smoke | `test/smoke/deployment.test.ts` | yes (config and manifest validation) | Against `SMOKE_BASE_URL`: the SPA rule, Cache-Control, entry integrity, no maps, 404s, `/healthz`; `live` mode adds the security headers |
+| Smoke | `test/smoke/deployment.test.ts` | yes (config and manifest validation) | Against `SMOKE_BASE_URL`: the SPA rule, Cache-Control, entry integrity, no maps, 404s, `/healthz`; `image` mode adds nginx's baseline headers, gzip, no version, dotfile 404s; `live` mode adds CloudFront's CSP, HSTS and nosniff |
 
 E2E seams (`test/fixtures/`): `FakeKeycloak` (authorize via `approve()`, token endpoint with PKCE check and refresh rotation), `FakeNetwork` (route table on the page origin; `/otel` → 204), `FakeBroadcastChannel`. Only the remote's entry `<script>` is stubbed: it defines `window.app2` exposing a dashboard built on SDK hooks. A page load clears `globalThis[Symbol.for('@bcbp-solutions-fzc-llc/frontend-sdk')]`, resets modules, and imports the bootstrap again; storage is kept.
 
@@ -452,10 +467,10 @@ Details: [VERSIONING.md](../../VERSIONING.md).
 
 | # | Item | Owner |
 |---|---|---|
-| 1 | `index.html` loads Geist and Inter from Google Fonts; the platform CSP (`style-src 'self'; font-src 'self'`) blocks them. Self-host under `/assets/` | this repo |
-| 2 | No real-browser suite under the production CSP (the SDK's `test/browser` pattern). Blocked on item 1 | this repo |
-| 3 | Consent is a stand-in (`essential` only). Wire the real CMP | this repo + CMP |
-| 4 | SDK features not used yet: `useAppUpdate` / `subscribeAppUpdate` (polling runs, but the user is never told), `registerNavigator` (a remote's `navigate()` does a full load), i18n `detect` from P-35 `locale` | this repo |
+| 1 | Official Privacy, Terms, Trust & Security and Help URLs: set them in `src/pages/links.ts` (hidden until then; none exists on bcbpsolutions.com) | product / legal |
+| 2 | No real-browser suite under the production CSP (the SDK's `test/browser` pattern) | this repo |
+| 3 | Consent is essential only in v1 (decision). A consent manager would call `cmp.accept()` | product |
+| 4 | SDK features not used yet: `registerNavigator` (a remote's `navigate()` does a full load), i18n `detect` from P-35 `locale` | this repo |
 | 5 | `no-raw-storage` catches `window.localStorage` but not bare `localStorage` | `platform-reactcommon` |
 | 6 | PUB-1 and P-35 must exist behind `/api` in every environment; they are stubbed only in dev | IAM |
 | 7 | No cluster deploy; each environment serves its own runtime config and manifest | operators |

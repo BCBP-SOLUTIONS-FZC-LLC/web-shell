@@ -244,7 +244,7 @@ describe('the shell, end to end', () => {
     expect(screen.queryByRole('button', { name: 'Invite' })).toBeNull()
   })
 
-  it('renders with deny-all permissions when the session context is unavailable', async () => {
+  it('renders with deny-all permissions when the session context is unavailable, and says so', async () => {
     net.on('GET /api/v1/me/session-context', () => Response.json({ title: 'Bad Gateway', status: 502 }, { status: 502 }))
     await load('/t/acme/dashboard')
     await until(() => assigned.length > 0, 'the redirect to Keycloak')
@@ -252,6 +252,7 @@ describe('the shell, end to end', () => {
     await screen.findByRole('heading', { name: /Dashboard for Ada Lovelace/ }, { timeout: 5_000 })
     expect(screen.queryByRole('link', { name: 'User management' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Invite' })).toBeNull()
+    expect(screen.getByRole('status')).toHaveTextContent("We couldn't load your permissions")
   })
 
   it('a remote that fails to load stays inside its boundary, and Try again recovers', async () => {
@@ -312,6 +313,17 @@ describe('the shell, end to end', () => {
     await approveLogin()
     await screen.findByRole('alertdialog', { name: "Check your device's clock" }, { timeout: 5_000 })
     expect(assigned).toEqual([])
+  })
+
+  it("Forgot your password? resolves the email and opens the realm's Keycloak reset page", async () => {
+    await load('/')
+    await userEvent.type(await emailBox(), EMAIL)
+    await userEvent.click(screen.getByRole('button', { name: 'Forgot your password?' }))
+    await until(() => assigned.length > 0, 'the redirect to the reset page')
+    const reset = new URL(assigned[0]!)
+    expect(`${reset.origin}${reset.pathname}`).toBe(`${IDP}/realms/tenant-acme/login-actions/reset-credentials`)
+    expect(reset.searchParams.get('client_id')).toBe('tender-web')
+    expect(kc.requests).toEqual([]) // no sign-in was started
   })
 
   it('an unknown email keeps the email screen up with the generic message, and never redirects', async () => {

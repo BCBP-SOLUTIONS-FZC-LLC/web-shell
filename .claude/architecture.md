@@ -11,10 +11,11 @@ Condensed from [ARCHITECTURE.md](../ARCHITECTURE.md) and the [LLD](../docs/lld/w
 | `src/App.tsx` | `BrowserRouter` (basename `/t/<slug>` when the URL has one); `/dashboard/*` → `RemoteBoundary remote="app2" module="./App"`; `*` → `/dashboard` |
 | `src/platform/iam.ts` | `toWorkspace` (PUB-1), `toSessionContext` (P-35), `workspaceResolver`, `sessionContextSource` over a lazy `createApiClient()` |
 | `src/platform/permissions.ts` | `IAM_ROLES`, `permissions` (role → `action:resource`) |
-| `src/platform/consent.ts` | `cmp`: `essential` until `accept()` |
+| `src/platform/consent.ts` | `cmp`: `essential` only (v1 decision); `accept()` unused |
 | `src/platform/SessionScreens.tsx` | `askForWorkspace`, `showSignedOut`, `showDeviceClock`, `showSessionEnded`, `showWrongWorkspace`, `showWorkspaceNotFound`, `WORKSPACE_NOT_FOUND` |
 | `src/platform/screen.tsx` | `#shell-screen` fixed overlay host: `showScreen`, `hideScreen`, `resetScreen` |
-| `src/pages/` | `LoginPage` (latest), `LoginPage1` (`?variant=login1`), `useEmailSignIn`, `rememberEmail`, `loginVariant` |
+| `src/pages/` | `LoginPage` (latest), `LoginPage1` (`?variant=login1`), `useEmailSignIn` (submit, forgot password), `rememberEmail`, `loginVariant`, `links` + `PageLinks` (help/legal, shown only with a URL) |
+| `src/platform/passwordReset.ts` | `passwordResetUrl(workspace)`: Keycloak `login-actions/reset-credentials` from `getConfig().auth` |
 | `rsbuild.config.ts` | `pluginReact`, `pluginPlatform({ role: 'shell' })`, `pluginVersionJson`; output, CSS, dev server |
 | `config/` | Dev only: `runtime.local.json`, `remotes.local.json`, `dev-platform.mjs` (+ `.d.mts`) |
 | `public/` | `config/runtime.json` (prod defaults), `remotes/manifest.json` (`{}`), images, favicons |
@@ -44,6 +45,8 @@ The preset owns: container `shell`, `var` library, strict singletons (`react`, `
 
 | Location | Cache | Missing |
 |---|---|---|
+| every response | gzip; `nosniff`, Referrer-Policy, `X-Frame-Options: DENY`, COOP, Permissions-Policy (`add_header_inherit merge`); `server_tokens off` | — |
+| `/\.` (dotfiles) | — | 404 |
 | `/healthz` | — | constant `ok` |
 | `/config/runtime.json`, `/remotes/manifest.json`, `/version.json`, `/index.html` | `no-cache` | 404 |
 | `/assets/` | `immutable`, 1 year | 404 |
@@ -51,7 +54,7 @@ The preset owns: container `shell`, `var` library, strict singletons (`react`, `
 | any path with an extension | `no-cache` | 404 |
 | `/` (extension-less) | `no-cache` | `index.html` |
 
-No CSP from nginx; CloudFront sends the platform's.
+No CSP or HSTS from nginx; CloudFront sends the platform's (a second CSP would be enforced alongside it).
 
 ## Tests
 

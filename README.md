@@ -59,6 +59,8 @@ After sign-in the SDK moves the URL under `/t/<slug>/` (`rememberWorkspace`), an
 5. Keycloak redirects to `{origin}/auth/callback`. The SDK checks `state`, exchanges the code with the PKCE verifier, and keeps the tokens in memory.
 6. The bootstrap loads the session context (`GET /api/v1/me/session-context`, P-35), sets permissions and flags, caches the workspace, loads `/remotes/manifest.json`, and renders.
 
+**Forgot your password?** resolves the typed email the same way and opens Keycloak's reset page for that realm (`/realms/{realm}/login-actions/reset-credentials`). Help and legal links appear only once their official URLs are set in `src/pages/links.ts`. When a new deployment is live, "A new version is available." offers a reload.
+
 Sign-out is global by default: the Keycloak session ends, every tab drops its tokens, the app unmounts, and "You are signed out" waits for a click. A session that expires during use shows "Session ended". The shell never redirects on its own.
 
 ### Federation contract
@@ -81,6 +83,8 @@ A remote must be built with `@bcbp-solutions-fzc-llc/webpack-preset` (`role: 're
 | `GET /` | Shell document. `index.html` is `Cache-Control: no-cache`. Only extension-less paths fall through to `index.html` (the platform's rule, `platform-reactcommon` `examples/cloudfront/spa-rewrite.js`); a missing file under `/api/`, `/otel/`, `/config/`, `/remotes/`, `/assets/`, or any missing file with an extension, is 404 |
 | `GET /config/runtime.json`, `/remotes/manifest.json`, `/version.json` | `no-cache`, `404` when the file is absent |
 | `GET /assets/*` | Hashed files, `Cache-Control: public, max-age=31536000, immutable` |
+| Dotfile paths (`/.git/…`, `/.env`) | `404` |
+| Every response | gzip for text, `nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `X-Frame-Options: DENY`, `Cross-Origin-Opener-Policy: same-origin`, `Permissions-Policy`; no nginx version. CSP and HSTS come from CloudFront |
 
 The container listens on **8080** as uid **101**.
 
@@ -98,7 +102,8 @@ web-shell/
 │   │   ├── iam.ts               # PUB-1 resolver and P-35 session context over the ApiClient
 │   │   ├── SessionScreens.tsx   # Email sign-in, signed out, session ended, device clock, wrong workspace
 │   │   ├── screen.tsx           # Full-screen host for those screens, outside the app root
-│   │   ├── consent.ts           # Consent stand-in (essential only until accepted)
+│   │   ├── consent.ts           # Consent: essential only in v1
+│   │   ├── passwordReset.ts     # Keycloak reset page for the workspace's realm
 │   │   └── permissions.ts       # Role → UI permission map
 │   ├── pages/                   # Login layouts, the shared email form hook, remember-email
 │   └── components/BrandLogo.tsx
@@ -217,7 +222,7 @@ Port **8080** is Keycloak in this compose file and also the port the shell image
 | Layer | Path | What it exercises |
 |---|---|---|
 | Unit | `test/unit/` | PUB-1 and P-35 mappings and ports, the entry point, remember-email, consent, the screen host, `BrandLogo`, the login variant, the dev server's platform middleware |
-| Integration | `test/integration/` | Both login layouts and the carousel, the session screens, `App` routes, and the bootstrap's order and branches |
+| Integration | `test/integration/` | Both login layouts and the carousel, the session screens, `App` routes, and the bootstrap's order and branches; axe-core over every shell screen (`accessibility.test.tsx`) |
 | End to end | `test/e2e/` | The real bootstrap, screens, `App` and SDK against a fake Keycloak (PKCE) and network: email → PUB-1 → sign-in → the `app2` remote under `/t/<slug>/`, deep links, role-map permissions in the remote, deny-all, a failing remote, global sign-out, the device clock |
 | Smoke | `test/smoke/` | `npm run test-smoke` against the served image (CI) or a deployment: the SPA rule, Cache-Control, script integrity, 404s, and the runtime files validated by the SDK. See [test/smoke/README.md](./test/smoke/README.md) |
 
@@ -272,7 +277,7 @@ The image takes `PLATFORM_ENVIRONMENT`, `BUILD_VERSION` and `SOURCE_DATE_EPOCH` 
 | **Redirect** | The SDK checks `state` before the code is exchanged. The redirect URI is `{origin}{auth.redirectPath}` |
 | **API calls** | The SDK's `ApiClient` sends the token to the page's own origin only and never sends identity headers. The ESLint plugin enforces subpath imports, no identity headers, no raw `window.*Storage`, no unsafe HTML |
 | **Remote code** | Remotes execute in this origin. Entries load only from the page's origin or `remotes.allowedOrigins`, pinned by `integrity` outside local, dev and test |
-| **CSP** | The bundle is Trusted-Types and `script-src 'self'` safe (preset output, `installTrustedTypesPolicy`). nginx sets no CSP header; the platform's CloudFront distribution does. Open item: `index.html` still loads Google Fonts, which the platform CSP blocks (LLD §15) |
+| **CSP** | The bundle is Trusted-Types and `script-src 'self'` safe (preset output, `installTrustedTypesPolicy`). nginx sets no CSP header; the platform's CloudFront distribution does. Fonts (Geist, Inter) are self-hosted under `/assets/`, so `font-src 'self'` and `style-src 'self'` hold |
 | **Image** | nginx runs as uid 101. `.env` is not copied into the build context. The registry token is a BuildKit secret and never lands in a layer. Source maps are deleted from the image |
 | **Reporting** | [SECURITY.md](./.github/SECURITY.md). Email vijay@bcbpsolutions.com with subject `[web-shell]` |
 
@@ -350,6 +355,7 @@ Two stages, both digest-pinned: `node:26-bookworm` runs `npm ci` and `npm run bu
 | `GET /realms/{realm}/protocol/openid-connect/auth` | Browser redirect to sign in, or a silent `prompt=none` restore |
 | `POST /realms/{realm}/protocol/openid-connect/token` | Code exchange and refresh |
 | `GET /realms/{realm}/protocol/openid-connect/logout` | Sign out |
+| `GET /realms/{realm}/login-actions/reset-credentials?client_id=` | "Forgot your password?" (browser navigation, built by the shell) |
 
 `{realm}` is the workspace's realm (`trial`, or `tenant-<slug>`). The SDK builds these URLs from `{auth.idpOrigin}/realms/{realm}`; it does not fetch discovery. The shell does not call the Keycloak Admin API. `scripts/seed-keycloak-user.mjs` uses `kcadm` inside the dev container only.
 
@@ -366,7 +372,7 @@ The shell loads `app2`'s entry from `/remotes/manifest.json` in the browser and 
 
 ### Telemetry
 
-Traces, logs and metrics are exported over OTLP/HTTP to `telemetry.otlpBaseUrl` (`/otel`), gated by consent. The consent stand-in grants `essential` only.
+Traces, logs and metrics are exported over OTLP/HTTP to `telemetry.otlpBaseUrl` (`/otel`), gated by consent. v1 grants `essential` only (a decision: no analytics consent manager), so errors and essential warnings are exported and traces, metrics and info logs are not.
 
 ---
 

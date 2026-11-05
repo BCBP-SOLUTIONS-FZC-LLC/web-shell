@@ -40,7 +40,7 @@ graph TD
 
     subgraph ports["Platform ports"]
         iam["platform/iam.ts\nPUB-1 resolver, P-35 session context"]
-        consent["platform/consent.ts\nconsent stand-in"]
+        consent["platform/consent.ts\nessential-only consent (v1)"]
         perms["platform/permissions.ts\nrole → UI permissions"]
         screen["platform/screen.tsx\nfull-screen host"]
     end
@@ -108,6 +108,8 @@ graph LR
     hook(["pages/useEmailSignIn.ts"])
     remember(["pages/rememberEmail.ts"])
     variant(["pages/loginVariant.ts"])
+    links(["pages/links.ts\npages/PageLinks.tsx"])
+    reset(["platform/passwordReset.ts"])
     logo(["BrandLogo.tsx"])
     sdk(["frontend-sdk subpaths"])
 
@@ -125,8 +127,11 @@ graph LR
     screens --> variant
     screens --> iam
     screens --> screen
+    screens --> reset
+    reset --> sdk
     login --> hook
     login --> logo
+    login --> links
     hook --> remember
     iam --> sdk
     consent --> sdk
@@ -136,11 +141,11 @@ graph LR
 
 | Module | May import |
 |---|---|
-| `platform/iam.ts`, `consent.ts`, `permissions.ts` | SDK subpaths only |
+| `platform/iam.ts`, `consent.ts`, `permissions.ts`, `passwordReset.ts` | SDK subpaths only |
 | `platform/screen.tsx` | `react-dom/client` |
-| `platform/SessionScreens.tsx` | Login pages, `loginVariant`, `iam`, `screen`, SDK types |
+| `platform/SessionScreens.tsx` | Login pages, `loginVariant`, `iam`, `passwordReset`, `screen`, SDK types |
 | `pages/*`, `BrandLogo.tsx` | Each other and `rememberEmail.ts`. Never `platform/` or the SDK |
-| `App.tsx` | `react-router-dom`, SDK `/react` |
+| `App.tsx` | `react-router-dom`, SDK `/react` (`RemoteBoundary`, `useRouteTemplate`, `useSessionContext`, `useAppUpdate`) |
 | `bootstrap.tsx` | Everything above, every SDK subpath it initialises, `index.css` |
 | `index.ts` | `bootstrap.tsx`, dynamically |
 | `rsbuild.config.ts` | The platform plugin, React, Tailwind, `/version.json`, `config/dev-platform.mjs`. `src/` does not import it |
@@ -266,6 +271,10 @@ The redirect URI is `{origin}{auth.redirectPath}` (`/auth/callback`). The local 
 
 "Not found", a 429 and an unreachable resolver all show one message ("We could not find a workspace for that email."), so the screen never says which input failed.
 
+**Forgot your password?** needs the typed email: the realm decides where the reset happens. The screen resolves it through PUB-1 (same generic message on failure) and sends the browser to `{auth.idpOrigin}/realms/{realm}/login-actions/reset-credentials?client_id={auth.clientId}` (`platform/passwordReset.ts`); Keycloak e-mails the reset link. Without an email the page asks for one first. The SDK has no reset helper, so this is the shell's.
+
+**Help and legal links** (`pages/links.ts`) render only when their URL is set, so the page has no dead links; none is published yet.
+
 ---
 
 ## Dashboard load
@@ -315,14 +324,14 @@ Remotes that need storage use `storage(appId)` from `/storage`, which is namespa
 
 | Step | Dependency | Posture | On failure |
 |---|---|---|---|
-| Identity and runtime config | `/config/runtime.json` | stop | "The app is unavailable right now." Console error only |
+| Identity and runtime config | `/config/runtime.json` | stop | "The app is unavailable right now." with Try again. Console error only |
 | Silent restore | Keycloak SSO session | degrade | `anonymous`; the sign-in flow runs |
 | Resolve the email | PUB-1 | stop on that screen | One generic message. The user can retry |
 | Leave for Keycloak | Browser navigation | stop | The shell is gone until Keycloak redirects back |
-| Session context | P-35 | degrade | Warning log. Deny-all permissions, platform flags only, no `/t/<slug>/` move |
+| Session context | P-35 | degrade | Warning log. Deny-all permissions, platform flags only, no `/t/<slug>/` move. A notice with Reload tells the user some actions are hidden |
 | Remote manifest | `/remotes/manifest.json` | degrade | Error log. The app renders; `RemoteBoundary` shows its error |
 | Dashboard load or render | `app2` remote | degrade | Boundary message with "Try again". The rest of the shell keeps running |
-| Telemetry export | `/otel` | ignore | Bounded queues in the SDK. Nothing is exported without consent beyond `essential` |
+| Telemetry export | `/otel` | ignore | Bounded queues in the SDK. v1 exports `essential` only (errors and essential warnings), by decision |
 | `GET /healthz` | nginx only | liveness | `200` and `ok`. Keycloak, IAM and `app2` are not checked |
 
 ---
@@ -343,7 +352,9 @@ Remotes that need storage use `storage(appId)` from `/storage`, which is namespa
 | `/healthz` does not depend on Keycloak, IAM or the remote | `nginx/default.conf` returns a constant |
 | Per-environment files are revalidated; hashed assets are immutable | `index.html`, `/config/runtime.json`, `/remotes/manifest.json`, `/version.json` are `no-cache`. `/assets/` is immutable |
 | Source maps are not shipped | Dockerfile and `prepare-release-asset.sh` delete them; the smoke script and suite fail on a `.map` |
-| Only extension-less paths get `index.html`; cache headers per location | `nginx/default.conf`; `test/smoke/deployment.test.ts` checks it against the built image |
+| Only extension-less paths get `index.html`; cache headers per location; dotfiles 404 | `nginx/default.conf`; `test/smoke/deployment.test.ts` checks it against the built image |
+| Every response is compressed when it can be and carries baseline security headers, without the nginx version | `nginx/default.conf` (`gzip`, `add_header_inherit merge`, `server_tokens off`); smoke image mode |
+| Every shell screen passes axe-core (contrast excepted) | `test/integration/accessibility.test.tsx` |
 | The coverage floor is 95% on statements, branches, functions, and lines | `.github/scripts/coverage-gate.mjs`. CI does not lower it |
 | Image base tags are digest-pinned | `validate-quality.yml` rejects a `FROM` line without `@sha256` |
 
@@ -388,7 +399,7 @@ Vitest 5, happy-dom at `http://localhost:5001/`, Testing Library. `vitest.config
 | Layer | Path | What it locks |
 |---|---|---|
 | Unit | `test/unit/` | PUB-1 and P-35 mappings and the port calls, the entry point's fatal path, remember-email with blocked storage, the consent stand-in, the screen host, `BrandLogo`, the login variant |
-| Integration | `test/integration/` | Both login layouts and the carousel, every session screen, `App` routes and props, and the bootstrap: the exact initialisation order, each anonymous reason, wrong workspace, missing context, manifest failure, expiry and sign-out events |
+| Integration | `test/integration/` | Both login layouts and the carousel, every session screen, `App` routes and props, and the bootstrap: the exact initialisation order, each anonymous reason, wrong workspace, missing context, manifest failure, expiry and sign-out events; axe-core over every shell screen (`accessibility.test.tsx`) |
 | End to end | `test/e2e/` | The real bootstrap and SDK (inlined by Vitest, fresh per simulated page load) against a fake Keycloak and network: PKCE sign-in, `/t/<slug>/`, the remote's SDK hooks and permissions, deny-all, a failing remote, global sign-out, the device clock |
 | Smoke | `test/smoke/`, `.github/scripts/smoke-tests.sh` | Image at most 200 MB and the startup gate, then the suite against the container: SPA rule, Cache-Control per location, script integrity, 404s, runtime config and manifest validated by the SDK. With `SMOKE_MODE=live`, a deployment's security headers too |
 
@@ -492,6 +503,12 @@ The login page's "Trouble logging in?" link is `href="#help"`. It does not open 
 11. **The e2e suite runs the real SDK in-process.** Following `platform-reactcommon` `test/e2e`, the shell boots under happy-dom against a fake Keycloak and network, with only the remote's entry script stubbed. Vitest inlines the SDK and the suite clears the SDK's runtime global and resets modules on each simulated page load, using only the SDK's public behaviour, no test internals.
 
 12. **Smoke runs against the image, not a stand-in.** The SDK's smoke suite serves its examples through a CloudFront stand-in; here the production server is nginx, so CI runs the same kind of suite against the built container (`SMOKE_MODE=image`), and the same file checks a deployment with `SMOKE_MODE=live`.
+
+13. **Fonts are self-hosted.** Geist and Inter come from Fontsource (`@fontsource-variable/*`, SIL OFL 1.1) and are bundled into `/assets/` with a hash, so `font-src 'self'` and `style-src 'self'` hold and nothing loads from Google. `tools.cssLoader.url` bundles relative `url()`s and leaves root-relative ones (`public/`) as written.
+
+14. **v1 consent is essential only.** There is no analytics consent manager in v1, so `platform/consent.ts` grants `essential` and nothing calls `accept()`.
+
+15. **Updates are offered, not forced.** `App` shows "A new version is available." with Reload when `useAppUpdate()` reports one; the user may be mid-task in the remote.
 
 ---
 

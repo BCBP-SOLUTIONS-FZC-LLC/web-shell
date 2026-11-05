@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useEmailSignIn, type LoginPageProps } from './useEmailSignIn'
 import { BrandLogo } from '../components/BrandLogo'
+import { ForgotPasswordButton, HelpLink, LegalFooter } from './PageLinks'
 
 const FEATURES = [
   { dotClass: 'bg-[#ff2d9a]', label: '95% Accuracy Forecasting' },
@@ -58,9 +59,10 @@ const SLIDES = [
 
 const SLIDE_MS = 6000
 
-export default function LoginPage({ onContinue, notice = null }: LoginPageProps) {
-  const { email, setEmail, remember, setRemember, submitting, error, handleSubmit } =
-    useEmailSignIn(onContinue)
+export default function LoginPage({ onContinue, onForgotPassword, notice = null }: LoginPageProps) {
+  const { email, setEmail, remember, setRemember, submitting, error, handleSubmit, handleForgotPassword } =
+    useEmailSignIn(onContinue, onForgotPassword)
+  const linkClass = 'font-medium text-[#6d5efc] no-underline hover:underline'
   const [slide, setSlide] = useState(0)
   const [settledSlide, setSettledSlide] = useState(0)
   const [loadedSlides, setLoadedSlides] = useState<ReadonlySet<number>>(() => new Set())
@@ -120,10 +122,13 @@ export default function LoginPage({ onContinue, notice = null }: LoginPageProps)
         {SLIDES.map((item, index) => {
           const isIncoming = index === slide && index !== settledSlide && loadedSlides.has(index)
           const isBase = index === settledSlide
+          // Fetch only the slides on screen and the next one; a loaded image keeps its src.
+          const wanted =
+            index === settledSlide || index === slide || index === (slide + 1) % SLIDES.length || loadedSlides.has(index)
           return (
             <img
               key={item.image}
-              src={item.image}
+              src={wanted ? item.image : undefined}
               alt=""
               decoding="async"
               draggable={false}
@@ -234,12 +239,12 @@ export default function LoginPage({ onContinue, notice = null }: LoginPageProps)
 
           <form className="mt-8" onSubmit={handleSubmit}>
             {notice ? (
-              <p className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+              <p role="alert" className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
                 {notice}
               </p>
             ) : null}
             {error ? (
-              <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+              <div role="alert" className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
                 <p>{error}</p>
               </div>
             ) : null}
@@ -276,27 +281,19 @@ export default function LoginPage({ onContinue, notice = null }: LoginPageProps)
           </form>
 
           <div className="mt-6 flex items-center justify-center gap-4 text-sm">
-            <a href="#forgot" className="font-medium text-[#6d5efc] no-underline hover:underline">
-              Forgot your password?
-            </a>
-            <span className="h-4 w-px bg-gray-200" aria-hidden />
-            <a href="#help" className="font-medium text-[#6d5efc] no-underline hover:underline">
-              Trouble logging in?
-            </a>
+            <ForgotPasswordButton
+              onClick={handleForgotPassword}
+              disabled={submitting}
+              className={`text-sm ${linkClass}`}
+            />
+            <HelpLink className={linkClass} />
           </div>
         </div>
 
-        <footer className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 px-8 pb-6 text-[0.7rem] text-gray-400">
-          <a href="#privacy" className="no-underline hover:underline">
-            Privacy Policy
-          </a>
-          <a href="#terms" className="no-underline hover:underline">
-            Terms of Service
-          </a>
-          <a href="#trust" className="no-underline hover:underline">
-            Trust &amp; Security
-          </a>
-        </footer>
+        <LegalFooter
+          className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 px-8 pb-6 text-[0.7rem] text-gray-400"
+          linkClassName="no-underline hover:underline"
+        />
       </aside>
     </div>
   )

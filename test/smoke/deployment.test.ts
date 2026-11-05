@@ -116,6 +116,8 @@ describe(`web-shell smoke (${mode}, ${baseUrl})`, () => {
       expect(tags.length, where(r, 'external scripts')).toBeGreaterThan(0)
       for (const t of tags) expect(t.integrity, where(r, `<script src=${t.src}> integrity`)).toMatch(/^sha384-/)
       expect(r.text, where(r, 'inline event handler attribute')).not.toMatch(/<[^>]+\son[a-z]+\s*=/i)
+      // Fonts and styles are self-hosted: the platform CSP allows no third-party origin.
+      expect(r.text, where(r, 'third-party <link>/<script> origin')).not.toMatch(/<(link|script)\b[^>]*\b(href|src)=["']?(https?:)?\/\//i)
     })
 
     it.each(['/t/acme/dashboard', '/t/acme/dashboard/members', '/auth/callback?code=x&state=y'])(
@@ -226,6 +228,32 @@ describe(`web-shell smoke (${mode}, ${baseUrl})`, () => {
   })
 
   describe('the image', () => {
+    it.skipIf(!image).each(['/', '/t/acme/dashboard', '/config/runtime.json', '/assets/missing.js'])(
+      'GET %s carries the baseline security headers and no server version',
+      async (path) => {
+        const r = await get(path)
+        expect(r.headers.get('x-content-type-options'), where(r, 'X-Content-Type-Options')).toBe('nosniff')
+        expect(r.headers.get('referrer-policy'), where(r, 'Referrer-Policy')).toBe('strict-origin-when-cross-origin')
+        expect(r.headers.get('x-frame-options'), where(r, 'X-Frame-Options')).toBe('DENY')
+        expect(r.headers.get('cross-origin-opener-policy'), where(r, 'Cross-Origin-Opener-Policy')).toBe('same-origin')
+        expect(r.headers.get('server') ?? '', where(r, 'Server')).not.toMatch(/\d/)
+      },
+    )
+
+    it.skipIf(!image)('compresses scripts for clients that accept gzip', async () => {
+      const doc = await get('/')
+      const src = scripts(doc)[0]!.src
+      const r = await fetch(new URL(src, baseUrl), { headers: { 'accept-encoding': 'gzip' } })
+      expect(r.headers.get('content-encoding'), `GET ${src}: Content-Encoding`).toBe('gzip')
+      expect(r.headers.get('vary') ?? '', `GET ${src}: Vary`).toMatch(/accept-encoding/i)
+    })
+
+    it.skipIf(!image).each(['/.git/config', '/.env', '/t/acme/.hidden'])('GET %s is 404, not index.html', async (path) => {
+      const r = await get(path)
+      expect(r.status, where(r)).toBe(404)
+      expect(r.text, where(r)).not.toMatch(APP_ROOT)
+    })
+
     it.skipIf(!image)('answers /healthz with ok', async () => {
       const r = await get('/healthz')
       expect(r.status, where(r)).toBe(200)
