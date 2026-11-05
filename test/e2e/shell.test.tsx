@@ -20,6 +20,8 @@ import { join } from 'node:path'
 import { act, fireEvent, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { mockProblem } from '@bcbp-solutions-fzc-llc/frontend-sdk/testing'
+import { PlatformProblemTypes } from '@bcbp-solutions-fzc-llc/frontend-sdk/problem'
 import { FakeBroadcastChannel, FakeKeycloak, IDP } from '../fixtures/keycloak'
 import { FakeNetwork } from '../fixtures/network'
 
@@ -169,7 +171,7 @@ beforeEach(() => {
     .on('GET /api/v1/me/session-context', (req) =>
       bearerOf(req)
         ? Response.json({ tenant_id: TENANT, slug: 'acme', roles, feature_flags: [], read_only: false, locale: 'en' })
-        : Response.json({ title: 'Unauthorized', status: 401 }, { status: 401 }),
+        : mockProblem(PlatformProblemTypes.Unauthorized),
     )
   vi.stubGlobal('fetch', net.fetch)
   vi.stubGlobal('BroadcastChannel', FakeBroadcastChannel)
@@ -259,7 +261,7 @@ describe('the shell, end to end', () => {
 
   it('renders with deny-all permissions when the session context is unavailable, and says so', async () => {
     // A final answer (IAM's endpoint missing in this environment): no retry.
-    net.on('GET /api/v1/me/session-context', () => Response.json({ title: 'Not Found', status: 404 }, { status: 404 }))
+    net.on('GET /api/v1/me/session-context', () => mockProblem(PlatformProblemTypes.NotFound))
     await load('/t/acme/dashboard')
     await until(() => assigned.length > 0, 'the redirect to Keycloak')
     await approveLogin()
@@ -269,14 +271,14 @@ describe('the shell, end to end', () => {
     expect(screen.getByRole('status')).toHaveTextContent("We couldn't load your permissions")
   })
 
-  it('a session context outage (502) is retried in the background, and the permissions appear when IAM is back', async () => {
+  it('a session context outage (503) is retried in the background, and the permissions appear when IAM is back', async () => {
     let iamDown = true
     net.on('GET /api/v1/me/session-context', (req) =>
       iamDown
-        ? Response.json({ title: 'Bad Gateway', status: 502 }, { status: 502 })
+        ? mockProblem(PlatformProblemTypes.ServiceUnavailable)
         : bearerOf(req)
           ? Response.json({ tenant_id: TENANT, slug: 'acme', roles, feature_flags: [], read_only: false, locale: 'en' })
-          : Response.json({ title: 'Unauthorized', status: 401 }, { status: 401 }),
+          : mockProblem(PlatformProblemTypes.Unauthorized),
     )
     await load('/t/acme/dashboard')
     await until(() => assigned.length > 0, 'the redirect to Keycloak')

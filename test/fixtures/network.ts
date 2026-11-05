@@ -2,6 +2,8 @@
 // Keycloak on its own origin, and the shell's origin answering from a route table (runtime config,
 // manifest, IAM). Every request to the shell's origin is kept, headers included.
 import { vi } from 'vitest'
+import { mockProblem } from '@bcbp-solutions-fzc-llc/frontend-sdk/testing'
+import { PlatformProblemTypes } from '@bcbp-solutions-fzc-llc/frontend-sdk/problem'
 import { IDP, type FakeKeycloak } from './keycloak'
 
 type Method = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
@@ -47,7 +49,7 @@ export class FakeNetwork {
     // Telemetry is accepted and dropped, as the collector would.
     if (url.pathname.startsWith('/otel/')) return new Response(null, { status: 204 })
     const hit = this.routes.find((r) => r.method === req.method && r.path === url.pathname)
-    if (!hit) return Response.json({ type: 'about:blank', title: 'Not Found', status: 404 }, { status: 404 })
+    if (!hit) return mockProblem(PlatformProblemTypes.NotFound, { errorCode: 'ROUTE_NOT_FOUND' })
     return hit.handler(req)
   })
 }
