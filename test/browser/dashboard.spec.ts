@@ -49,6 +49,25 @@ test('the real dashboard loads in the shell: integrity, share scope, CSS, no CSP
   expect(await page.evaluate(() => (window as unknown as { __violations: string[] }).__violations)).toEqual([])
 })
 
+test("every image the dashboard shows loads (its assets resolve under the remote, not the shell's origin)", async ({ page }) => {
+  await signIn(page)
+  await expect(page.locator('img').first()).toBeAttached()
+  // A root-relative src (/image/x.png) resolves against the shell's origin, where the remote's files are not.
+  const broken = await page.evaluate(async () => {
+    const imgs = [...document.querySelectorAll('img')]
+    const settled = (i: HTMLImageElement) =>
+      new Promise<void>((r) => {
+        if (i.complete) return r()
+        i.addEventListener('load', () => r(), { once: true })
+        i.addEventListener('error', () => r(), { once: true })
+        setTimeout(r, 5_000)
+      })
+    await Promise.all(imgs.map(settled))
+    return imgs.filter((i) => i.naturalWidth === 0).map((i) => `${i.alt || '(no alt)'}: ${i.getAttribute('src')}`)
+  })
+  expect(broken).toEqual([])
+})
+
 test("the shell's role map reaches the dashboard, and its navigation stays in the page", async ({ page }) => {
   await signIn(page)
   await page.evaluate(() => ((window as unknown as { __samePage: boolean }).__samePage = true))

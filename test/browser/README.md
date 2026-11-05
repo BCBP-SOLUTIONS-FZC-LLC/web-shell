@@ -46,6 +46,7 @@ npm run build && REMOTE_DIST=/tmp/mfe-dashboard/dist npm run test-contract
 | Case | Locks |
 |---|---|
 | Loads | The real remote renders "Dashboard" with its own stylesheet, no failed `/remotes/` request, no CSP violation |
+| Images | Every `<img>` the dashboard renders loads. A root-relative `src` (`/image/x.png`) resolves against the shell's origin, where the remote's files are not served |
 | Role map and navigation | An owner sees "User management" (the shell's role map through SDK hooks); its `NavLink` opens the page without a reload |
 | Logout | The dashboard's Logout signs out through the shell: the form POST reaches Keycloak, "You are signed out" |
 
