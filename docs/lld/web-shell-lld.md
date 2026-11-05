@@ -14,6 +14,7 @@
 
 | Date | Change |
 |---|---|
+| 2026-11-05 | Observability standard: inventory (`docs/observability.md`), `metrics-check` in CI |
 | 2026-11-05 | Remote renamed `app2` → `dashboard` (breaking; pairs with mfe-dashboard `v0.3.0`) |
 | 2026-11-05 | SDK `1.0.0-alpha.5` (optional `auth.signInUrl` for standalone remotes; host-page docs). Checked against mfe-dashboard `v0.1.1` (alpha.4) |
 | 2026-11-05 | Docs aligned with `main` after #25–#27: status, layout, hosting until CloudFront, release workflow, compatibility, open items |
@@ -427,7 +428,7 @@ Identity: `service.name` `web-shell`, domain `portal`, environment `__ENVIRONMEN
 | `manifest load failed` | `error` | `loadManifest` rejected (§5 step 15) |
 | `the app could not start` | `console.error` only | Fatal start-up error (telemetry may not exist yet) |
 
-Everything else (API spans, remote load logs and metrics, web vitals, global errors) is emitted by the SDK. Route grouping: `useRouteTemplate('/t/:slug/dashboard')`.
+Everything else (API spans, remote load logs and metrics, web vitals, global errors) is emitted by the SDK. Metrics follow the Enterprise Platform Observability Standard ([observability.md](../observability.md)): the shell creates none of its own today; the SDK injects `domain` `portal`, `service` `web-shell` and `environment`; Tier 1 `platform_web_*` is SDK-bound and pending ratification; a shell metric would be Tier 3 `portal_web_shell_*`, checked in CI by `metrics-check`. Route grouping: `useRouteTemplate('/t/:slug/dashboard')`.
 
 ---
 

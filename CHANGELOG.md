@@ -8,7 +8,9 @@ Pull requests that change the shell, its dependencies, or the image add an entry
 
 ## [Unreleased]
 
-Nothing yet.
+### Added
+
+- **The Enterprise Platform Observability Standard, for the shell (`2026-11-05`).** `docs/observability.md` documents the shell's place in the three tiers (identity `portal` / `web-shell`; Tier 3 prefix `portal_web_shell_`; `domain`, `service`, `environment` injected by the SDK), its metric inventory (none of its own today: Tier 1 `platform_web_*` is SDK-bound and pending ratification, the signals are logs), how to add a metric, and that no dashboards, recording rules, SLOs or HPA live in this repo. `npm run metrics-check` (`.github/scripts/metrics-check.mjs`, in `Validate / Quality`) enforces it on `src/` with the SDK's registry: SDK meters only, no `platform_*`, Tier 2 only from the registry for `portal`, Tier 3 prefix and `_total` / `_seconds`, no prohibited, injected or more than 8 labels, and every metric listed in the inventory. 13 tests, including a probe that the check fails on bad metrics.
 
 ## [0.2.0] - 2026-11-05
 

@@ -191,6 +191,7 @@ The dashboard is a second process. Start `mfe-dashboard` (`npm run dev` there) s
 | `npm test` | Vitest once (unit, integration, e2e) |
 | `npm run test-unit` / `test-int` / `test-e2e` | One layer |
 | `npm run budget` | Bundle size budget over `dist/` (run after `npm run build`; CI does) |
+| `npm run metrics-check` | Every metric `src/` creates follows the Enterprise Platform Observability Standard and is listed in [docs/observability.md](./docs/observability.md) (CI does) |
 | `npm run test-browser` | The real-browser suite (Playwright, Chromium, Firefox, WebKit) against `dist/` under the production CSP ([test/browser/README.md](./test/browser/README.md)) |
 | `npm run test-contract` | The browser suite against a real mfe-dashboard build: `REMOTE_DIST=../mfe-dashboard/dist npm run test-contract` after building both ([test/browser/README.md](./test/browser/README.md)) |
 | `npm run test-smoke` | The smoke suite against `SMOKE_BASE_URL` ([test/smoke/README.md](./test/smoke/README.md)) |

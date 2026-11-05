@@ -9,6 +9,7 @@
     "docker:dev:mac": "docker run -it --rm -p 5001:5001 -e NODE_AUTH_TOKEN -v $(pwd):/app -v /app/node_modules node:26-alpine sh -c \"cd /app && npm ci && npm run dev\"",
     "build": "tsc && rsbuild build",
     "budget": "node .github/scripts/bundle-budget.mjs",
+    "metrics-check": "node .github/scripts/metrics-check.mjs",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:ci": "vitest run --coverage && node .github/scripts/coverage-gate.mjs",
