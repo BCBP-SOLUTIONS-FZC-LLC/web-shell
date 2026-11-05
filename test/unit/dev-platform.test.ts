@@ -5,6 +5,9 @@ import { createServer, request, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { initializeCore } from '@bcbp-solutions-fzc-llc/frontend-sdk/core'
+import { setRuntimeConfig } from '@bcbp-solutions-fzc-llc/frontend-sdk/config'
 import { devPlatformMiddleware } from '../../config/dev-platform.mjs'
 import { toSessionContext, toWorkspace, type ResolveResponse, type SessionContextResponse } from '../../src/platform/iam'
 
@@ -83,6 +86,9 @@ describe('dev platform middleware', () => {
     const r = await get('/api/v1/public/tenants/resolve?identifier=ada%40bcbp.com')
     const body = r.json() as ResolveResponse
     expect(body).toEqual({ found: true, realm: 'tenant-bcbp', strategy: 'dedicated' })
+    // iam.ts reads the paid-realm prefix from the runtime config: use the dev server's own.
+    initializeCore({ serviceName: 'web-shell', domain: 'portal', environment: 'local' })
+    setRuntimeConfig(JSON.parse(readFileSync(join(ROOT, 'config/runtime.local.json'), 'utf8')))
     expect(toWorkspace('bcbp', body)).toEqual({ realm: 'tenant-bcbp', trial: false, slug: 'bcbp' })
 
     const empty = await get('/api/v1/public/tenants/resolve?identifier=%20')

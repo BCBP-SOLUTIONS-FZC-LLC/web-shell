@@ -1,7 +1,6 @@
 import { act, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { getRememberedEmail, persistRememberEmail } from '../../src/pages/rememberEmail'
-import { cmp } from '../../src/platform/consent'
 import { hasPermission, roleMapAuthorizer, setAuthorizer, setAuthzSubject } from '@bcbp-solutions-fzc-llc/frontend-sdk/authz'
 import { createTestPlatform } from '@bcbp-solutions-fzc-llc/frontend-sdk/testing'
 import { IAM_ROLES, permissions } from '../../src/platform/permissions'
@@ -28,21 +27,6 @@ describe('rememberEmail', () => {
     vi.stubGlobal('localStorage', { getItem: blocked, setItem: blocked, removeItem: blocked })
     expect(getRememberedEmail()).toBe('')
     expect(() => persistRememberEmail('a@b.c', true)).not.toThrow()
-  })
-})
-
-describe('consent stand-in', () => {
-  it('grants essential only until accepted, and notifies subscribers', () => {
-    expect(cmp.has('essential')).toBe(true)
-    expect(cmp.has('telemetry')).toBe(false)
-    const listener = vi.fn()
-    const unsubscribe = cmp.subscribe(listener)
-    cmp.accept(['telemetry'])
-    expect(cmp.has('telemetry')).toBe(true)
-    expect(listener).toHaveBeenCalledTimes(1)
-    unsubscribe()
-    cmp.accept(['analytics'])
-    expect(listener).toHaveBeenCalledTimes(1)
   })
 })
 

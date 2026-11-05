@@ -40,7 +40,6 @@ graph TD
 
     subgraph ports["Platform ports"]
         iam["platform/iam.ts\nPUB-1 resolver, P-35 session context"]
-        consent["platform/consent.ts\nessential-only consent (v1)"]
         perms["platform/permissions.ts\nrole → UI permissions"]
         screen["platform/screen.tsx\nfull-screen host"]
     end
@@ -67,7 +66,6 @@ graph TD
     boot --> app
     boot --> screens
     boot --> iam
-    boot --> consent
     boot --> perms
     boot --> screen
     boot --> sdkmods
@@ -82,7 +80,7 @@ graph TD
     docker --> nginx
 ```
 
-**Direction:** `src/platform/iam.ts`, `consent.ts` and `permissions.ts` import the SDK only. `SessionScreens.tsx` imports the login pages, the resolver and the screen host. `bootstrap.tsx` is the only module that wires them together and the only one that renders the app root. `App.tsx` reads session state through SDK hooks (`useCurrentUser`, `useSignOut`) and never imports `platform/`.
+**Direction:** `src/platform/iam.ts` and `permissions.ts` import the SDK only. `SessionScreens.tsx` imports the login pages, the resolver and the screen host. `bootstrap.tsx` is the only module that wires them together and the only one that renders the app root. `App.tsx` reads session state through SDK hooks (`useCurrentUser`, `useSignOut`) and never imports `platform/`.
 
 The SDK is imported through public subpaths only. `@bcbp-solutions-fzc-llc/eslint-plugin` fails a root import (`@bcbp-solutions-fzc-llc/frontend-sdk`) or a deep import, and `npm run lint` runs in `validate-quality`.
 
@@ -102,7 +100,6 @@ graph LR
     screens(["platform/SessionScreens.tsx"])
     screen(["platform/screen.tsx"])
     iam(["platform/iam.ts"])
-    consent(["platform/consent.ts"])
     perms(["platform/permissions.ts"])
     ctx(["platform/sessionContext.ts\nplatform/ShellRoot.tsx"])
     nav(["platform/navigator.ts"])
@@ -119,7 +116,6 @@ graph LR
     boot --> screens
     boot --> screen
     boot --> iam
-    boot --> consent
     boot --> perms
     boot --> ctx
     boot --> nav
@@ -137,14 +133,13 @@ graph LR
     login --> links
     hook --> remember
     iam --> sdk
-    consent --> sdk
 ```
 
 `App.tsx` renders `dashboard` through `RemoteBoundary`. That edge is not a file in this repo.
 
 | Module | May import |
 |---|---|
-| `platform/iam.ts`, `consent.ts`, `permissions.ts`, `passwordReset.ts` | SDK subpaths only |
+| `platform/iam.ts`, `permissions.ts`, `passwordReset.ts` | SDK subpaths only |
 | `platform/screen.tsx` | `react-dom/client` |
 | `platform/SessionScreens.tsx` | `LoginPage`, `iam`, `passwordReset`, `screen`, SDK types |
 | `platform/sessionContext.ts`, `ShellRoot.tsx`, `navigator.ts` | SDK subpaths (`/auth` and `/problem` types, `/react`), React |
@@ -177,7 +172,7 @@ sequenceDiagram
     Boot->>SDK: installTrustedTypesPolicy, initializeCore
     Boot->>SDK: loadRuntimeConfig (/config/runtime.json)
     Note over Boot,SDK: a failure is logged as an error (default /otel), then "The app is unavailable right now."
-    Boot->>SDK: consent, tracing, logging, metrics, error handlers, web vitals
+    Boot->>SDK: tracing, logging, metrics, error handlers, web vitals (consent: SDK default, essential only)
     Boot->>SDK: createOidcProvider, initializeAuth, setTokenSource
     Boot->>SDK: idp.init()
     alt anonymous
@@ -201,7 +196,7 @@ sequenceDiagram
         Boot->>SDK: initializeI18n (detect: P-35 locale), loadManifest, startVersionPolling
         Boot->>Browser: render App inside ShellRoot (PlatformProvider), registerNavigator
         opt no session context
-            Boot->>IAM: retry after 1 s, 2 s, 4 s (network, timeout, 429, 5xx)
+            Boot->>IAM: retry after 1 s, 2 s, 4 s (online network error, timeout, 429, 502-504)
             Boot->>SDK: subject, flags, rememberWorkspace; the provider updates live
         end
     end
@@ -209,11 +204,11 @@ sequenceDiagram
 
 1. `installTrustedTypesPolicy()`, then `initializeCore({ serviceName: 'web-shell', domain: 'portal', environment: __ENVIRONMENT__, buildVersion: __BUILD_VERSION__ })`.
 2. `loadRuntimeConfig()` fetches `/config/runtime.json` and validates it; `setRuntimeConfig`. A throw from here on is logged as an essential error (`the app could not start`; logging starts on the default `/otel` when the config never arrived), then reaches `index.ts`, which replaces `#app` with "The app is unavailable right now."
-3. `setConsentProvider(cmp)`, tracing, logging and metrics against `telemetry.otlpBaseUrl`, `installGlobalErrorHandlers()`, `startWebVitals()`, platform flags from the runtime config.
+3. Consent stays the SDK's default (essential only), then tracing, logging and metrics against `telemetry.otlpBaseUrl`, `installGlobalErrorHandlers()`, `startWebVitals()`, platform flags from the runtime config.
 4. `createOidcProvider(cfg.auth, workspaceResolver)`, `setTokenSource(initializeAuth(idp))`, `idp.init()`. On a reload or a new tab `init()` may redirect once with `prompt=none` and never settle.
 5. Anonymous: see the sign-in flow. The bootstrap returns without rendering the app.
 6. Authenticated in the wrong workspace (a trial login through an invitation that landed in another tenant): `showWrongWorkspace`. The app never renders and the workspace is not cached.
-7. Authenticated: `idp.subscribe` handles expiry and sign-out (below). The P-35 session context sets the authorizer subject and tenant flags, and `rememberWorkspace` caches the workspace with its slug and moves the URL to `/t/<slug>/`. Without a context: deny-all and platform flags only, with a warning log; after render a network error, timeout, 429 or 5xx is retried after 1 s, 2 s and 4 s, and a success updates the subject, flags and provider without a reload. A sign-out stops the retries, and a sign-out during these steps stops the boot before the app mounts.
+7. Authenticated: `idp.subscribe` handles expiry and sign-out (below). The P-35 session context sets the authorizer subject and tenant flags, and `rememberWorkspace` caches the workspace with its slug and moves the URL to `/t/<slug>/`. Without a context: deny-all and platform flags only, with a warning log; after render a network failure while online, a timeout, 429, 502, 503 or 504 (the SDK ApiClient's own rule) is retried after 1 s, 2 s and 4 s, one request per attempt, and a success updates the subject, flags and provider without a reload. A sign-out stops the retries, and a sign-out during these steps stops the boot before the app mounts.
 8. `initializeI18n` (the user's P-35 `locale` first, through `detect`), `loadManifest()` (a failure is logged; the app still renders), `startVersionPolling()`.
 9. Render `<App>` inside `platform/ShellRoot` (a `PlatformProvider` whose `context` follows the retry store and whose `locale` follows `setLocale`) into `#app`. The router's basename is `/t/<slug>` when `slugFromPath` finds one in the URL. The router is registered as the SDK's navigator: a remote's `navigate()` under the basename stays in the page; any other path is a full load.
 
@@ -336,7 +331,7 @@ Remotes that need storage use `storage(appId)` from `/storage`, which is namespa
 | Silent restore | Keycloak SSO session | degrade | `anonymous`; the sign-in flow runs |
 | Resolve the email | PUB-1 | stop on that screen | One generic message. The user can retry |
 | Leave for Keycloak | Browser navigation | stop | The shell is gone until Keycloak redirects back |
-| Session context | P-35 | degrade, then recover | Warning log. Deny-all permissions and platform flags until it answers; a network error, timeout, 429 or 5xx is retried after 1 s, 2 s, 4 s and applied live (a final 401, 403 or 404 is not asked again) (the router moves under `/t/<slug>/` then). A notice with Reload says some actions are hidden |
+| Session context | P-35 | degrade, then recover | Warning log. Deny-all permissions and platform flags until it answers; after a transient failure (a network failure while online, a timeout, 429, 502, 503 or 504 (the SDK ApiClient's own rule)) it is retried after 1 s, 2 s, 4 s, one request per attempt, and applied live (any other answer, offline included, is final) (the router moves under `/t/<slug>/` then). A notice with Reload says some actions are hidden |
 | Remote manifest | `/remotes/manifest.json` | degrade | Error log. The app renders; `RemoteBoundary` shows its error |
 | Dashboard load or render | `dashboard` remote | degrade | Boundary message with "Try again". The rest of the shell keeps running |
 | Telemetry export | `/otel` | ignore | Bounded queues in the SDK. v1 exports `essential` only (errors and essential warnings), by decision |
@@ -406,7 +401,7 @@ Vitest 5, happy-dom at `http://localhost:5001/`, Testing Library. `vitest.config
 
 | Layer | Path | What it locks |
 |---|---|---|
-| Unit | `test/unit/` | PUB-1 and P-35 mappings and the port calls, the entry point's fatal path, remember-email with blocked storage, the consent stand-in, the screen host, `BrandLogo`, the session-context retry and store, the navigator adapter |
+| Unit | `test/unit/` | PUB-1 and P-35 mappings and the port calls, the entry point's fatal path, remember-email with blocked storage, the screen host, `BrandLogo`, the session-context retry and store, the navigator adapter |
 | Integration | `test/integration/` | The login page and the carousel, every session screen, `App` routes and props, and the bootstrap: the exact initialisation order, each anonymous reason, wrong workspace, missing context and its background retry, sign-out during boot, i18n `detect`, navigator registration, start-up failure reporting, manifest failure, expiry and sign-out events; axe-core over every shell screen (`accessibility.test.tsx`) |
 | End to end | `test/e2e/` | The real bootstrap and SDK (inlined by Vitest, fresh per simulated page load) against a fake Keycloak and network: PKCE sign-in, `/t/<slug>/`, the remote's SDK hooks and permissions, deny-all, an IAM outage that recovers in the background, a failing remote, global sign-out (form POST), the device clock |
 | Browser | `test/browser/`, CI `browser` | The production build in Chromium, Firefox and WebKit under the production CSP and Trusted Types, over HTTPS, with a fake Keycloak on a second origin: self-hosted fonts and hashed images, PKCE sign-in, the remote's entry with integrity and the share scope, `navigate()` without a reload, the sign-out form POST under `form-action`, the start-up failure reaching `/otel`, colour contrast (axe) |
@@ -518,7 +513,7 @@ The login page's "Trouble logging in?" link is `href="#help"`. It does not open 
 
 13. **Fonts are self-hosted.** Geist and Inter come from Fontsource (`@fontsource-variable/*`, SIL OFL 1.1) and are bundled into `/assets/` with a hash, so `font-src 'self'` and `style-src 'self'` hold and nothing loads from Google. `tools.cssLoader.url` bundles relative `url()`s and leaves root-relative ones (`public/`) as written.
 
-14. **v1 consent is essential only.** There is no analytics consent manager in v1, so `platform/consent.ts` grants `essential` and nothing calls `accept()`.
+14. **v1 consent is essential only: the SDK's default.** There is no analytics consent manager in v1. The SDK's runtime starts with an essential-only consent provider, so the shell sets none (an earlier stand-in, `platform/consent.ts`, duplicated that default and was removed). A consent manager would call `setConsentProvider` in the bootstrap.
 
 15. **Updates are offered, not forced.** `App` shows "A new version is available." with Reload when `useAppUpdate()` reports one; the user may be mid-task in the remote.
 

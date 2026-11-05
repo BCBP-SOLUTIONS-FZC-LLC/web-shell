@@ -13,7 +13,6 @@ graph TD
 
     subgraph ports["Platform ports"]
         iam["platform/iam.ts\nPUB-1 resolver, P-35 session context"]
-        consent["platform/consent.ts\nessential-only consent (v1)"]
         perms["platform/permissions.ts\nrole → UI permissions"]
         screen["platform/screen.tsx\nfull-screen host"]
     end
@@ -40,7 +39,6 @@ graph TD
     boot --> app
     boot --> screens
     boot --> iam
-    boot --> consent
     boot --> perms
     boot --> screen
     boot --> sdkmods

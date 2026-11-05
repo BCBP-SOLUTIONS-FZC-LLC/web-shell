@@ -11,7 +11,7 @@ sequenceDiagram
     Boot->>SDK: installTrustedTypesPolicy, initializeCore
     Boot->>SDK: loadRuntimeConfig (/config/runtime.json)
     Note over Boot,SDK: a failure is logged as an error (default /otel), then "The app is unavailable right now."
-    Boot->>SDK: consent, tracing, logging, metrics, error handlers, web vitals
+    Boot->>SDK: tracing, logging, metrics, error handlers, web vitals (consent: SDK default, essential only)
     Boot->>SDK: createOidcProvider, initializeAuth, setTokenSource
     Boot->>SDK: idp.init()
     alt anonymous
@@ -35,7 +35,7 @@ sequenceDiagram
         Boot->>SDK: initializeI18n (detect: P-35 locale), loadManifest, startVersionPolling
         Boot->>Browser: render App inside ShellRoot (PlatformProvider), registerNavigator
         opt no session context
-            Boot->>IAM: retry after 1 s, 2 s, 4 s (network, timeout, 429, 5xx)
+            Boot->>IAM: retry after 1 s, 2 s, 4 s (online network error, timeout, 429, 502-504)
             Boot->>SDK: subject, flags, rememberWorkspace; the provider updates live
         end
     end

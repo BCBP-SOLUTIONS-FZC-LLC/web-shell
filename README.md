@@ -103,7 +103,6 @@ web-shell/
 │   │   ├── iam.ts               # PUB-1 resolver and P-35 session context over the ApiClient
 │   │   ├── SessionScreens.tsx   # Email sign-in, signed out, session ended, device clock, wrong workspace
 │   │   ├── screen.tsx           # Full-screen host for those screens, outside the app root
-│   │   ├── consent.ts           # Consent: essential only in v1
 │   │   ├── passwordReset.ts     # Keycloak reset page for the workspace's realm
 │   │   └── permissions.ts       # Role → UI permission map
 │   ├── pages/                   # Login layouts, the shared email form hook, remember-email
@@ -373,7 +372,7 @@ Two stages, both digest-pinned: `node:26-bookworm` runs `npm ci` and `npm run bu
 | Call | When |
 |---|---|
 | `GET /api/v1/public/tenants/resolve?identifier=` (PUB-1) | The email sign-in screen, and workspace switching. No token |
-| `GET /api/v1/me/session-context` (P-35) | Once after sign-in; on a network error, timeout, 429 or 5xx again after 1 s, 2 s, 4 s. Until it answers the app renders with deny-all permissions |
+| `GET /api/v1/me/session-context` (P-35) | Once after sign-in (with the SDK's own retries); after a network failure while online, a timeout, 429, 502, 503 or 504 (the SDK ApiClient's own rule), again after 1 s, 2 s, 4 s, one request each. Until it answers the app renders with deny-all permissions |
 
 ### Dashboard remote (`dashboard`)
 

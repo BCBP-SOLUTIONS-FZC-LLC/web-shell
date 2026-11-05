@@ -54,7 +54,6 @@ let shellProps: Record<string, unknown> = {}
 
 vi.mock('@bcbp-solutions-fzc-llc/frontend-sdk/core', () => ({
   initializeCore: (...a: unknown[]) => (calls.push('initializeCore'), initializeCore(...a)),
-  setConsentProvider: record('setConsentProvider'),
 }))
 vi.mock('@bcbp-solutions-fzc-llc/frontend-sdk/config', () => ({
   loadRuntimeConfig: () => (calls.push('loadRuntimeConfig'), loadRuntimeConfig()),
@@ -133,6 +132,7 @@ vi.mock('../../src/App', async () => {
 vi.mock('../../src/platform/iam', () => ({
   workspaceResolver: { resolve: (i: string) => resolve(i) },
   sessionContextSource: { load: () => loadContext() },
+  loadSessionContextOnce: () => loadContext(),
 }))
 
 const { bootstrap } = await import('../../src/bootstrap')
@@ -176,7 +176,6 @@ describe('bootstrap, signed in', () => {
       'initializeCore',
       'loadRuntimeConfig',
       'setRuntimeConfig',
-      'setConsentProvider',
       'initializeTracing',
       'initializeLogging',
       'initializeMetrics',
@@ -231,8 +230,8 @@ describe('bootstrap, signed in', () => {
 
   it('retries a transient session-context failure in the background and applies it when it answers', async () => {
     loadContext
-      .mockRejectedValueOnce(new NetworkError(true, 'req-1'))
-      .mockRejectedValueOnce(new NetworkError(true, 'req-1'))
+      .mockRejectedValueOnce(new NetworkError(false, 'req-1'))
+      .mockRejectedValueOnce(new NetworkError(false, 'req-1'))
       .mockResolvedValue({ tenantId: 't-1', slug: 'acme', roles: ['tenant_owner'] })
     const subjects: unknown[] = []
     sdk.setAuthzSubject = (s) => subjects.push(s)
@@ -256,7 +255,7 @@ describe('bootstrap, signed in', () => {
 
   it('keeps the router when a late context leaves the URL where it was', async () => {
     window.history.replaceState({}, '', '/t/acme/dashboard')
-    loadContext.mockRejectedValueOnce(new NetworkError(true, 'req-1')).mockResolvedValue({ tenantId: 't-1', slug: 'acme', roles: ['member'] })
+    loadContext.mockRejectedValueOnce(new NetworkError(false, 'req-1')).mockResolvedValue({ tenantId: 't-1', slug: 'acme', roles: ['member'] })
     vi.useFakeTimers({ toFake: ['setTimeout'] })
     const started = bootstrap()
     await act(() => vi.advanceTimersByTimeAsync(1_000))
@@ -265,7 +264,7 @@ describe('bootstrap, signed in', () => {
   })
 
   it('stops the retries on a sign-out', async () => {
-    loadContext.mockRejectedValue(new NetworkError(true, 'req-1'))
+    loadContext.mockRejectedValue(new NetworkError(false, 'req-1'))
     vi.useFakeTimers({ toFake: ['setTimeout'] })
     const started = bootstrap()
     await act(() => vi.advanceTimersByTimeAsync(0))

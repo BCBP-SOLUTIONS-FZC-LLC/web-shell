@@ -51,7 +51,6 @@ src/
     iam.ts               ← PUB-1 resolver and P-35 session context (the SDK's /auth ports)
     SessionScreens.tsx   ← Email sign-in, signed out, session ended, device clock, wrong workspace
     screen.tsx           ← Full-screen host for those screens
-    consent.ts           ← Consent stand-in
     permissions.ts       ← Role → UI permission map
   pages/                 ← Login layouts, useEmailSignIn, rememberEmail
   components/            ← Shell-owned UI (BrandLogo)

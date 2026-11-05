@@ -5,10 +5,16 @@
 import type { SessionContext } from '@bcbp-solutions-fzc-llc/frontend-sdk/auth'
 import { NetworkError, TimeoutError, isProblemError } from '@bcbp-solutions-fzc-llc/frontend-sdk/problem'
 
-/** Network failures, timeouts, 429 and 5xx are worth another try; any other answer is final. */
+/**
+ * The SDK ApiClient's own rule for a failure worth another try (its RETRY_STATUSES, which it does not
+ * export): a network failure while online, a timeout, or 429, 502, 503, 504. Anything else (other
+ * 4xx, 500, 501, offline) is final, as it is for the ApiClient.
+ */
+const RETRY_STATUSES = new Set([429, 502, 503, 504])
 export function isTransient(e: unknown): boolean {
-  if (e instanceof NetworkError || e instanceof TimeoutError) return true
-  return isProblemError(e) && (e.status === 429 || e.status >= 500)
+  if (e instanceof NetworkError) return !e.offline
+  if (e instanceof TimeoutError) return true
+  return isProblemError(e) && RETRY_STATUSES.has(e.status)
 }
 
 export interface RetryOptions {
