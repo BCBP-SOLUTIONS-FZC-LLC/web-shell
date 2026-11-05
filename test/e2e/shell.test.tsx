@@ -125,7 +125,9 @@ async function until(done: () => boolean, what: string): Promise<void> {
   )
 }
 
-const emailBox = () => screen.findByRole('textbox', { name: /work email address/i })
+// A page load boots the real SDK before the email screen shows: allow it the suite's 5 s, not
+// Testing Library's default 1 s (a slow CI runner took just over 1 s once).
+const emailBox = () => screen.findByRole('textbox', { name: /work email address/i }, { timeout: 5_000 })
 const continueButton = () => screen.getByRole('button', { name: /continue with email/i })
 const bearerOf = (r: Request) => r.headers.get('authorization')
 const storedValues = () =>
@@ -334,7 +336,7 @@ describe('the shell, end to end', () => {
     expect(fields.id_token_hint).toBeTruthy()
     expect(fields.post_logout_redirect_uri).toBe(`${ORIGIN}/`)
     await load(new URL(fields.post_logout_redirect_uri!).pathname)
-    await screen.findByRole('heading', { name: 'You are signed out' })
+    await screen.findByRole('heading', { name: 'You are signed out' }, { timeout: 5_000 })
     expect(assigned).toEqual([]) // no silent sign-in on the live SSO session
 
     // Signing in again asks for credentials (a shared device).
@@ -369,7 +371,7 @@ describe('the shell, end to end', () => {
     await load('/')
     await userEvent.type(await emailBox(), 'nobody@else.test')
     await userEvent.click(continueButton())
-    await screen.findByText('We could not find a workspace for that email.')
+    await screen.findByText('We could not find a workspace for that email.', {}, { timeout: 5_000 })
     expect(assigned).toEqual([])
   })
 })

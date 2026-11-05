@@ -6,7 +6,7 @@
 |---|---|
 | **Repository** | `github.com/BCBP-SOLUTIONS-FZC-LLC/web-shell` (private) |
 | **Artifact** | Static bundle served by nginx (`ghcr.io/bcbp-solutions-fzc-llc/web-shell`), never installed as a package (`web-shell`, `"private": true`, `0.0.0`) |
-| **Platform SDK** | `@bcbp-solutions-fzc-llc/frontend-sdk`, `webpack-preset`, `eslint-plugin` `1.0.0-alpha.4`, pinned exactly, all three on one version |
+| **Platform SDK** | `@bcbp-solutions-fzc-llc/frontend-sdk`, `webpack-preset`, `eslint-plugin` `1.0.0-alpha.5`, pinned exactly, all three on one version |
 | **Status** | Not tagged or deployed; everything is `[Unreleased]` in [CHANGELOG.md](../../CHANGELOG.md). `main` passes every CI job; the release workflow has not run (its provenance step fixed in #27). Compatible with mfe-dashboard `v0.1.0`+ (contract suite). Hosting until CloudFront (next month): [hosting-without-cloudfront.md](../hosting-without-cloudfront.md). Open: §15 |
 | **Owners** | `@BCBP-SOLUTIONS-FZC-LLC/web-shell` (CODEOWNERS) |
 
@@ -14,6 +14,7 @@
 
 | Date | Change |
 |---|---|
+| 2026-11-05 | SDK `1.0.0-alpha.5` (optional `auth.signInUrl` for standalone remotes; host-page docs). Checked against mfe-dashboard `v0.1.1` (alpha.4) |
 | 2026-11-05 | Docs aligned with `main` after #25–#27: status, layout, hosting until CloudFront, release workflow, compatibility, open items |
 | 2026-11-05 | Release workflow fixed before its first run (#27): provenance via `imagetools`, release notes, `BUILD_VERSION` without `v`, source maps artifact |
 | 2026-11-05 | Hosting until CloudFront (#26): ingress routing, mounted CSP and HSTS |
@@ -470,7 +471,7 @@ Every `npm ci` reads `@bcbp-solutions-fzc-llc/*` from GitHub Packages with `GITH
 
 | Peer | Rule |
 |---|---|
-| SDK | Pinned exactly; the shell shares it as `1.0.0-alpha.4` under the preset's range `^1.0.0-0` |
+| SDK | Pinned exactly; the shell shares it as `1.0.0-alpha.5` under the preset's range `^1.0.0-0`. It loads remotes built on alpha.4 (`^1.0.0-alpha.4`) and alpha.5 |
 | Remotes | A remote built with the preset requires `^<its SDK version>`: it must not be newer than the shell's. **Upgrade the shell first**, then remotes. A release that changes the shell–remote contract is the exception (alpha.4 changed the container global): the shell and every remote deploy together. `npm run test-contract` checks a pairing |
 | React | Strict singleton `^19.0.0` from the preset; the shell ships 19.3 |
 | `mfe-dashboard` (`app2`) | Rsbuild remote with `pluginPlatform({ role: 'remote', name: 'app2' })`, async-only chunk splitting, reads the user and sign-out through SDK hooks, takes no props. alpha.4 from its `main` and tag `v0.1.0` on. Contract suite (`dashboard.spec.ts`) on 2026-11-05 against `main` `e1b04c3` and branch `0be083c` (v0.1.1 prep): 9/9 in three engines (loads with its CSS and integrity, role map reaches it, `NavLink` without a reload, Logout through the shell's form POST). Its `v0.1.0` tag has no published release (its provenance step failed); `v0.1.1` is pending. An alpha.3 build does not load in this shell |
@@ -486,7 +487,7 @@ Details: [VERSIONING.md](../../VERSIONING.md).
 |---|---|---|
 | 1 | Official Privacy, Terms, Trust & Security and Help URLs: set them in `src/pages/links.ts` (hidden until then; none exists on bcbpsolutions.com) | product / legal |
 | 3 | Consent is essential only in v1 (decision). A consent manager would call `cmp.accept()` | product |
-| 5 | mfe-dashboard `v0.1.1` (alpha.4) is published (its `v0.1.0` never was) and deploys together with this shell's first release | `mfe-dashboard` |
+| 5 | mfe-dashboard `v0.1.1` (alpha.4) is published (its `v0.1.0` never was) and loads in this alpha.5 shell (contract suite, 2026-11-05). Order for alpha.5 (platform): this shell first, then mfe-dashboard (its standalone `main.tsx` loads the runtime config), and only then do deployed `runtime.json` files set `auth.signInUrl` (older SDKs refuse the key) | `mfe-dashboard`, operators |
 | 6 | PUB-1 and P-35 must exist behind `/api` in every environment; they are stubbed only in dev | IAM |
 | 7 | No cluster deploy; each environment serves its own runtime config and manifest (with the remote's integrity) and registers its redirect URIs in each realm | operators |
 | 8 | Tender permissions in the role map are provisional | Tender Service |
