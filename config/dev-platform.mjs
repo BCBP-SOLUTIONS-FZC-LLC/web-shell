@@ -8,6 +8,8 @@
 // - /otel accepts and drops telemetry.
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { PlatformProblemTypes } from '@bcbp-solutions-fzc-llc/frontend-sdk/problem'
+import { mockProblem } from '@bcbp-solutions-fzc-llc/frontend-sdk/testing'
 
 function send(res, status, body, type = 'application/json') {
   res.statusCode = status
@@ -15,6 +17,12 @@ function send(res, status, body, type = 'application/json') {
   if (body === undefined) return res.end()
   res.setHeader('content-type', type)
   res.end(typeof body === 'string' ? body : JSON.stringify(body))
+}
+
+/** A problem response exactly as platform-gincommon writes it (the SDK's mockProblem), not a hand-built one. */
+function sendProblem(res, type, extra) {
+  const r = mockProblem(type, extra)
+  void r.text().then((body) => send(res, r.status, body, r.headers.get('content-type') ?? 'application/problem+json'))
 }
 
 async function proxy(req, res, upstream) {
@@ -46,7 +54,8 @@ export function devPlatformMiddleware(root) {
     if (!path.startsWith('/api/')) return next()
 
     if (upstream) {
-      proxy(req, res, upstream).catch((e) => send(res, 502, { type: 'about:blank', title: 'Bad Gateway', status: 502, detail: String(e) }, 'application/problem+json'))
+      // The platform has no 502 problem type: an unreachable upstream answers 503, as a gateway would.
+      proxy(req, res, upstream).catch((e) => sendProblem(res, PlatformProblemTypes.ServiceUnavailable, { detail: String(e) }))
       return
     }
     if (path === '/api/v1/public/tenants/resolve') {
@@ -55,7 +64,7 @@ export function devPlatformMiddleware(root) {
     }
     if (path === '/api/v1/me/session-context') {
       if (!/^Bearer \S+/.test(req.headers.authorization ?? '')) {
-        return send(res, 401, { type: 'about:blank', title: 'Unauthorized', status: 401 }, 'application/problem+json')
+        return sendProblem(res, PlatformProblemTypes.Unauthorized)
       }
       return send(res, 200, {
         tenant_id: 'local-tenant',
@@ -66,6 +75,6 @@ export function devPlatformMiddleware(root) {
         read_only: false,
       })
     }
-    return send(res, 404, { type: 'about:blank', title: 'Not Found', status: 404 }, 'application/problem+json')
+    return sendProblem(res, PlatformProblemTypes.NotFound)
   }
 }

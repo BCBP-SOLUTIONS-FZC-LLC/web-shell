@@ -24,6 +24,8 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { createServer, type Server } from 'node:https'
 import type { AddressInfo } from 'node:net'
 import { extname, join, normalize } from 'node:path'
+import { PlatformProblemTypes } from '@bcbp-solutions-fzc-llc/frontend-sdk/problem'
+import { mockProblem } from '@bcbp-solutions-fzc-llc/frontend-sdk/testing'
 
 const ROOT = join(import.meta.dirname, '..', '..')
 const DIST = join(ROOT, 'dist')
@@ -217,7 +219,10 @@ export async function startServers(): Promise<{ app: string; idp: string; close:
       return json(res, 200, found ? { found: true, realm: REALM, strategy: 'dedicated' } : { found: false })
     }
     if (p === '/api/v1/me/session-context') {
-      if (!req.headers.authorization?.startsWith('Bearer ')) return json(res, 401, { title: 'Unauthorized', status: 401 })
+      if (!req.headers.authorization?.startsWith('Bearer ')) {
+        const r = mockProblem(PlatformProblemTypes.Unauthorized)
+        return send(res, r.status, await r.text(), r.headers.get('content-type') ?? 'application/problem+json')
+      }
       return json(res, 200, {
         tenant_id: '7d3c1f9e-2b4a-4c6d-8e0f-1a2b3c4d5e6f',
         slug: 'acme',

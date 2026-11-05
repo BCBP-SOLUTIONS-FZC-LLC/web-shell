@@ -76,7 +76,7 @@ Audit (2026-11-05) of `src/`, the tests and the CI scripts against platform-reac
 | `test/fixtures/keycloak.ts`, `network.ts` | `test/fixtures/` (pattern) | The SDK's `/testing` `mockApi` answers only `api.baseUrl` routes; the e2e suite also needs `/config`, `/remotes` and `/otel` | Not a copy to remove |
 | `.github/scripts/metrics-check.mjs` | — | Uses the SDK's own `getServiceMeter` / `getDomainMeter` as the verdict; restates no rule | — |
 
-Removed as duplicates of the SDK (2026-11-05): `platform/consent.ts` (the runtime's default `ESSENTIAL_ONLY_CONSENT`), a second retry layer around the ApiClient's own GET retry, and the restated `tenant-` default in `iam.ts`.
+Removed as duplicates of the SDK (2026-11-05): `platform/consent.ts` (the runtime's default `ESSENTIAL_ONLY_CONSENT`), a second retry layer around the ApiClient's own GET retry, the restated `tenant-` default in `iam.ts`, and hand-built problem responses in the tests and the dev server (now the SDK's `/testing` `mockProblem`).
 
 ---
 

@@ -124,7 +124,7 @@ describe('dev platform middleware', () => {
     expect(nextCalls).toBe(1)
   })
 
-  it('proxies /api to DEV_API_URL, body and headers included, and reports an unreachable upstream as 502', async () => {
+  it('proxies /api to DEV_API_URL, body and headers included, and reports an unreachable upstream as 503 (the platform has no 502 problem type)', async () => {
     const seen: { method?: string; url?: string; auth?: string; body?: string } = {}
     const upstream = createServer((req, res) => {
       let body = ''
@@ -148,7 +148,7 @@ describe('dev platform middleware', () => {
     upstream.closeAllConnections()
     await new Promise((res) => upstream.close(res))
     const down = await get('/api/v1/tenders')
-    expect(down.status).toBe(502)
+    expect(down.status).toBe(503)
     expect(down.headers['content-type']).toBe('application/problem+json')
   })
 })
