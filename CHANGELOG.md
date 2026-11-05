@@ -2,11 +2,21 @@
 
 All notable changes to this shell are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning aligned with SemVer.
 
-This shell has never been tagged or deployed. There is no released version yet, so everything lives under `[Unreleased]`. `package.json` `version` is `0.0.0` and is not a published release. This file tracks what is currently true and what is still outstanding. The development diary, when one is needed, is `git log`.
+`0.1.0` is the first release. Everything before it is in its section below. `package.json` `version` matches the latest tag without the `v`. This file tracks what is true in each release and what is still outstanding. The development diary, when one is needed, is `git log`.
 
 Pull requests that change the shell, its dependencies, or the image add an entry under `[Unreleased]`. `.github/workflows/changelog-check.yml` fails a pull request that touches `src/`, `package.json`, `package-lock.json`, `Dockerfile`, `nginx/`, `rsbuild.config.ts`, `config/**`, `public/config/**`, or `index.html` without updating this file. `.github/workflows/release.yml` rejects a tag that has no matching `## [X.Y.Z]` section (`verify-changelog-entry.sh` looks for the version without the `v`).
 
 ## [Unreleased]
+
+Nothing yet.
+
+## [0.1.0] - 2026-11-05
+
+First release. The shell runs the platform SDK's start-up once per page, owns sign-in and the session screens, and hosts the dashboard remote `app2` through Module Federation. Image: `ghcr.io/bcbp-solutions-fzc-llc/web-shell:0.1.0` (signed, with SBOM and SLSA provenance).
+
+**Compatibility.** Platform SDK `1.0.0-alpha.5` (`frontend-sdk`, `webpack-preset`, `eslint-plugin`). Loads remotes built on alpha.4 or alpha.5: mfe-dashboard `v0.1.1` (alpha.4) and `v0.2.0` (alpha.5), both checked with the contract suite. A remote built on alpha.5 needs this release or later; deploy it no earlier than this shell.
+
+**Deploying it.** Each environment serves its own `/config/runtime.json` and `/remotes/manifest.json` (with the remote's integrity), routes `/api` (IAM PUB-1 and P-35) and `/otel` on the shell's origin, registers `<origin>/auth/callback` and `<origin>/` in each realm, and sends the platform CSP with the IdP origin in `form-action` (the global sign-out POSTs a form to Keycloak). Until CloudFront exists, follow `docs/hosting-without-cloudfront.md` (ingress routing, mounted CSP and HSTS). Check with `SMOKE_MODE=live npm run test-smoke`. Set `auth.signInUrl` in `runtime.json` only once this shell and an alpha.5 dashboard are deployed. Open items: `docs/lld/web-shell-lld.md` §15.
 
 ### Added
 

@@ -41,7 +41,7 @@ This shell has no package for another app to import from npm. Its public contrac
 
 | Version | Status | Image tag | Notes |
 |---------|--------|-----------|-------|
-| *(none tagged)* | **Unreleased** | — | [CHANGELOG.md](CHANGELOG.md) lives entirely under `[Unreleased]`. `package.json` `version` is `0.0.0` and is not a published release. No support window has started |
+| `v0.1.0` | **Current** (pre-1.0) | `0.1.0`, `0.1`, `0`, `latest` | First release; SDK `1.0.0-alpha.5`. [CHANGELOG § 0.1.0](CHANGELOG.md). No support window: pre-1.0, so a minor may break compatibility (see below) |
 | `< v0.1.0` | — | — | No tagged Git releases |
 
 This shell has no formal support-window policy yet, since nothing is running in production against a tagged release. Once a `v1.0.0` ships, this section will define how long a superseded major line receives security-only fixes.
