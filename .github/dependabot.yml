@@ -1,12 +1,31 @@
 version: 2
 
+# GitHub Packages (@bcbp-solutions-fzc-llc/*): Dependabot gets no credentials for it on its own, and
+# regenerating package-lock.json resolves those packages, so without this every npm update failed
+# with a 401 (private_source_authentication_failure). PACKAGES_READ_TOKEN is a Dependabot secret
+# (organization-level, shared with mfe-dashboard): a classic PAT with read:packages, or a
+# fine-grained token with Packages: read on the organization.
+registries:
+  github-packages:
+    type: npm-registry
+    url: https://npm.pkg.github.com
+    token: ${{secrets.PACKAGES_READ_TOKEN}}
+
 updates:
   - package-ecosystem: npm
     directory: /
+    registries: [github-packages]
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
     labels: [dependencies, npm]
+    ignore:
+      # The platform packages move by hand, all three together and shell before remotes
+      # (SdkVersionPlugin, and the shared version range): a single-package bump is always wrong.
+      - dependency-name: "@bcbp-solutions-fzc-llc/*"
+    # @playwright/test is not ignored, but its PR needs a second edit: the browser jobs run in
+    # mcr.microsoft.com/playwright:v<version>-noble@sha256:<digest> (ci.yml), which Dependabot does
+    # not bump. Their first step fails until the tag and digest match the new version.
 
   - package-ecosystem: docker
     directory: /
