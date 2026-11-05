@@ -100,8 +100,9 @@ test('a deploy without its runtime config shows the unavailable page and reports
   await page.route('**/config/runtime.json', (r) => r.fulfill({ status: 404, body: 'Not Found' }))
   await page.goto(`${APP}/`)
   await expect(page.getByRole('alert')).toContainText('The app is unavailable right now')
-  // The record goes on the next export or the page-hide beacon, whichever is first.
-  await page.goto('about:blank')
+  // The user stays on the unavailable page: the record goes with the SDK's next export (every 5 s).
+  // Not by leaving the page: WebKit sometimes drops the page-hide beacon (the SDK's engine notes),
+  // which made this case fail about once in 90 runs; delivery on unload is the SDK's to test.
   await expect
     .poll(async () => (await state(page)).otel.filter((o) => o.path === '/otel/v1/logs').map((o) => o.body).join('\n'), {
       timeout: 15_000,
