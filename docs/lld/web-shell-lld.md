@@ -457,7 +457,7 @@ E2E seams (`test/fixtures/`): `FakeKeycloak` (authorize via `approve()`, token e
 | `ci.yml` `browser` | Playwright browsers, `npm run build`, `npm run test-browser` (Chromium, Firefox, WebKit). Gates `push` |
 | `ci.yml` `push` | `main`/`master`: GHCR branch and `sha-<short>` tags, Cosign keyless sign |
 | `changelog-check.yml` | `CHANGELOG.md` required when `src/`, `package*.json`, `Dockerfile`, `nginx/`, `rsbuild.config.ts`, `config/**`, `public/config/**` or `index.html` change |
-| `release.yml` | `vX.Y.Z[-*]`: re-validate, changelog section, dist tarball, semver image tags, scan, SBOM, SLSA, Cosign, GitHub Release |
+| `release.yml` | `vX.Y.Z[-*]`: re-validate, changelog section, dist tarball (`BUILD_VERSION` without the `v`), source maps as a workflow artifact, semver image tags, scan, SBOM, SLSA (BuildKit attestation via `imagetools`), Cosign, GitHub Release |
 
 Every `npm ci` reads `@bcbp-solutions-fzc-llc/*` from GitHub Packages with `GITHUB_TOKEN` (`packages: read`); each package grants this repository read under "Manage Actions access".
 

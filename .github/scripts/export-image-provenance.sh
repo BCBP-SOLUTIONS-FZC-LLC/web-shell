@@ -1,20 +1,21 @@
 #!/usr/bin/env bash
-# Downloads SLSA provenance attestation from GHCR and writes provenance.slsa.json.
+# Writes the image's SLSA provenance to provenance.slsa.json.
+# build-push-action (`provenance: mode=max`) stores provenance as a BuildKit attestation manifest
+# inside the image index, not as a Cosign attestation, so read it with
+# `docker buildx imagetools inspect`. Needs the registry login from the same job.
+# (mfe-dashboard's v0.1.0 release failed here with the old Cosign lookup; fixed there in 0be083c.)
 set -euo pipefail
-set -o pipefail
 
 : "${IMAGE_NAME:?IMAGE_NAME is required}"
 : "${IMAGE_DIGEST:?IMAGE_DIGEST is required}"
 
 IMAGE_REF="${IMAGE_NAME}@${IMAGE_DIGEST}"
 
-if ! cosign download attestation \
-  --predicate-type=https://slsa.dev/provenance/v1 \
-  "${IMAGE_REF}" \
-  | jq -er 'if type == "array" then .[0].payload else .payload end' \
-  | base64 -d \
-  | jq . \
-  | tee provenance.slsa.json >/dev/null; then
+# .Provenance is {"SLSA": {...}} for one platform and keyed by platform for several.
+if ! docker buildx imagetools inspect "${IMAGE_REF}" --format '{{ json .Provenance }}' \
+  | jq -e 'if has("SLSA") then .SLSA else (to_entries | first | .value.SLSA) end | select(type == "object" and length > 0)' \
+  > provenance.slsa.json; then
+  rm -f provenance.slsa.json
   echo "::error title=Provenance export::SLSA provenance attestation not found on ${IMAGE_REF}"
   exit 1
 fi

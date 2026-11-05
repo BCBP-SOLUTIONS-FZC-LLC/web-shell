@@ -359,7 +359,7 @@ Remotes that need storage use `storage(appId)` from `/storage`, which is namespa
 | The bundle needs no `eval` and no inline script | Preset output, Rsbuild `inlineScripts: false` (external scripts only) |
 | `/healthz` does not depend on Keycloak, IAM or the remote | `nginx/default.conf` returns a constant |
 | Per-environment files are revalidated; hashed assets are immutable | `index.html`, `/config/runtime.json`, `/remotes/manifest.json`, `/version.json` are `no-cache`. `/assets/` is immutable |
-| Source maps are not shipped | Dockerfile and `prepare-release-asset.sh` delete them; the smoke script and suite fail on a `.map` |
+| Source maps are not shipped | Dockerfile and `prepare-release-asset.sh` delete them; the smoke script and suite fail on a `.map`. A release keeps them as a workflow artifact (`sourcemaps-<tag>`) |
 | Only extension-less paths get `index.html`; cache headers per location; dotfiles 404 | `nginx/default.conf`; `test/smoke/deployment.test.ts` checks it against the built image |
 | Every response is compressed when it can be and carries baseline security headers, without the nginx version | `nginx/default.conf` (`gzip`, `add_header_inherit merge`, `server_tokens off`); smoke image mode |
 | Every shell screen passes axe-core (contrast excepted) | `test/integration/accessibility.test.tsx` |

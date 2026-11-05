@@ -23,7 +23,7 @@ ENV SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH} \
     BUILD_VERSION=${BUILD_VERSION} \
     PLATFORM_ENVIRONMENT=${PLATFORM_ENVIRONMENT}
 
-# Hidden source maps are uploaded privately, never served.
+# Source maps are never served. A release keeps them as a workflow artifact (prepare-release-asset.sh).
 RUN npm run build && find dist -name '*.map' -delete
 
 FROM nginxinc/nginx-unprivileged:1.31-alpine@sha256:b5047b9b76845eac124358373c6852377c52e4b05834a47647e955dd91cb8f1e

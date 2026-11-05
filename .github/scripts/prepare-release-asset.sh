@@ -7,9 +7,14 @@ set -euo pipefail
 
 echo "Building web-shell static bundle for ${RELEASE_TAG}"
 npm ci --no-audit --no-fund
-BUILD_VERSION="${RELEASE_TAG}" npm run build
-# Hidden source maps are uploaded privately, never shipped with the bundle.
+# The version without the `v` (0.1.0), as the image and mfe-dashboard report it (service.version).
+BUILD_VERSION="${RELEASE_TAG#v}" npm run build
+# Source maps never ship with the bundle or the image. They are kept as a workflow artifact
+# (release.yml "Upload source maps") to read production stack traces against this exact build.
+MAPS_NAME="sourcemaps_web-shell_${RELEASE_TAG}.tar.gz"
+(cd dist && find . -name '*.map' -print0 | tar --null -czf "../${MAPS_NAME}" -T -)
 find dist -name '*.map' -delete
+echo "  ✔  ${MAPS_NAME} (workflow artifact only)"
 
 ASSET_NAME="web-shell_${RELEASE_TAG}_dist.tar.gz"
 tar -C dist -czf "${ASSET_NAME}" .
