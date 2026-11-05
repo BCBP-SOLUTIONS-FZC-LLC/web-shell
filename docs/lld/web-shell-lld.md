@@ -65,6 +65,17 @@ This LLD is the contract for the shell: what it owns, what the SDK owns for it, 
 
 The shell implements only what the SDK leaves to a shell: the screens, the two IAM ports, consent, the role map, and the routes. PKCE, tokens, refresh, idle timeout, cross-tab sign-out, workspace caching, the `/t/<slug>/` URL, telemetry, remote loading, chunk integrity and the shared map are the SDK's and the preset's. A change to any of those is made in `platform-reactcommon`.
 
+Audit (2026-11-05) of `src/`, the tests and the CI scripts against platform-reactcommon. Nothing re-implements a published SDK, preset or lint-plugin behaviour. What the shell takes from platform-reactcommon's **unpublished** parts:
+
+| In this repository | Taken from platform-reactcommon | Why it is here | To remove the copy |
+|---|---|---|---|
+| `platform/iam.ts`, `permissions.ts`, `consent.ts`, `SessionScreens.tsx`, `screen.tsx` | `examples/shell/src/*` (pattern) | The ports and screens every shell must own (design doc §C1); adapted (§2.3) | Not a copy to remove |
+| `platform/sessionContext.ts` (`isTransient`, `retrySessionContext`, `createStore`), `platform/ShellRoot.tsx` | `examples/shell/src/session-context.ts`, `ShellRoot.tsx`, nearly verbatim | The SDK exports no session-context retry and no `PlatformProvider` that reads a live context | SDK export requested (`platform-reactcommon-shell-helpers-export.md`) |
+| `platform/passwordReset.ts` (`/realms/<realm>/login-actions/reset-credentials`) | The SDK's realm URL scheme (internal to `/auth`) | The SDK exports no realm-URL or password-reset builder | Same request |
+| `nginx/security.d/csp.conf.example` (read by `test/browser/server.ts`) | `examples/cloudfront/csp.mjs` `buildCsp` | The CSP builder is not in any package; one copy here, enforced in three engines by the browser suite | Same request (publish `buildCsp`) |
+| `test/fixtures/keycloak.ts`, `network.ts` | `test/fixtures/` (pattern) | The SDK's `/testing` `mockApi` answers only `api.baseUrl` routes; the e2e suite also needs `/config`, `/remotes` and `/otel` | Not a copy to remove |
+| `.github/scripts/metrics-check.mjs` | — | Uses the SDK's own `getServiceMeter` / `getDomainMeter` as the verdict; restates no rule | — |
+
 ---
 
 ## 2. Responsibilities and boundaries
