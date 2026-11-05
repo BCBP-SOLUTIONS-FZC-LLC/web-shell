@@ -1,71 +1,33 @@
 // @vitest-environment node
-// .github/scripts/metrics-check.mjs: the observability standard (docs/observability.md) checked at
-// build time, against the SDK's own registry, mirroring the SDK's getDomainMeter / getServiceMeter.
+// .github/scripts/metrics-check.mjs: the observability standard (docs/observability.md) at build
+// time. The rules are the SDK's: each metric is created with its getServiceMeter / getDomainMeter and
+// the SDK's InvalidMetricError is the verdict. These tests check that the script finds the metrics,
+// passes the SDK's verdict through, and adds what the SDK cannot see (foreign APIs, the inventory).
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { describe, expect, it } from 'vitest'
-import {
-  check,
-  checkMetric,
-  findMetrics,
-  identityOf,
-  inventoryNames,
-  servicePrefix,
-  type Registry,
-} from '../../.github/scripts/metrics-check.mjs'
+import { beforeAll, describe, expect, it } from 'vitest'
+import { check, findMetrics, identityOf, inventoryNames, sdkVerdict, useIdentity } from '../../.github/scripts/metrics-check.mjs'
 
 const root = join(import.meta.dirname, '..', '..')
-const registry = JSON.parse(
-  readFileSync(join(root, 'node_modules/@bcbp-solutions-fzc-llc/frontend-sdk/contracts/metric-registry.json'), 'utf8'),
-) as Registry
-const id = { registry, domain: 'portal', service: 'web-shell' }
 const svc = (name: string, type: 'counter' | 'histogram' = 'counter', labels: string[] = []) =>
-  checkMetric({ tier: 'service', type, name, labels }, id)
+  sdkVerdict({ tier: 'service', type, name, labels })
 
-describe('servicePrefix (the SDK and gincommon ServicePrefix)', () => {
-  it('normalises the service to snake_case and drops a repeated domain', () => {
-    expect(servicePrefix('portal', 'web-shell')).toBe('portal_web_shell_')
-    expect(servicePrefix('iam', 'iam-event-consumer')).toBe('iam_event_consumer_')
-  })
-})
+beforeAll(() => useIdentity(identityOf(readFileSync(join(root, 'src/bootstrap.tsx'), 'utf8'))))
 
-describe('Tier 3 (getServiceMeter)', () => {
-  it('accepts a prefixed counter and histogram with bounded labels', () => {
-    expect(svc('portal_web_shell_session_fallback_total', 'counter', ['outcome', 'reason'])).toEqual([])
+describe("the SDK's verdict, passed through", () => {
+  it('accepts what the SDK accepts', () => {
+    expect(svc('portal_web_shell_session_fallback_total', 'counter', ['outcome'])).toEqual([])
     expect(svc('portal_web_shell_boot_seconds', 'histogram')).toEqual([])
   })
 
-  it('refuses a missing prefix and the wrong suffixes', () => {
-    expect(svc('web_shell_x_total')).toEqual([expect.stringContaining('portal_web_shell_<metric>')])
-    expect(svc('portal_web_shell_x')).toEqual([expect.stringContaining('counters must end in _total')])
-    expect(svc('portal_web_shell_x_ms', 'histogram')).toEqual([expect.stringContaining('histograms must end in _seconds')])
-  })
-
-  it('refuses platform_*, registry, legacy and runtime-reserved names', () => {
-    expect(svc('platform_custom_total')[0]).toMatch(/platform_\* \(Tier 1\)/)
-    expect(svc(registry.metrics.find((m) => m.tier === 'platform' && !m.name.startsWith('platform_'))?.name ?? 'iam_auth_events_total')[0]).toMatch(/registry metric/)
-    expect(svc('http_requests_total')[0]).toMatch(/legacy name/)
-    expect(svc('process_cpu_seconds_total')[0]).toMatch(/reserved for runtime collectors/)
-  })
-
-  it('refuses prohibited, injected, non-snake_case, duplicate and too many labels', () => {
-    expect(svc('portal_web_shell_x_total', 'counter', ['tenant_id'])).toEqual([expect.stringContaining('prohibited')])
-    expect(svc('portal_web_shell_x_total', 'counter', ['customer_email'])).toEqual([expect.stringContaining('prohibited')])
-    expect(svc('portal_web_shell_x_total', 'counter', ['environment'])).toEqual([expect.stringContaining('injected centrally')])
-    expect(svc('portal_web_shell_x_total', 'counter', ['Outcome'])).toEqual([expect.stringContaining('snake_case')])
-    expect(svc('portal_web_shell_x_total', 'counter', ['a', 'a'])).toEqual([expect.stringContaining('duplicate')])
-    expect(svc('portal_web_shell_x_total', 'counter', 'abcdefghi'.split(''))).toEqual([expect.stringContaining('at most 8')])
-  })
-})
-
-describe('Tier 2 (getDomainMeter)', () => {
-  const dom = (name: string, type: 'counter' | 'histogram' = 'counter') => checkMetric({ tier: 'domain', type, name, labels: [] }, id)
-  it("allows only the registry's Tier 2 metrics of the shell's domain, as their type", () => {
-    expect(dom('portal_unknown_total')[0]).toMatch(/not in the Platform Observability Registry/)
-    expect(dom('iam_auth_events_total')).toEqual([expect.stringContaining('this shell\'s domain is portal')])
-    expect(dom('iam_auth_events_total', 'histogram')).toContainEqual(expect.stringContaining('defines a counter'))
-    const platform = registry.metrics.find((m) => m.tier === 'platform')!
-    expect(dom(platform.name)[0]).toMatch(/platform_\* \(Tier 1\)|not a domain one/)
+  it('reports each rule the SDK enforces, with its rule name', () => {
+    expect(svc('web_shell_x_total')).toEqual([expect.stringMatching(/^namespace: .*portal_web_shell_<metric>/)])
+    expect(svc('portal_web_shell_x_ms', 'histogram')).toEqual([expect.stringMatching(/^suffix: /)])
+    expect(svc('portal_web_shell_y_total', 'counter', ['tenant_id'])).toEqual([expect.stringMatching(/^prohibited_label: /)])
+    expect(svc('portal_web_shell_z_total', 'counter', ['environment'])).toEqual([expect.stringMatching(/^required_labels: /)])
+    expect(svc('platform_custom_total')).toEqual([expect.stringMatching(/^namespace: .*platform_\*/)])
+    expect(sdkVerdict({ tier: 'domain', type: 'counter', name: 'portal_unknown_total', labels: [] })).toEqual([expect.stringMatching(/^registry: /)])
+    expect(sdkVerdict({ tier: 'domain', type: 'counter', name: 'iam_auth_events_total', labels: [] })).toEqual([expect.stringContaining('domain "portal"')])
   })
 })
 
@@ -118,15 +80,17 @@ describe('inventory and identity', () => {
     expect(() => identityOf('nothing here')).toThrow(/not found/)
   })
 
-  it('fails a compliant metric that the inventory does not list', () => {
-    const files = [{ path: 'src/x.ts', source: "getServiceMeter().counter('portal_web_shell_a_total', 'A.', [])" }]
-    expect(check({ files, registry, identity: id, inventory: new Set() })).toEqual([expect.stringContaining('not in docs/observability.md')])
-    expect(check({ files, registry, identity: id, inventory: new Set(['portal_web_shell_a_total']) })).toEqual([])
+  it('fails a compliant metric that the inventory does not list, and a broken one twice', () => {
+    const files = [{ path: 'src/x.ts', source: "getServiceMeter().counter('portal_web_shell_c_total', 'C.', [])\ngetServiceMeter().counter('bad', 'B.', [])" }]
+    expect(check({ files, inventory: new Set(['portal_web_shell_c_total']) })).toEqual([
+      expect.stringMatching(/^src\/x\.ts:2: [a-z_]+: metric "bad"/), // the SDK reports the first rule a metric breaks
+      'src/x.ts:2: "bad" is not in docs/observability.md § Inventory',
+    ])
   })
 })
 
 describe('this repository', () => {
-  it('passes: identity from src/bootstrap.tsx, every src/ metric compliant and listed', () => {
+  it('passes: identity from src/bootstrap.tsx, and the inventory lists no metric yet', () => {
     expect(identityOf(readFileSync(join(root, 'src/bootstrap.tsx'), 'utf8'))).toEqual({ service: 'web-shell', domain: 'portal' })
     expect(inventoryNames(readFileSync(join(root, 'docs/observability.md'), 'utf8')).size).toBe(0)
   })

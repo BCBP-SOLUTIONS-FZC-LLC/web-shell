@@ -10,7 +10,7 @@
 | `npm run lint` / `typecheck` / `build` | ESLint (platform rules) / `tsc -p tsconfig.test.json` / `tsc && rsbuild build` |
 | `npm test`, `test-unit`, `test-int`, `test-e2e` | Vitest (all, or one layer) |
 | `npm run test:ci` | Coverage + `.github/scripts/coverage-gate.mjs` (95%) |
-| `npm run metrics-check` | `.github/scripts/metrics-check.mjs`: the observability standard over `src/` (SDK meters only; no `platform_*`; Tier 2 from the registry for `portal`; Tier 3 `portal_web_shell_*`, `_total`/`_seconds`, bounded labels; listed in `docs/observability.md` § Inventory). Registry: the SDK's `contracts/metric-registry.json` |
+| `npm run metrics-check` | `.github/scripts/metrics-check.mjs`: creates every metric `src/` defines once more with the SDK's own `getServiceMeter` / `getDomainMeter` (identity from `src/bootstrap.tsx`), so the SDK's `InvalidMetricError` is the verdict; adds only what the SDK cannot see: metrics created outside the SDK, non-literal names or labels, and the `docs/observability.md` Inventory. No rule is restated here |
 | `npm run budget` | `.github/scripts/bundle-budget.mjs` over `dist/`: entry 12 KB, JS+CSS 300 KB, largest 85 KB (gzip), images 2.7 MB. Raise a limit only on purpose, with a CHANGELOG line |
 | `npm run test-browser` | Playwright over `dist/` (build first): Chromium, Firefox, WebKit, production CSP, HTTPS (openssl self-signed cert in `test/browser/.build/`), fake Keycloak on a second origin. `-- --project=webkit` for one engine |
 | `npm run test-contract` | `REMOTE_DIST=<mfe-dashboard>/dist` (built, with `remote-manifest-entry.json`): `dashboard.spec.ts` with the real remote. Build mfe-dashboard in a copy, never in the sibling checkout |

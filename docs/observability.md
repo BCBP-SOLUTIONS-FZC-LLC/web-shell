@@ -1,6 +1,6 @@
 # Observability: web-shell under the Enterprise Platform Observability Standard
 
-How the shell fits the platform's three metric tiers, what it emits, and how a metric is added. The standard's registry is platform-gincommon's `internal/obsregistry/registry.json`, synced into the SDK as `contracts/metric-registry.json` (58 metrics today: 50 Tier 1, 8 Tier 2; 6 approved, 52 proposed). `npm run metrics-check` enforces it at build time; the SDK enforces it again at run time.
+How the shell fits the platform's three metric tiers, what it emits, and how a metric is added. The standard's registry is platform-gincommon's `internal/obsregistry/registry.json`, synced into the SDK as `contracts/metric-registry.json` (58 metrics today: 50 Tier 1, 8 Tier 2; 6 approved, 52 proposed). The SDK enforces it whenever a metric is created; `npm run metrics-check` runs that same SDK check at build time over every metric `src/` creates, and adds the Inventory below.
 
 ## Identity and central labels
 
