@@ -33,8 +33,12 @@ import { registerNavigator } from '@bcbp-solutions-fzc-llc/frontend-sdk/nav'
 import { installTrustedTypesPolicy } from '@bcbp-solutions-fzc-llc/frontend-sdk/security'
 import { installGlobalErrorHandlers } from '@bcbp-solutions-fzc-llc/frontend-sdk/react'
 import App from './App'
-import { getRememberedEmail } from './pages/rememberEmail'
+import type { SignInUseCases } from './application/signIn'
+import { requestPasswordResetUseCase } from './application/use-cases/requestPasswordReset'
+import { resolveWorkspaceUseCase } from './application/use-cases/resolveWorkspace'
 import { loadSessionContextOnce, sessionContextSource, workspaceResolver } from './platform/iam'
+import { passwordResetUrl } from './platform/passwordReset'
+import { localStorageRememberedEmail } from './platform/rememberedEmail'
 import { shellNavigator } from './platform/navigator'
 import { permissions } from './platform/permissions'
 import {
@@ -115,6 +119,19 @@ async function start(cfg: RuntimeConfig, report: { otlpBaseUrl: string }): Promi
   startWebVitals()
   setFlagProvider(runtimeConfigFlagProvider())
 
+  // Composition root: the sign-in use cases, built from infrastructure (PUB-1 port, the reset URL,
+  // the remembered email in localStorage, browser navigation) and given to the screens.
+  const resolveWorkspace = resolveWorkspaceUseCase(workspaceResolver)
+  const signInUseCases: SignInUseCases = {
+    resolveWorkspace,
+    requestPasswordReset: requestPasswordResetUseCase({
+      resolveWorkspace,
+      resetUrl: passwordResetUrl,
+      open: (url) => window.location.assign(url),
+    }),
+    rememberedEmail: localStorageRememberedEmail,
+  }
+
   const idp = createOidcProvider(cfg.auth, workspaceResolver)
   setTokenSource(initializeAuth(idp))
   // May redirect once with prompt=none on a reload or a new tab, and then never settles.
@@ -128,7 +145,7 @@ async function start(cfg: RuntimeConfig, report: { otlpBaseUrl: string }): Promi
       const known: Workspace | undefined =
         (session.reason === 'login-required' ? session.workspace : undefined) ??
         (await chooseWorkspace({ pathname: window.location.pathname, resolver: workspaceResolver, cfg: cfg.auth }))
-      const choice = known ? { workspace: known, loginHint: getRememberedEmail() } : await askForWorkspace()
+      const choice = known ? { workspace: known, loginHint: signInUseCases.rememberedEmail.get() } : await askForWorkspace(signInUseCases)
       // returnUrl defaults to the current page in the SDK.
       await idp.login({ workspace: choice.workspace, ...(choice.loginHint ? { loginHint: choice.loginHint } : {}) })
     }
@@ -141,7 +158,7 @@ async function start(cfg: RuntimeConfig, report: { otlpBaseUrl: string }): Promi
 
   // A trial login through an invitation that landed in another tenant: never cache it, never render.
   if (isWrongWorkspace(session.workspace, session.user)) {
-    showWrongWorkspace(idp)
+    showWrongWorkspace(idp, signInUseCases)
     return
   }
 
@@ -159,7 +176,7 @@ async function start(cfg: RuntimeConfig, report: { otlpBaseUrl: string }): Promi
           state: s,
           resolver: workspaceResolver,
           cfg: cfg.auth,
-          ask: () => askForWorkspace().then((c) => c.workspace),
+          ask: () => askForWorkspace(signInUseCases).then((c) => c.workspace),
         }),
       )
     }

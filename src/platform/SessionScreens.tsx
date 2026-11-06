@@ -2,9 +2,9 @@
 // own: every login starts from the user's click.
 import { useEffect, useRef, type ReactNode } from 'react'
 import type { IdentityProvider, SessionState, Workspace } from '@bcbp-solutions-fzc-llc/frontend-sdk/auth'
+import type { SignInUseCases } from '../application/signIn'
+import { WorkspaceNotFoundError } from '../domain/errors'
 import LoginPage from '../pages/LoginPage'
-import { workspaceResolver } from './iam'
-import { passwordResetUrl } from './passwordReset'
 import { hideScreen, showScreen } from './screen'
 
 /** Generic on purpose: never says whether the email or the workspace was the problem. */
@@ -53,34 +53,30 @@ function Button({ onClick, children }: { onClick: () => void; children: ReactNod
   )
 }
 
-/**
- * The email-first sign-in screen (the existing login layouts). Resolves the email through PUB-1 and
- * returns the workspace; stays up with a generic error until one resolves.
- */
-/** PUB-1 for the typed email; "not found", rate-limited and unreachable all throw the same message. */
-async function resolveEmail(email: string): Promise<Workspace> {
-  let workspace: Workspace | undefined
+/** The page shows WORKSPACE_NOT_FOUND for the use cases' WorkspaceNotFoundError (the words are the screen's). */
+async function withPageMessage<T>(work: Promise<T>): Promise<T> {
   try {
-    workspace = await workspaceResolver.resolve(email)
-  } catch {
-    // Rate-limited or unreachable: the same generic message.
+    return await work
+  } catch (error) {
+    if (error instanceof WorkspaceNotFoundError) throw new Error(WORKSPACE_NOT_FOUND)
+    throw error
   }
-  if (!workspace) throw new Error(WORKSPACE_NOT_FOUND)
-  return workspace
 }
 
-export function askForWorkspace(notice?: string): Promise<SignInChoice> {
+/**
+ * The email-first sign-in screen. Calls the sign-in use cases (application layer) it is given: it
+ * reaches no API, storage or browser navigation itself.
+ */
+export function askForWorkspace(useCases: SignInUseCases, notice?: string): Promise<SignInChoice> {
   return new Promise((resolve) => {
     showScreen(
       <LoginPage
         notice={notice ?? null}
+        rememberedEmail={useCases.rememberedEmail}
         onContinue={async (email) => {
-          resolve({ workspace: await resolveEmail(email), loginHint: email })
+          resolve({ workspace: await withPageMessage(useCases.resolveWorkspace(email)), loginHint: email })
         }}
-        onForgotPassword={async (email) => {
-          // The realm decides where the reset happens, so the email is resolved first.
-          window.location.assign(passwordResetUrl(await resolveEmail(email)))
-        }}
+        onForgotPassword={(email) => withPageMessage(useCases.requestPasswordReset(email))}
       />,
     )
   })
@@ -140,14 +136,14 @@ export function showSessionEnded(s: Extract<SessionState, { status: 'expired' }>
 }
 
 /** A trial login that landed in another tenant than the invitation's: never cached, app not rendered. */
-export function showWrongWorkspace(idp: IdentityProvider): void {
+export function showWrongWorkspace(idp: IdentityProvider, useCases: SignInUseCases): void {
   showScreen(
     <Dialog title="You signed in to a different workspace" role="alertdialog">
       <p className="mt-3 text-sm text-gray-600">
         The account you used belongs to another workspace than the one you were invited to.
       </p>
       <Button onClick={() => void idp.logout()}>Sign out</Button>
-      <Button onClick={() => void askForWorkspace().then(({ workspace }) => idp.switchWorkspace(workspace))}>
+      <Button onClick={() => void askForWorkspace(useCases).then(({ workspace }) => idp.switchWorkspace(workspace))}>
         Switch workspace
       </Button>
     </Dialog>,

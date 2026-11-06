@@ -7,9 +7,18 @@ import axe from 'axe-core'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { IdentityProvider } from '@bcbp-solutions-fzc-llc/frontend-sdk/auth'
 import LoginPage from '../../src/pages/LoginPage'
+import { localStorageRememberedEmail as remembered } from '../../src/platform/rememberedEmail'
+import { resolveWorkspaceUseCase } from '../../src/application/use-cases/resolveWorkspace'
+import { requestPasswordResetUseCase } from '../../src/application/use-cases/requestPasswordReset'
 
-vi.mock('../../src/platform/iam', () => ({ workspaceResolver: { resolve: async () => undefined } }))
 const screens = await import('../../src/platform/SessionScreens')
+// Sign-in use cases over a resolver that finds nothing, as the screens get them from the bootstrap.
+const resolveWorkspace = resolveWorkspaceUseCase({ resolve: async () => undefined })
+const useCases = {
+  resolveWorkspace,
+  requestPasswordReset: requestPasswordResetUseCase({ resolveWorkspace, resetUrl: () => '', open: () => {} }),
+  rememberedEmail: remembered,
+}
 const { resetScreen } = await import('../../src/platform/screen')
 
 async function violations(): Promise<string[]> {
@@ -26,6 +35,7 @@ describe('accessibility (axe)', () => {
   it.each([['latest', LoginPage]] as const)('the %s login layout, with a notice and an error', async (_name, Page) => {
     render(
       <Page
+        rememberedEmail={remembered}
         notice="Your session has ended."
         onContinue={async () => {
           throw new Error(screens.WORKSPACE_NOT_FOUND)
@@ -45,7 +55,7 @@ describe('accessibility (axe)', () => {
     ['signed out', () => screens.showSignedOut(async () => {})],
     ['device clock', () => screens.showDeviceClock(async () => {})],
     ['session ended', () => screens.showSessionEnded({ status: 'expired', idle: true } as never, async () => {})],
-    ['wrong workspace', () => screens.showWrongWorkspace(idp)],
+    ['wrong workspace', () => screens.showWrongWorkspace(idp, useCases)],
     ['workspace not found', () => screens.showWorkspaceNotFound()],
   ])('the %s dialog', async (_name, show) => {
     act(() => show())

@@ -1,23 +1,23 @@
 import { act, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { getRememberedEmail, persistRememberEmail } from '../../src/pages/rememberEmail'
+import { localStorageRememberedEmail as remembered } from '../../src/platform/rememberedEmail'
 import { hasPermission, roleMapAuthorizer, setAuthorizer, setAuthzSubject } from '@bcbp-solutions-fzc-llc/frontend-sdk/authz'
 import { createTestPlatform } from '@bcbp-solutions-fzc-llc/frontend-sdk/testing'
 import { IAM_ROLES, permissions } from '../../src/platform/permissions'
 import { hideScreen, resetScreen, showScreen } from '../../src/platform/screen'
 
-describe('rememberEmail', () => {
+describe('localStorageRememberedEmail (the RememberedEmailRepository)', () => {
   it('round-trips and clears', () => {
-    expect(getRememberedEmail()).toBe('')
-    persistRememberEmail(' ada@bcbp.com ', true)
-    expect(getRememberedEmail()).toBe('ada@bcbp.com')
-    persistRememberEmail('ada@bcbp.com', false)
-    expect(getRememberedEmail()).toBe('')
+    expect(remembered.get()).toBe('')
+    remembered.save(' ada@bcbp.com ', true)
+    expect(remembered.get()).toBe('ada@bcbp.com')
+    remembered.save('ada@bcbp.com', false)
+    expect(remembered.get()).toBe('')
   })
 
   it('returns an empty email when the flag is set without one', () => {
     localStorage.setItem('bcbp.rememberEmail', 'true')
-    expect(getRememberedEmail()).toBe('')
+    expect(remembered.get()).toBe('')
   })
 
   it('survives blocked storage', () => {
@@ -25,8 +25,8 @@ describe('rememberEmail', () => {
       throw new Error('blocked')
     }
     vi.stubGlobal('localStorage', { getItem: blocked, setItem: blocked, removeItem: blocked })
-    expect(getRememberedEmail()).toBe('')
-    expect(() => persistRememberEmail('a@b.c', true)).not.toThrow()
+    expect(remembered.get()).toBe('')
+    expect(() => remembered.save('a@b.c', true)).not.toThrow()
   })
 })
 

@@ -10,7 +10,9 @@ graph LR
     nav(["platform/navigator.ts"])
     login(["pages/LoginPage.tsx"])
     hook(["pages/useEmailSignIn.ts"])
-    remember(["pages/rememberEmail.ts"])
+    remember(["platform/rememberedEmail.ts\n(localStorage)"])
+    usecases(["application/use-cases\nresolveWorkspace, requestPasswordReset"])
+    domain(["domain/\nRememberedEmailRepository, WorkspaceNotFoundError"])
     links(["pages/links.ts\npages/PageLinks.tsx"])
     reset(["platform/passwordReset.ts"])
     logo(["BrandLogo.tsx"])
@@ -29,12 +31,16 @@ graph LR
     boot --> sdk
     app --> sdk
     screens --> login
-    screens --> iam
+    screens --> usecases
+    screens --> domain
     screens --> screen
-    screens --> reset
+    boot --> usecases
+    boot --> reset
+    usecases --> domain
+    remember --> domain
     reset --> sdk
     login --> hook
     login --> logo
     login --> links
-    hook --> remember
+    hook --> domain
     iam --> sdk

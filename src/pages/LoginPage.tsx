@@ -69,9 +69,9 @@ const SLIDES = [
 
 const SLIDE_MS = 6000
 
-export default function LoginPage({ onContinue, onForgotPassword, notice = null }: LoginPageProps) {
+export default function LoginPage({ onContinue, onForgotPassword, rememberedEmail, notice = null }: LoginPageProps) {
   const { email, setEmail, remember, setRemember, submitting, error, handleSubmit, handleForgotPassword } =
-    useEmailSignIn(onContinue, onForgotPassword)
+    useEmailSignIn(onContinue, rememberedEmail, onForgotPassword)
   const linkClass = 'font-medium text-[#6d5efc] no-underline hover:underline'
   const [slide, setSlide] = useState(0)
   const [settledSlide, setSettledSlide] = useState(0)

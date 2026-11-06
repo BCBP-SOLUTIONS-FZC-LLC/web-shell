@@ -105,7 +105,9 @@ graph LR
     nav(["platform/navigator.ts"])
     login(["pages/LoginPage.tsx"])
     hook(["pages/useEmailSignIn.ts"])
-    remember(["pages/rememberEmail.ts"])
+    remember(["platform/rememberedEmail.ts\n(localStorage)"])
+    usecases(["application/use-cases\nresolveWorkspace, requestPasswordReset"])
+    domain(["domain/\nRememberedEmailRepository, WorkspaceNotFoundError"])
     links(["pages/links.ts\npages/PageLinks.tsx"])
     reset(["platform/passwordReset.ts"])
     logo(["BrandLogo.tsx"])
@@ -124,14 +126,18 @@ graph LR
     boot --> sdk
     app --> sdk
     screens --> login
-    screens --> iam
+    screens --> usecases
+    screens --> domain
     screens --> screen
-    screens --> reset
+    boot --> usecases
+    boot --> reset
+    usecases --> domain
+    remember --> domain
     reset --> sdk
     login --> hook
     login --> logo
     login --> links
-    hook --> remember
+    hook --> domain
     iam --> sdk
 ```
 
@@ -141,11 +147,14 @@ graph LR
 |---|---|
 | `platform/iam.ts`, `permissions.ts`, `passwordReset.ts` | SDK subpaths only |
 | `platform/screen.tsx` | `react-dom/client` |
-| `platform/SessionScreens.tsx` | `LoginPage`, `iam`, `passwordReset`, `screen`, SDK types |
+| `platform/SessionScreens.tsx` | `LoginPage`, `screen`, `application/signIn` (use cases it is given), `domain/errors`, SDK types. Not `iam`, `passwordReset` or browser navigation |
+| `application/` (use cases) | `domain/`, SDK `/auth` types. No React, no browser APIs (ports injected) |
+| `domain/` | Nothing but SDK `/auth` types: repository contracts, errors |
+| `platform/rememberedEmail.ts` | `domain/` (implements `RememberedEmailRepository` over `localStorage`) |
 | `platform/sessionContext.ts`, `ShellRoot.tsx`, `navigator.ts` | SDK subpaths (`/auth` and `/problem` types, `/react`), React |
-| `pages/*`, `BrandLogo.tsx` | Each other and `rememberEmail.ts`. Never `platform/` or the SDK |
+| `pages/*`, `BrandLogo.tsx` | Each other and `domain/` types (the remembered-email repository is passed in). Never `platform/`, storage or the SDK |
 | `App.tsx` | `react-router-dom`, SDK `/react` (`RemoteBoundary`, `useRouteTemplate`, `useSessionContext`, `useAppUpdate`). It hands the router's `navigate` to the bootstrap through `onRouter` instead of importing `/nav` |
-| `bootstrap.tsx` | Everything above, every SDK subpath it initialises, `index.css` |
+| `bootstrap.tsx` | Everything above (the composition root: builds the sign-in use cases from infrastructure), every SDK subpath it initialises, `index.css` |
 | `index.ts` | `bootstrap.tsx`, dynamically |
 | `rsbuild.config.ts` | The platform plugin, React, Tailwind, `/version.json`, `config/dev-platform.mjs`. `src/` does not import it |
 | Tests | Production modules. `test/integration` replaces SDK subpaths with `vi.mock` fakes; `test/e2e` uses the real SDK with `test/fixtures/` fakes around it |
@@ -242,7 +251,7 @@ sequenceDiagram
     participant KC as Keycloak
 
     User->>Login: submit work email
-    Login->>Login: persistRememberEmail
+    Login->>Login: rememberedEmail.save (injected repository)
     Login->>Screens: onContinue(email)
     Screens->>IAM: GET /v1/public/tenants/resolve?identifier=email (no token)
     alt not found or unreachable
@@ -317,7 +326,7 @@ Tokens are never written to storage. A reload restores the session from Keycloak
 |---|---|---|---|
 | `@bcbp-solutions-fzc-llc/frontend-sdk:workspaces` | `localStorage` | SDK, `rememberWorkspace` | Cached workspaces (realm, slug), so a return visit skips the email screen |
 | `@bcbp-solutions-fzc-llc/frontend-sdk:session-id`, `:auth:last-activity`, `:auth:last-user` | `localStorage` | SDK | Telemetry session id, idle timeout across tabs, user change detection |
-| `bcbp.rememberEmail`, `bcbp.loginEmail` | `localStorage` | `pages/rememberEmail.ts` | "Remember Email" only. Needed before a workspace is known, so it does not use the SDK's per-workspace `storage()`. Every access is wrapped in `try`; blocked storage just forgets |
+| `bcbp.rememberEmail`, `bcbp.loginEmail` | `localStorage` | `platform/rememberedEmail.ts` (behind the domain's `RememberedEmailRepository`) | "Remember Email" only. Needed before a workspace is known, so it does not use the SDK's per-workspace `storage()`. Every access is wrapped in `try`; blocked storage just forgets |
 
 Remotes that need storage use `storage(appId)` from `/storage`, which is namespaced per workspace and refuses token-like keys.
 
@@ -344,7 +353,7 @@ Remotes that need storage use `storage(appId)` from `/storage`, which is namespa
 | Invariant | Where it holds |
 |---|---|
 | The shell is a public OAuth client. There is no client secret in the repo or the bundle | Runtime config has a `clientId` only |
-| Tokens never touch storage | SDK `/auth`. `no-raw-storage` lint rule on `src/` (off only for `src/pages/rememberEmail.ts`) |
+| Tokens never touch storage | SDK `/auth`. `no-raw-storage` lint rule on `src/` (off only for `src/platform/rememberedEmail.ts`) |
 | No login starts without a click after a logout | `showSignedOut`, `showDeviceClock`, `showSessionEnded` |
 | The app never renders for a wrong-workspace login | `isWrongWorkspace` check before render |
 | The bootstrap runs once, behind the async boundary | `src/index.ts` |

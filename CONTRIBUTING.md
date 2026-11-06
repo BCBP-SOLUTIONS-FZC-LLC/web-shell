@@ -52,7 +52,11 @@ src/
     SessionScreens.tsx   ← Email sign-in, signed out, session ended, device clock, wrong workspace
     screen.tsx           ← Full-screen host for those screens
     permissions.ts       ← Role → UI permission map
-  pages/                 ← Login layouts, useEmailSignIn, rememberEmail
+    rememberedEmail.ts   ← "Remember Email" in localStorage (implements the domain repository; the one raw-storage file)
+    passwordReset.ts     ← Keycloak reset-credentials URL for a workspace
+  application/           ← Use cases (no React, no browser APIs): resolveWorkspace, requestPasswordReset; signIn.ts
+  domain/                ← Contracts and errors: RememberedEmailRepository, WorkspaceNotFoundError
+  pages/                 ← Login layout and useEmailSignIn (the remembered-email repository is passed in)
   components/            ← Shell-owned UI (BrandLogo)
   globals.d.ts           ← __ENVIRONMENT__, __BUILD_VERSION__
 rsbuild.config.ts       ← Platform plugin, React, Tailwind, dev server
