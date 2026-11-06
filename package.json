@@ -28,6 +28,7 @@
     "keycloak:setup": "node scripts/setup-keycloak.mjs",
     "keycloak:seed-user": "node scripts/seed-keycloak-user.mjs",
     "lint": "eslint .",
+    "arch-lint": "depcruise src --config .dependency-cruiser.cjs --output-type err",
     "typecheck": "tsc -p tsconfig.test.json"
   },
   "devDependencies": {
@@ -47,6 +48,7 @@
     "@vitest/coverage-v8": "^5.1.0",
     "axe-core": "^4.14.0",
     "daisyui": "^5.7.50",
+    "dependency-cruiser": "18.7.0",
     "eslint": "^10.14.0",
     "eslint-plugin-react-hooks": "^7.1.1",
     "globals": "^17.14.0",

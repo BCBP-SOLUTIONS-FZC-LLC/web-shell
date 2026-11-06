@@ -186,6 +186,7 @@ The dashboard is a second process. Start `mfe-dashboard` (`npm run dev` there) s
 | `npm run build` | `tsc` and the production bundle (`rsbuild build`) |
 | `npm run preview` | Serve `dist/` on port 5001 |
 | `npm run lint` | ESLint, including the `@bcbp-solutions-fzc-llc` platform rules |
+| `npm run arch-lint` | Component boundaries: every dependency in `src/` declared in `.dependency-cruiser.cjs` (the counterpart of go-arch-lint; CI does) |
 | `npm run typecheck` | `tsc` over `src/` and `test/` (`tsconfig.test.json`) |
 | `npm test` | Vitest once (unit, integration, e2e) |
 | `npm run test-unit` / `test-int` / `test-e2e` | One layer |

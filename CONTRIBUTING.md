@@ -25,6 +25,7 @@ npm run hooks:install     # copies .githooks/pre-commit into .git/hooks
 npm run keycloak:setup    # local realm tenant-bcbp on :8080; first start can take 1–2 minutes
 npm run dev               # shell on http://localhost:5001, with stubbed IAM endpoints
 npm run lint              # ESLint with the platform rules
+npm run arch-lint         # component boundaries (.dependency-cruiser.cjs)
 npm run typecheck         # tsc over src/ and test/
 npm run test:ci           # unit, integration and e2e, then the 95% coverage gate
 npm run build             # tsc and the production bundle
@@ -65,6 +66,7 @@ config/                  ← Dev only: runtime.local.json, remotes.local.json, d
 public/config/runtime.json  ← Runtime config the image ships (production defaults)
 public/remotes/manifest.json ← Remote manifest the image ships ({})
 eslint.config.js         ← typescript-eslint, React hooks, @bcbp-solutions-fzc-llc rules
+.dependency-cruiser.cjs  ← Architecture lint: components and what each may depend on
 .npmrc                   ← GitHub Packages scope and NODE_AUTH_TOKEN
 nginx/default.conf       ← Runtime server for dist/
 Dockerfile               ← Node 26 builder, nginx-unprivileged runtime
@@ -177,7 +179,28 @@ The text report prints uncovered lines. Cover the branch you changed. The gate i
 
 ## Lint and typecheck
 
-`npm run lint` runs ESLint with typescript-eslint, the React hooks rules, and `@bcbp-solutions-fzc-llc/eslint-plugin`'s recommended rules on `src/`: SDK imports through public subpaths only, no identity headers, no raw `window.localStorage` / `sessionStorage`, no unsafe HTML, API route templates. It also enforces the layer rules (`eslint.config.js`, proven by `test/unit/layer-rules.test.ts`): `domain/` imports no React, SDK runtime, other layer or browser global; `application/` no React, presentation, infrastructure, SDK runtime or browser global; `pages/` and `components/` nothing from `platform/` or the SDK; `platform/SessionScreens.tsx` no other infrastructure module and only `/auth` types from the SDK. Presentation never uses `fetch`, `XMLHttpRequest`, storage, IndexedDB, `location`, `history`, `navigator` or `open`, bare or through `window`, `globalThis`, `self` or `document.location`. A use case needs something from outside: the bootstrap injects it. `validate-quality` runs it with `--max-warnings 0`, then `npm run typecheck`.
+`npm run lint` runs ESLint with typescript-eslint, the React hooks rules, and `@bcbp-solutions-fzc-llc/eslint-plugin`'s recommended rules on `src/`: SDK imports through public subpaths only, no identity headers, no raw `window.localStorage` / `sessionStorage`, no unsafe HTML, API route templates. It also enforces the layer rules (`eslint.config.js`, proven by `test/unit/layer-rules.test.ts`): `domain/` imports no React, SDK runtime, other layer or browser global; `application/` no React, presentation, infrastructure, SDK runtime or browser global; `pages/` and `components/` nothing from `platform/` or the SDK; `platform/SessionScreens.tsx` no other infrastructure module and only `/auth` types from the SDK. Presentation never uses `fetch`, `XMLHttpRequest`, storage, IndexedDB, `location`, `history`, `navigator` or `open`, bare or through `window`, `globalThis`, `self` or `document.location`. A use case needs something from outside: the bootstrap injects it. `validate-quality` runs it with `--max-warnings 0`, then `npm run arch-lint` and `npm run typecheck`.
+
+### Architecture lint
+
+`npm run arch-lint` is the shell's counterpart of the IAM services' `go-arch-lint`. `.dependency-cruiser.cjs` declares the **components** (where each lives) and the **deps** (`mayDependOn` other components, `vendors` packages, `typeOnlyVendors` for SDK port types), and dependency-cruiser checks every import in `src/` in allowed mode: an undeclared dependency fails, and so does a file in no component, a cycle or an unresolvable import.
+
+| Component | In | May depend on |
+|---|---|---|
+| `domain` | `src/domain/` | SDK types only |
+| `application` | `src/application/` | `domain`; SDK types only |
+| `i18n` | `src/shared/i18n/` | SDK `/i18n`, `/react` |
+| `assets` | `src/assets/`, `index.css`, `theme/` | — |
+| `components` | `src/components/` | `assets` |
+| `pages` | `src/pages/` | `components`, `assets`, `i18n`, `domain`, `application`; React |
+| `screen_host` | `platform/screen.tsx` | React |
+| `session_screens` | `platform/SessionScreens.tsx` | `pages`, `screen_host`, `i18n`, `domain`, `application`; React; SDK `/auth` types only |
+| `infrastructure` | the other `platform/` modules | `domain`, `i18n`; React, the SDK |
+| `routes` | `App.tsx` | `i18n`; React, React Router, SDK `/react` |
+| `composition_root` | `bootstrap.tsx` | everything |
+| `entry` | `index.ts` | `composition_root` (dynamic), `i18n` (`en.json`) |
+
+A new folder or module: add it to a component (or a new one, with its deps) in the same PR; keep this table and ARCHITECTURE's in step. `test/unit/arch-lint.test.ts` proves each rule fires on probe files. ESLint keeps the per-layer import rules for editor feedback, and owns what a dependency graph cannot see (browser globals).
 
 `npm run build` runs `tsc` before `rsbuild build`. `strict`, `noUnusedLocals` and `noUnusedParameters` are on. TypeScript is pinned to `~6.0.3`: `typescript-eslint` does not support TypeScript 7 yet, and the SDK builds on 6.
 

@@ -17,6 +17,15 @@ Pull requests that change the shell, its dependencies, or the image add an entry
 
 ### Changed
 
+- **Architecture lint, like the IAM services' go-arch-lint (`2026-11-06`).** `.dependency-cruiser.cjs` declares the shell's components and what each may depend on, in the same shape as `.go-arch-lint.yml`:
+  - **Components:** `domain`, `application`, `i18n`, `assets`, `components`, `pages`, `screen_host`, `session_screens`, `infrastructure`, `routes`, `composition_root` and `entry`, each with its `in` paths.
+  - **Deps:** `mayDependOn` (other components), `vendors` (packages) and `typeOnlyVendors` (SDK port types).
+  - **Checks:** `npm run arch-lint` runs dependency-cruiser in allowed mode over `src/`. An undeclared dependency fails, and so does a file in no component, a cycle or an unresolvable import. It runs in `Validate / Quality` after ESLint.
+  - **Proof:** `test/unit/arch-lint.test.ts` lints a copy of `src/` with probe files and shows each rule fires (9 tests). The probes include the session screens importing a sign-in function from `/auth`, a page importing infrastructure, and a file outside any component.
+  - **ESLint unchanged:** it keeps the per-layer import rules for editor feedback, plus the browser-global rules a dependency graph cannot see.
+  - **New dev dependency:** `dependency-cruiser` `18.7.0`, pinned exactly. It is a dev dependency only, so nothing changes in the bundle or the image.
+  - **Results:** 190 tests at 100%.
+
 - **Frontend Architecture Constitution, step 5: every user-facing word through the SDK's `/i18n` (`2026-11-06`).** Violation V4 of the assessment (ADR 0005, both in #45). The shell's user-facing text, 61 keys, moves to one English catalogue, `src/shared/i18n/en.json`, under the `shell` namespace. That covers the sign-in page and carousel, the session screens, the help and legal link labels, the app banners and the unavailable page.
   - **`src/shared/i18n`:** `useShellText()` (the SDK's `useT('shell')`), `shellText()` (its `t`) and `ShellKey` (an unknown key is a type error). It offers text lookup only, and presentation reaches the SDK's i18n runtime through it and nothing else. A new lint block lets `shared/` import no shell layer and only `/i18n` and `/react` from the SDK.
   - **`src/platform/shellMessages.ts`:** `registerShellMessages()` registers the namespace and loads it with `setLocale(defaultLocale)`. The bootstrap calls it right after the flags, before any screen. The sign-in screens show before `initializeI18n` (after sign-in), and the SDK's `t` gives back the key until a catalogue is loaded. `initializeI18n` still picks the user's locale.
