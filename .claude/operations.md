@@ -48,16 +48,20 @@ It has run for `v0.1.0` and `v0.2.0` (2026-11-05), both green end to end. Its pr
 
 1. Read `platform-reactcommon` `CHANGELOG.md` for the version; diff `git diff vOLD vNEW -- packages/` there.
 2. `npm install --save-exact` all three packages to the same version.
-3. lint, typecheck, `test:ci`, build; check the bundle shares the new version (`grep -o '1\.0\.0-alpha\.[0-9]*' dist/assets/*.js | sort | uniq -c`).
-4. Update the version in README, ARCHITECTURE, VERSIONING, the LLD header, `.claude/CLAUDE.md`, and add a CHANGELOG entry.
+3. lint, arch-lint, typecheck, metrics-check, `test:ci` (and `no-sdk-duplicates`: delete any copy the SDK now exports, LLD §1.2), build, budget, test-browser; check the bundle shares the new version (`grep -o '1\.0\.0-alpha\.[0-9]*' dist/assets/*.js | sort | uniq -c`).
+4. Update the version in README, ARCHITECTURE, VERSIONING, the LLD header, `.claude/CLAUDE.md`, and add a CHANGELOG entry. New `runtime.json` keys also go in README, LLD §9.1, `public/config/runtime.json`, `config/runtime.local.json` and `test/smoke`. Run the `invariant-reviewer` and `doc-sync-reviewer` subagents on the diff.
 5. Merge before any remote moves to that version. Exception: a release that changes the shell–remote contract (alpha.4's container global) ships the shell and every remote together; check with `REMOTE_DIST=<dashboard dist> npm run test-contract`.
 
 ## Claude Code settings and hooks
 
 | File | What |
 |---|---|
-| `.claude/settings.json` | **Not installed.** Without it the two hooks below do not run. A proposed version (read-only and test commands allowed; both hooks wired) was written outside the repo; adding it is the user's decision |
+| `.claude/settings.json` | Checked in. Wires the two hooks below (needs `jq`). No permission rules: each developer keeps those in `settings.local.json` |
 | `.claude/hooks/guard.sh` (PreToolUse) | Blocks edits to `../mfe-dashboard`, `platform-reactcommon`, `node_modules/`, `dist/`, `coverage/`, `.env`, `docker.local.env` |
-| `.claude/hooks/post-edit.sh` (PostToolUse) | ESLint on an edited `*.ts/tsx/js/mjs` (exit 2 shows problems); for `docs/architecture/mermaid/*.mmd` or `ARCHITECTURE.md`, checks each embedded diagram equals its source (`check-diagrams.mjs`) |
+| `.claude/hooks/post-edit.sh` (PostToolUse) | ESLint on an edited `*.ts/tsx/js/mjs` (exit 2 shows problems), then for `src/**` arch-lint on the file and its imports (`.dependency-cruiser.cjs`); for `package.json`, the three platform packages exact and on one version (`check-sdk-pins.mjs`); for `docs/architecture/mermaid/*.mmd` or `ARCHITECTURE.md`, each embedded diagram equals its source (`check-diagrams.mjs`) |
 | `.claude/agents/invariant-reviewer.md` | Read-only review of a diff against the Critical Rules |
+| `.claude/agents/doc-sync-reviewer.md` | Read-only review of a diff for documentation drift: paths, module tables vs `eslint.config.js` / `.dependency-cruiser.cjs`, diagram arrows vs real imports, counts, commands, behaviour claims, CHANGELOG |
+| `.claude/skills/sdk-upgrade/` | `/sdk-upgrade <version>` (user-invoked): the SDK upgrade checklist above as a workflow; `scripts/bump.sh` installs all three packages at one exact version and checks the pins |
+| `.claude/skills/stack-sync/` | `/stack-sync <PR>` (user-invoked): after a stacked PR's base is squash-merged, `scripts/sync.sh` merges `main` into the branch only when `main`'s tree equals the old base's, by recording `main` (`-s ours`) and applying only `main`'s changes since the branch was cut, and keeps the merge only when the branch's diff against `main` is exactly its own change (else it resets the branch and names the files); then the PR is retargeted to `main` |
+| `.mcp.json` | `context7` (`@upstash/context7-mcp@4.4.4`, pinned): current docs for React, Rsbuild, Tailwind, dependency-cruiser, Playwright. Approve it once when Claude Code asks. It cannot see the private SDK: read its `dist/<subpath>/index.d.ts` |
 | `.claude/settings.local.json` | Personal, gitignored |

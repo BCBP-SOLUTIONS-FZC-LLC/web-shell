@@ -75,4 +75,4 @@ Run one test: `npx vitest run test/e2e/shell.test.tsx -t "sign-out"`. Full list:
 | [`request-flows.md`](request-flows.md) | Bootstrap, sign-in, callback, restore, expiry, sign-out, workspace switch, dashboard load |
 | [`operations.md`](operations.md) | Commands, CI jobs, registry access, image, smoke, release; Claude Code settings and hooks |
 
-**Subagent** (read-only; pass it a diff file): `invariant-reviewer` before a PR touching `src/`, `rsbuild.config.ts`, `nginx/`, `Dockerfile`, `index.html` or `config/`.
+**Subagents** (read-only; pass each a diff file): `invariant-reviewer` before a PR touching `src/`, `rsbuild.config.ts`, `nginx/`, `Dockerfile`, `index.html` or `config/`; `doc-sync-reviewer` before any PR that changes code the docs describe, or the docs. **Skills** (user-invoked): `/sdk-upgrade <version>`, `/stack-sync <PR>`. **Hooks** (`.claude/settings.json`): `guard.sh` blocks edits to sibling repos, `node_modules/`, `dist/`, `coverage/`, env files; `post-edit.sh` runs ESLint, arch-lint, the SDK pin check and the diagram check. **MCP:** `context7` (`.mcp.json`) for public library docs.

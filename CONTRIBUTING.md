@@ -91,7 +91,8 @@ test/
   smoke/                 ← GET-only checks against the image or a deployment (npm run test-smoke)
   browser/               ← Playwright: the build in Chromium, Firefox, WebKit under the production CSP (npm run test-browser)
 docs/lld/web-shell-lld.md ← Low-level design (the contract)
-.claude/                 ← Claude Code guidance, hook scripts, reviewer agent
+.claude/                 ← Claude Code guidance, settings (hooks), hook scripts, reviewer agents, skills
+.mcp.json                ← Claude Code MCP servers (context7, pinned)
 .github/workflows/       ← ci, test, quality, changelog, release
 ```
 
@@ -254,6 +255,8 @@ Feature branches follow one of these forms:
 Base new branches on the latest `main`.
 
 ## Pull request checklist
+
+`main`'s branch rules require linear history, a pull request and the required checks, and refuse force pushes and deletion. Pull requests are squash-merged. A PR stacked on another one shows conflicts after its base is squash-merged even when nothing differs: `/stack-sync <PR>` (Claude Code) or `.claude/skills/stack-sync/scripts/sync.sh <branch> <old base>` merges `main` only when its tree equals the old base's, then retarget the PR to `main`.
 
 `.github/pull_request_template.md` is the checklist GitHub shows. Match it:
 
