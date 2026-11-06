@@ -11,7 +11,7 @@ The rules are CLAUDE.md's: all three packages, exact pins, one version; the shel
 
 1. **Read the release.** In `../../../XPertSharedLib/react/platform-reactcommon`: `CHANGELOG.md` for $ARGUMENTS and `git diff <current tag> v$ARGUMENTS -- packages/`. List for the user: breaking changes, new required config keys (`runtime.json`), changed exports the shell uses (`src/` imports), anything that changes the shell–remote contract (container global, shared map, `PlatformProvider` shell value). If the release notes include an order for consumers, follow it.
 2. **Branch** `chore/sdk-$ARGUMENTS` from `main`.
-3. **Install:** `bash .claude/skills/sdk-upgrade/scripts/bump.sh $ARGUMENTS`. It refuses an unpublished version and checks the pins (`.claude/hooks/check-sdk-pins.mjs`).
+3. **Install:** `bash .claude/skills/sdk-upgrade/scripts/bump.sh $ARGUMENTS`. It refuses a non-exact version (e.g. `^1.0.0`) before installing anything, then a version any of the three packages has not published; then it installs all three and checks the pins (`.claude/hooks/check-sdk-pins.mjs`).
 4. **Adapt and verify**, fixing what each step reports:
    - `npm run lint`, `npm run arch-lint`, `npm run typecheck`, `npm run metrics-check`, `npm run test:ci` (95% gate);
    - `test/unit/no-sdk-duplicates.test.ts`: if the SDK now exports something the shell copied (LLD §1.2), delete the copy and import it;

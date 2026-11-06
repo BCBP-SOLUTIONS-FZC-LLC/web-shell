@@ -10,7 +10,7 @@ graph TD
     subgraph presentation["presentation/"]
         pages["pages/login\nLoginPage, useEmailSignIn"]
         features["features/session-screens\nsign-in, signed out, session ended, …"]
-        widgets["widgets/\nupdate notice, missing permissions"]
+        widgets["widgets/\nupdate notice, missing permissions, error page"]
         components["components/\nBrandLogo, PageLinks"]
     end
 
@@ -38,7 +38,7 @@ graph TD
         dashboard["dashboard ./App\nSDK hooks, no props"]
     end
 
-    index --> boot
+    index -. dynamic import .-> boot
     boot --> routes
     boot --> providers
     boot --> layouts
@@ -53,7 +53,7 @@ graph TD
     features -. types .-> usecases
     layouts -. types .-> usecases
     usecases --> dom
-    infra --> dom
+    infra -. types .-> dom
     infra --> sdkmods
     presentation --> sh
     sh --> sdkmods

@@ -1,6 +1,6 @@
 # Request flows
 
-Condensed from the [LLD](../docs/lld/web-shell-lld.md) §5–§6. Step numbers refer to LLD §5.
+Condensed from the [LLD](../docs/lld/web-shell-lld.md) §5–§6; the step numbers here are not LLD §5's.
 
 ## Bootstrap (every page load)
 

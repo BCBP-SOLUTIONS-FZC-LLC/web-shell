@@ -20,7 +20,7 @@ graph LR
     links(["shared/constants/links.ts"])
     sdk(["frontend-sdk subpaths"])
 
-    index --> boot
+    index -. dynamic import .-> boot
     index -. en.json .-> text
     boot --> app
     boot --> root
