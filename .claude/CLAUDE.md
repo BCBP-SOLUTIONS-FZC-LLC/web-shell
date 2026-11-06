@@ -33,7 +33,7 @@ npm run test-contract     # same, against a real mfe-dashboard build: REMOTE_DIS
 npm run test-smoke        # needs SMOKE_BASE_URL (test/smoke/README.md)
 ```
 
-Run one test: `npx vitest run test/e2e/shell.test.tsx -t "sign-out"`. Full list: [`operations.md`](operations.md).
+Run one test: `npx vitest run test/e2e/shell.test.tsx -t "Sign out"`. Full list: [`operations.md`](operations.md).
 
 ## Architecture
 

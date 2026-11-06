@@ -32,12 +32,13 @@ fork=$(git merge-base "$branch" "$base")
 own=$(git diff "$fork" "$branch" | git patch-id --stable | cut -d' ' -f1)
 git merge -q -s ours --no-edit origin/main -m "Merge main after the squash merge of $base"
 err=$(mktemp)
-if ! git diff --binary "$fork" origin/main | git apply -3 --index 2>"$err"; then
+# Nothing to apply when main gained nothing since the branch was cut (the base was merged as it was).
+if [ -n "$(git diff --name-only "$fork" origin/main)" ] && ! git diff --binary "$fork" origin/main | git apply -3 --index 2>"$err"; then
   cat "$err" >&2; rm -f "$err"
   undo "✗ main's changes since $branch was cut do not apply cleanly on it."
 fi
 rm -f "$err"
-git commit -q --amend --no-edit
+git diff --cached --quiet || git commit -q --amend --no-edit
 now=$(git diff origin/main HEAD | git patch-id --stable | cut -d' ' -f1)
 if [ "$own" != "$now" ]; then
   echo "✗ after the merge, $branch's diff against main is not its own change. Files that differ:" >&2
