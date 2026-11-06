@@ -8,6 +8,8 @@ import tseslint from 'typescript-eslint'
 // Layer rule building blocks (used below).
 const REACT = ['react', 'react/*', 'react-dom', 'react-dom/*', 'react-router-dom']
 const SDK = ['@bcbp-solutions-fzc-llc/frontend-sdk', '@bcbp-solutions-fzc-llc/frontend-sdk/*']
+/** The shell's layers (the constitution's src/ folders). */
+const LAYERS = ['**/app/**', '**/presentation/**', '**/application/**', '**/domain/**', '**/infrastructure/**', '**/shared/**']
 /** What domain and application code may not touch: the browser. */
 const BROWSER_GLOBALS = ['window', 'document', 'navigator', 'location', 'localStorage', 'sessionStorage', 'indexedDB', 'fetch', 'XMLHttpRequest', 'history', 'globalThis', 'self', 'open']
 /** Presentation renders the DOM, but never reaches the network, storage or navigation itself. */
@@ -36,12 +38,14 @@ export default tseslint.config(
     // "Remember Email" is needed before any workspace is known and must survive sign-out; the SDK's
     // storage() is workspace-scoped and cleared on sign-out. Only the typed email is kept, never a
     // token. This is the one file allowed raw localStorage (the rule has no allow option).
-    files: ['src/platform/rememberedEmail.ts'],
+    files: ['src/infrastructure/storage/rememberedEmail.ts'],
     rules: { '@bcbp-solutions-fzc-llc/no-raw-storage': 'off' },
   },
   // Layer rules (Frontend Architecture Constitution; docs/architecture/constitution-assessment.md §5).
-  // Presentation → application → domain; infrastructure (platform/) implements domain contracts;
-  // bootstrap.tsx is the composition root. test/unit/layer-rules.test.ts proves each rule fires.
+  // presentation → application → domain; infrastructure implements domain contracts; app/ is the
+  // composition root (bootstrap, providers, routes, layouts) and may use everything. The same graph is
+  // declared in .dependency-cruiser.cjs (npm run arch-lint); these rules add editor feedback and the
+  // browser globals a dependency graph cannot see. test/unit/layer-rules.test.ts proves each fires.
   {
     files: ['src/domain/**/*.{ts,tsx}'],
     rules: {
@@ -49,7 +53,7 @@ export default tseslint.config(
       '@typescript-eslint/no-restricted-imports': ['error', { patterns: [
         { group: REACT, message: 'Domain is framework-free: no React.' },
         { group: SDK, allowTypeImports: true, message: 'Domain may use SDK types (ports) only, not its runtime.' },
-        { group: ['**/application/**', '**/platform/**', '**/pages/**', '**/components/**', '**/App', '**/bootstrap'], message: 'Domain depends on nothing in the shell.' },
+        { group: LAYERS.filter((l) => l !== '**/domain/**'), message: 'Domain depends on nothing in the shell.' },
       ] }],
       'no-restricted-globals': ['error', ...BROWSER_GLOBALS.map((name) => ({ name, message: 'Domain is browser-free.' }))],
     },
@@ -60,50 +64,64 @@ export default tseslint.config(
       'no-restricted-imports': 'off',
       '@typescript-eslint/no-restricted-imports': ['error', { patterns: [
         { group: REACT, message: 'Application has no React.' },
-        { group: SDK, allowTypeImports: true, message: 'Application uses SDK types (ports); the runtime is injected by the composition root.' },
-        { group: ['**/platform/**', '**/pages/**', '**/components/**', '**/App', '**/bootstrap'], message: 'Application reaches infrastructure only through injected ports, and never presentation.' },
+        // The SDK's error classes (/problem) are plain values a use case may test for (instanceof).
+        { regex: '^@bcbp-solutions-fzc-llc/frontend-sdk(?!/problem$)(/.*)?$', allowTypeImports: true, message: 'Application uses SDK types (ports) and /problem errors; the runtime is injected by the composition root.' },
+        { group: ['**/infrastructure/**', '**/presentation/**', '**/app/**'], message: 'Application reaches infrastructure only through injected ports, and never presentation or app/.' },
       ] }],
       'no-restricted-globals': ['error', ...BROWSER_GLOBALS.map((name) => ({ name, message: 'Application is browser-free: inject the port.' }))],
     },
   },
   {
-    // Pages and components: never platform/ or the SDK (CLAUDE.md); what they need is passed in.
-    files: ['src/pages/**/*.{ts,tsx}', 'src/components/**/*.{ts,tsx}'],
+    files: ['src/infrastructure/**/*.{ts,tsx}'],
     rules: {
       'no-restricted-imports': 'off',
       '@typescript-eslint/no-restricted-imports': ['error', { patterns: [
-        { group: ['**/platform/**', '**/bootstrap', '**/App'], message: 'Pages and components never import platform/ (infrastructure) or the composition root: take what you need as props or use cases.' },
-        { group: SDK, message: 'Pages and components never import the SDK: the composition root passes what they need.' },
+        { group: ['**/presentation/**', '**/application/**', '**/app/**'], message: 'Infrastructure implements domain contracts: it never imports presentation, application or app/.' },
+      ] }],
+    },
+  },
+  {
+    // All of presentation (pages, components, widgets, and any new folder): never infrastructure, app/
+    // or the SDK (CLAUDE.md); what it needs is passed in as props or use cases. features/ is relaxed
+    // for /auth types by the next block.
+    files: ['src/presentation/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': 'off',
+      '@typescript-eslint/no-restricted-imports': ['error', { patterns: [
+        { group: ['**/infrastructure/**', '**/app/**'], message: 'Presentation never imports infrastructure or app/: take what you need as props or use cases.' },
+        { group: ['**/application/**'], allowTypeImports: true, message: 'Presentation takes use cases as props: application/ types only.' },
+        { group: SDK, message: 'Pages, components and widgets never import the SDK: the composition root passes what they need.' },
       ] }],
       'no-restricted-globals': ['error', ...PRESENTATION_GLOBALS.map((name) => ({ name, message: PRESENTATION }))],
       'no-restricted-properties': ['error', ...browserProperties(PRESENTATION)],
     },
   },
   {
-    // shared/: cross-cutting helpers for every layer (the shell's text). It depends on no shell layer,
-    // and of the SDK only on text lookup (/i18n) and its React hook (/react).
-    files: ['src/shared/**/*.{ts,tsx}'],
+    // Features (the session screens): as above, plus SDK /auth types (session state, workspace).
+    files: ['src/presentation/features/**/*.{ts,tsx}'],
     rules: {
       'no-restricted-imports': 'off',
       '@typescript-eslint/no-restricted-imports': ['error', { patterns: [
-        { group: ['**/platform/**', '**/pages/**', '**/components/**', '**/application/**', '**/App', '**/bootstrap'], message: 'shared/ depends on no shell layer.' },
-        { regex: '^@bcbp-solutions-fzc-llc/frontend-sdk(?!/(i18n|react)$)(/.*)?$', message: 'shared/ uses the SDK only for text (/i18n, /react).' },
-      ] }],
-      'no-restricted-globals': ['error', ...PRESENTATION_GLOBALS.map((name) => ({ name, message: 'shared/ does not reach the network, storage or navigation.' }))],
-    },
-  },
-  {
-    // The session screens are presentation that lives next to the infrastructure it must not use.
-    files: ['src/platform/SessionScreens.tsx'],
-    rules: {
-      'no-restricted-imports': 'off',
-      '@typescript-eslint/no-restricted-imports': ['error', { patterns: [
-        { group: ['./iam', './passwordReset', './rememberedEmail', './navigator', './sessionContext', './permissions', './ShellRoot', '**/platform/*', '!**/platform/screen', '**/bootstrap', '**/App'], message: 'The session screens call the use cases they are given (application/), not infrastructure.' },
+        { group: ['**/infrastructure/**', '**/app/**'], message: 'The session screens call the use cases they are given (application/), not infrastructure or app/.' },
+        { group: ['**/application/**'], allowTypeImports: true, message: 'Presentation takes use cases as props: application/ types only.' },
         { group: ['@bcbp-solutions-fzc-llc/frontend-sdk/auth'], allowTypeImports: true, message: 'The session screens use /auth types only: signing in is the caller\'s (no login without a click).' },
         { regex: '^@bcbp-solutions-fzc-llc/frontend-sdk(?!/auth$)(/.*)?$', message: 'The session screens use /auth types only.' },
       ] }],
       'no-restricted-globals': ['error', ...PRESENTATION_GLOBALS.map((name) => ({ name, message: PRESENTATION }))],
       'no-restricted-properties': ['error', ...browserProperties(PRESENTATION)],
+    },
+  },
+  {
+    // shared/: cross-cutting helpers for every layer (text, constants, UI assets, types). It depends
+    // on no shell layer, and of the SDK only on text lookup (/i18n) and its React hook (/react).
+    files: ['src/shared/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': 'off',
+      '@typescript-eslint/no-restricted-imports': ['error', { patterns: [
+        { group: LAYERS.filter((l) => l !== '**/shared/**'), message: 'shared/ depends on no shell layer.' },
+        { regex: '^@bcbp-solutions-fzc-llc/frontend-sdk(?!/(i18n|react)$)(/.*)?$', message: 'shared/ uses the SDK only for text (/i18n, /react).' },
+      ] }],
+      'no-restricted-globals': ['error', ...PRESENTATION_GLOBALS.map((name) => ({ name, message: 'shared/ does not reach the network, storage or navigation.' }))],
     },
   },
   {

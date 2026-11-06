@@ -9,7 +9,7 @@ import { readFileSync } from 'node:fs'
 import { initializeCore } from '@bcbp-solutions-fzc-llc/frontend-sdk/core'
 import { setRuntimeConfig } from '@bcbp-solutions-fzc-llc/frontend-sdk/config'
 import { devPlatformMiddleware } from '../../config/dev-platform.mjs'
-import { toSessionContext, toWorkspace, type ResolveResponse, type SessionContextResponse } from '../../src/platform/iam'
+import { toSessionContext, toWorkspace, type ResolveResponse, type SessionContextResponse } from '../../src/infrastructure/api/iam'
 
 const ROOT = join(import.meta.dirname, '../..')
 let server: Server

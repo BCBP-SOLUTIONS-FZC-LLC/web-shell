@@ -14,8 +14,9 @@
 
 | Date | Change |
 |---|---|
+| 2026-11-06 | Constitution step 2: `src/` in the constitution's folders (`app/`, `presentation/`, `application/`, `domain/`, `infrastructure/`, `shared/`); session screens split into components and their mounting; App notices as widgets |
 | 2026-11-06 | Architecture lint: `.dependency-cruiser.cjs` component map, `npm run arch-lint` in `Validate / Quality` |
-| 2026-11-06 | Constitution step 5: every user-facing word in the `shell` namespace of the SDK's `/i18n` (`shared/i18n`, `en.json`), loaded before any screen (`platform/shellMessages.ts`); sign-in errors never show an error's own message |
+| 2026-11-06 | Constitution step 5: every user-facing word in the `shell` namespace of the SDK's `/i18n` (`shared/i18n`, `en.json`), loaded before any screen (`infrastructure/i18n/shellMessages.ts`); sign-in errors never show an error's own message |
 | 2026-11-06 | Constitution step 4: the layer rules are ESLint errors (`test/unit/layer-rules.test.ts`) |
 | 2026-11-06 | Constitution step 3: use cases (`application/`) and repository contracts (`domain/`); presentation no longer reaches storage, PUB-1 or browser navigation |
 | 2026-11-06 | SDK `1.0.0-alpha.6`: `runtime.json` names the environment; config loaded before the identity; deploy check in smoke `live` |
@@ -63,7 +64,7 @@ This LLD is the contract for the shell: what it owns, what the SDK owns for it, 
 |---|---|
 | `platform-reactcommon` `docs/design/frontend-sdk-design.md` | §C1 (the ports a shell implements: `/auth` `WorkspaceResolver`, `SessionContextSource`), §C2 (shell bootstrap order), §C3 (web distribution: SPA rule, cache, CSP) |
 | `platform-reactcommon` `docs/lld/platform-reactcommon-lld.md` | §5.4 behaviour of `ApiClient`, `IdentityProvider`, `loadRemote`, boundaries; §6.2 initialisation order; §12.1 `runtime.json` schema; §12.3 reserved storage keys |
-| `platform-reactcommon` `examples/shell` | The reference shell. `src/platform/iam.ts` and the bootstrap follow it; differences are listed in §2.3 |
+| `platform-reactcommon` `examples/shell` | The reference shell. `src/infrastructure/api/iam.ts` and the bootstrap follow it; differences are listed in §2.3 |
 | `iam-org-membership` LLD rev 2.47 | PUB-1 `GET /api/v1/public/tenants/resolve`, P-35 `GET /api/v1/me/session-context`, the closed role set (§5.4) and member-management grants (§10.4) |
 
 ### 1.2 Rule: no copies of SDK behaviour
@@ -74,9 +75,9 @@ Audit (2026-11-05) of `src/`, the tests and the CI scripts against platform-reac
 
 | In this repository | Taken from platform-reactcommon | Why it is here | To remove the copy |
 |---|---|---|---|
-| `platform/iam.ts`, `permissions.ts`, `SessionScreens.tsx`, `screen.tsx` | `examples/shell/src/*` (pattern) | The ports and screens every shell must own (design doc §C1); adapted (§2.3) | Not a copy to remove |
-| `platform/sessionContext.ts` (`isTransient`, `retrySessionContext`, `createStore`), `platform/ShellRoot.tsx` | `examples/shell/src/session-context.ts`, `ShellRoot.tsx`, nearly verbatim; `isTransient` is now the SDK ApiClient's rule (429, 502–504, online network error, timeout), and background attempts send one request each (`loadSessionContextOnce`, `retry: false`) | The SDK exports no session-context retry and no `PlatformProvider` that reads a live context | SDK export requested (`platform-reactcommon-shell-helpers-export.md`) |
-| `platform/passwordReset.ts` (`/realms/<realm>/login-actions/reset-credentials`) | The SDK's realm URL scheme (internal to `/auth`) | The SDK exports no realm-URL or password-reset builder | Same request |
+| `infrastructure/api/iam.ts`, `domain/rules/permissions.ts`, `presentation/features/session-screens/`, `app/layouts/` (`sessionScreens.tsx`, `screen.tsx`) | `examples/shell/src/*` (pattern) | The ports and screens every shell must own (design doc §C1); adapted (§2.3) | Not a copy to remove |
+| `application/use-cases/loadSessionContext.ts` (`isTransient`, `retrySessionContext`, `createStore`), `app/providers/ShellRoot.tsx` | `examples/shell/src/session-context.ts`, `ShellRoot.tsx`, nearly verbatim; `isTransient` is now the SDK ApiClient's rule (429, 502–504, online network error, timeout), and background attempts send one request each (`loadSessionContextOnce`, `retry: false`) | The SDK exports no session-context retry and no `PlatformProvider` that reads a live context | SDK export requested (`platform-reactcommon-shell-helpers-export.md`) |
+| `infrastructure/auth/passwordReset.ts` (`/realms/<realm>/login-actions/reset-credentials`) | The SDK's realm URL scheme (internal to `/auth`) | The SDK exports no realm-URL or password-reset builder | Same request |
 | `nginx/security.d/csp.conf.example` (read by `test/browser/server.ts`) | `examples/cloudfront/csp.mjs` `buildCsp` | The CSP builder is not in any package; one copy here, enforced in three engines by the browser suite | Same request (publish `buildCsp`) |
 | `test/fixtures/keycloak.ts`, `network.ts` | `test/fixtures/` (pattern) | The SDK's `/testing` `mockApi` answers only `api.baseUrl` routes; the e2e suite also needs `/config`, `/remotes` and `/otel` | Not a copy to remove |
 | `.github/scripts/metrics-check.mjs` | — | Uses the SDK's own `getServiceMeter` / `getDomainMeter` as the verdict; restates no rule | — |
@@ -93,17 +94,18 @@ Removed as duplicates of the SDK (2026-11-05): `platform/consent.ts` (the runtim
 
 | Area | Module |
 |---|---|
-| Async boundary and the fatal "unavailable" message | `src/index.ts` |
-| The SDK start-up sequence and session handling | `src/bootstrap.tsx` |
-| Signed-in routes and the dashboard `RemoteBoundary` | `src/App.tsx` |
-| IAM ports: PUB-1 → `Workspace`, P-35 → `SessionContext` | `src/platform/iam.ts` |
-| Session screens: email sign-in, signed out, session ended, device clock, wrong workspace, workspace not found | `src/platform/SessionScreens.tsx`, `src/platform/screen.tsx` |
-| Login layouts, email form, remember-email, help and legal links (`links.ts`, `PageLinks.tsx`) | `src/pages/*` |
-| Password reset hand-off to Keycloak | `src/platform/passwordReset.ts` |
-| Update and missing-permissions notices | `src/App.tsx` (`useAppUpdate`, `useSessionContext`) |
-| The shell's text: the `shell` namespace of the SDK's `/i18n`, English catalogue, registration before any screen | `src/shared/i18n/` (`en.json`, `catalogues.ts`, `useShellText`, `shellText`), `src/platform/shellMessages.ts` |
+| Async boundary and the fatal "unavailable" message | `src/app/bootstrap/index.ts` |
+| The SDK start-up sequence and session handling | `src/app/bootstrap/bootstrap.tsx` |
+| Signed-in routes and the dashboard `RemoteBoundary` | `src/app/routes/App.tsx` |
+| IAM ports: PUB-1 → `Workspace`, P-35 → `SessionContext` | `src/infrastructure/api/iam.ts` |
+| Session screens: email sign-in, signed out, session ended, device clock, wrong workspace, workspace not found | `src/presentation/features/session-screens/` (components), `src/app/layouts/sessionScreens.tsx` (mounting), `src/app/layouts/screen.tsx` (host) |
+| Login page, email form, remember-email, help and legal links | `src/presentation/pages/login/`, `src/presentation/components/PageLinks.tsx`, `src/shared/constants/links.ts` |
+| Password reset hand-off to Keycloak | `src/infrastructure/auth/passwordReset.ts` |
+| Update and missing-permissions notices | `src/presentation/widgets/`, mounted by `src/app/routes/App.tsx` with `useAppUpdate`, `useSessionContext` |
+| The shell's text: the `shell` namespace of the SDK's `/i18n`, English catalogue, registration before any screen | `src/shared/i18n/` (`en.json`, `catalogues.ts`, `useShellText`, `shellText`), `src/infrastructure/i18n/shellMessages.ts` |
 | Consent (v1: essential only) | The SDK's default consent provider; the shell sets none |
-| Role → UI permission map | `src/platform/permissions.ts` |
+| Role → UI permission map | `src/domain/rules/permissions.ts` |
+| Session context retry and store | `src/application/use-cases/loadSessionContext.ts` |
 | Build (`shell` host), `/version.json` | `rsbuild.config.ts` |
 | Dev-only platform stand-ins | `config/dev-platform.mjs` |
 | Static hosting | `nginx/default.conf`, `Dockerfile` |
@@ -133,56 +135,60 @@ Removed as duplicates of the SDK (2026-11-05): `platform/consent.ts` (the runtim
 
 ## 3. Architecture and module layout
 
+`src/` follows the Frontend Architecture Constitution's structure. Tests stay in `test/` (ADR 0008).
+
 ```
 src/
-  index.ts                  async boundary → bootstrap(); showUnavailable on a throw
-  bootstrap.tsx             the only module that wires platform/ and renders #app
-  App.tsx                   BrowserRouter (basename /t/<slug>), /dashboard/* → RemoteBoundary dashboard ./App
-  platform/
-    iam.ts                  toWorkspace, toSessionContext, workspaceResolver, sessionContextSource
-    permissions.ts          IAM_ROLES, permissions (role → action:resource)
-    SessionScreens.tsx      askForWorkspace and the dialogs
-    sessionContext.ts       P-35 retry (isTransient, retrySessionContext) and the store the provider reads
-    ShellRoot.tsx           PlatformProvider with the live context and locale
-    navigator.ts            shellNavigator: the router as the SDK's navigate() target
-    screen.tsx              #shell-screen host (fixed overlay outside #app)
-    rememberedEmail.ts      localStorageRememberedEmail (implements domain RememberedEmailRepository)
-  application/              signIn.ts (SignInUseCases); use-cases/ resolveWorkspace, requestPasswordReset
-  domain/                   repositories/rememberedEmail.ts (contract), errors.ts (WorkspaceNotFoundError)
-  shared/i18n/              index.ts (useShellText, shellText, ShellKey), catalogues.ts, en.json (every user-facing word)
-  pages/                    LoginPage, useEmailSignIn, links, PageLinks
-  components/BrandLogo.tsx
-  assets/images/            carousel photos and the logo, bundled into /assets/ with a hash
-  theme/, index.css         Tailwind 4 and daisyUI theme
-  globals.d.ts              __ENVIRONMENT__, __BUILD_VERSION__
-config/                     dev only: runtime.local.json, remotes.local.json, dev-platform.mjs
-public/                     config/runtime.json (prod defaults), remotes/manifest.json ({}), favicons
-nginx/default.conf          the image's server
-test/                       unit, integration, e2e, fixtures, smoke, browser (§12)
+  app/                          composition root
+    bootstrap/index.ts          Rsbuild entry: async boundary → bootstrap(); showUnavailable on a throw
+    bootstrap/bootstrap.tsx     the only module that wires infrastructure/ and renders #app
+    providers/ShellRoot.tsx     PlatformProvider with the live context and locale
+    routes/App.tsx              BrowserRouter (basename /t/<slug>), /dashboard/* → RemoteBoundary dashboard ./App
+    layouts/screen.tsx          #shell-screen host (fixed overlay outside #app)
+    layouts/sessionScreens.tsx  askForWorkspace and the show* functions: mount the session screens
+  presentation/
+    pages/login/                LoginPage, useEmailSignIn
+    features/session-screens/   SignInScreen and the dialogs (components; callbacks in, no mounting)
+    components/                 BrandLogo, PageLinks
+    widgets/                    UpdateAvailable, ContextUnavailable (state as props)
+  application/                  signIn.ts (SignInUseCases); use-cases/ resolveWorkspace, requestPasswordReset,
+                                loadSessionContext (isTransient, retrySessionContext, createStore)
+  domain/                       repositories/rememberedEmail.ts (contract), errors.ts (WorkspaceNotFoundError),
+                                rules/permissions.ts (IAM_ROLES, permissions: role → action:resource)
+  infrastructure/
+    api/iam.ts                  toWorkspace, toSessionContext, workspaceResolver, sessionContextSource
+    auth/passwordReset.ts       passwordResetUrl (Keycloak reset-credentials)
+    storage/rememberedEmail.ts  localStorageRememberedEmail (implements RememberedEmailRepository)
+    federation/navigator.ts     shellNavigator: the router as the SDK's navigate() target
+    i18n/shellMessages.ts       registerShellMessages (bootstrap only)
+  shared/
+    i18n/                       index.ts (useShellText, shellText, ShellKey), catalogues.ts, en.json (every user-facing word)
+    constants/links.ts          help and legal links (labels are keys; URLs unset until official)
+    ui/                         assets/images (bundled into /assets/ with a hash), theme/, index.css (Tailwind 4, daisyUI)
+    types/globals.d.ts          __ENVIRONMENT__, __BUILD_VERSION__
+config/                         dev only: runtime.local.json, remotes.local.json, dev-platform.mjs
+public/                         config/runtime.json (prod defaults), remotes/manifest.json ({}), favicons
+nginx/default.conf              the image's server
+test/                           unit, integration, e2e, fixtures, smoke, browser (§12)
 ```
 
 ### 3.1 Dependency rules
 
-| Module | May import |
-|---|---|
-| `platform/iam.ts`, `permissions.ts` | SDK subpaths only |
-| `platform/screen.tsx` | `react-dom/client` |
-| `platform/SessionScreens.tsx` | `pages/*`, `screen`, the sign-in use cases it is given (`application/signIn`), `domain/errors`, `shared/i18n` (text lookup), SDK `/auth` types. No other `platform/` module, no other SDK runtime |
-| `application/` | `domain/`, SDK types; no React, no browser APIs (ports injected by the bootstrap) |
-| `domain/` | SDK types only |
-| `platform/rememberedEmail.ts` | `domain/` |
-| `pages/*`, `components/*` | Each other, `domain/` and `application/` types, `shared/i18n`. Never `platform/`, the SDK, storage, the network or navigation |
-| `shared/i18n` | SDK `/i18n` (`t`), `/react` (`useT`); no shell layer. Exposes text lookup only: presentation reaches the SDK's i18n runtime through it and nothing else |
-| `platform/shellMessages.ts` | `shared/i18n`, SDK `/i18n` (`registerNamespace`, `setLocale`). Changes the page's locale, so only the bootstrap calls it |
-| `App.tsx` | `react-router-dom`, SDK `/react`, `shared/i18n` |
-| `bootstrap.tsx` | Everything above; every SDK subpath it initialises. The composition root: builds the sign-in use cases from infrastructure and passes them to the screens |
-| `index.ts` | `bootstrap.tsx`, dynamically; `shared/i18n/en.json` statically (the unavailable page, which cannot use the SDK) |
+| Layer | May import | Never |
+|---|---|---|
+| `domain/` | SDK types only | React, the browser, any other layer |
+| `application/` | `domain/`; SDK types and the `/problem` error classes | React, the browser, `infrastructure/`, `presentation/`, `app/` (ports are injected by the bootstrap) |
+| `infrastructure/` | `domain/`, `shared/i18n`, SDK subpaths | `presentation/`, `application/`, `app/` |
+| `presentation/` (any folder) | `domain/`, `application/` types, `shared/`; pages → components; features → pages, components. Widgets: `shared/i18n` only; components: `shared/` only | `infrastructure/`, `app/`, the SDK, `application/` values, storage, the network, navigation |
+| `presentation/features/` | as above, plus SDK `/auth` types | SDK `/auth` values (no login without a click) |
+| `shared/` | SDK `/i18n` (`t`), `/react` (`useT`); each other | any shell layer. `shared/i18n` exposes text lookup only |
+| `app/` | `bootstrap.tsx` (the composition root, the only module that imports `infrastructure/`) wires every layer; `routes`, `providers` and `layouts` only what they render or provide (CONTRIBUTING § Architecture lint). `bootstrap.tsx` builds the use cases from infrastructure and passes them to the screens; `index.ts` imports `bootstrap.tsx` dynamically and `shared/i18n/en.json` statically (the unavailable page cannot use the SDK) | — |
 
 The SDK is imported through public subpaths only. `@bcbp-solutions-fzc-llc/eslint-plugin` `configs.recommended` on `src/` fails a root or deep import, identity headers, raw `window.*Storage`, unsafe HTML and non-template API paths; `npm run lint` runs with `--max-warnings 0` in `validate-quality`.
 
-The rows for `domain/`, `application/`, `pages/*`, `components/*` and `platform/SessionScreens.tsx` are lint errors (`eslint.config.js`: `@typescript-eslint/no-restricted-imports`, `no-restricted-globals`, `no-restricted-properties`); `test/unit/layer-rules.test.ts` lints a violation of each rule to prove it fires. Presentation may not use `fetch`, `XMLHttpRequest`, storage, IndexedDB, `location`, `history`, `navigator` or `open`, bare or through `window`, `globalThis`, `self` (and `document.location`); domain and application may not use any browser global. Infrastructure (`platform/`) and the composition root (`bootstrap.tsx`) are not restricted by these rules. The component graph is also declared in `.dependency-cruiser.cjs` and checked by `npm run arch-lint` (allowed mode: an undeclared dependency, a file in no component, a cycle or an unresolvable import fails; `test/unit/arch-lint.test.ts`).
+Enforced twice. `eslint.config.js` (`@typescript-eslint/no-restricted-imports`, `no-restricted-globals`, `no-restricted-properties`; `test/unit/layer-rules.test.ts`): import rules per layer, plus browser globals. Presentation may not use `fetch`, `XMLHttpRequest`, storage, IndexedDB, `location`, `history`, `navigator` or `open`, bare or through `window`, `globalThis`, `self` (and `document.location`); domain and application may not use any browser global. `.dependency-cruiser.cjs` (`npm run arch-lint`; `test/unit/arch-lint.test.ts`): every component and its allowed dependencies, in allowed mode, so an undeclared dependency, a file in no component, a cycle or an unresolvable import fails.
 
-SDK subpaths `src/` uses: `/core`, `/config`, `/tracing`, `/logging`, `/metrics`, `/flags`, `/auth`, `/http`, `/authz`, `/i18n`, `/mfe`, `/security`, `/react`.
+SDK subpaths `src/` uses: `/core`, `/config`, `/tracing`, `/logging`, `/metrics`, `/flags`, `/auth`, `/http`, `/authz`, `/i18n`, `/mfe`, `/nav`, `/problem`, `/security`, `/react`.
 
 ### 3.2 Build
 
@@ -190,7 +196,7 @@ SDK subpaths `src/` uses: `/core`, `/config`, `/tracing`, `/logging`, `/metrics`
 
 | Setting | Value | Reason |
 |---|---|---|
-| Entry | `index: ./src/index.ts` | Emits `index.html` |
+| Entry | `index: ./src/app/bootstrap/index.ts` | Emits `index.html` |
 | `source.define` | `__ENVIRONMENT__` (`PLATFORM_ENVIRONMENT`, default `prod` / `local` in dev; only the fallback for a `runtime.json` without `environment`), `__BUILD_VERSION__` | The only compiled-in values |
 | `output.distPath` | css, font, image, svg, media, wasm, assets → `assets` | Every hashed file under `/assets/` (immutable). JS paths are the preset's |
 | `inlineScripts`, `inlineStyles` | `false` | CSP `script-src 'self'`, `style-src 'self'` |
@@ -267,7 +273,7 @@ Keys are IAM's closed role set: `member`, `tenant_owner`, `tenant_admin`, `tende
 
 ## 5. Initialisation order
 
-`src/index.ts` does `import('./bootstrap').then(m => m.bootstrap())` (the Module Federation async boundary) and catches into `showUnavailable`, which replaces `#app` with "The app is unavailable right now. Please try again later."
+`src/app/bootstrap/index.ts` does `import('./bootstrap').then(m => m.bootstrap())` (the Module Federation async boundary) and catches into `showUnavailable`, which replaces `#app` with "The app is unavailable right now. Please try again later."
 
 | # | Call | Notes |
 |---|---|---|
@@ -276,7 +282,7 @@ Keys are IAM's closed role set: `member`, `tenant_owner`, `tenant_admin`, `tende
 | 3 | `initializeCore({ serviceName: 'web-shell', domain: 'portal', environment: cfg.environment ?? __ENVIRONMENT__, buildVersion: __BUILD_VERSION__ })` → `setRuntimeConfig(cfg)` | Registry-validated identity. One build for every environment (SDK alpha.6): the deployed file names the environment; the build-time one is the fallback until every file has the key. The SDK refuses a config whose `environment` differs from the identity's. Any throw from here on is fatal (§7): after `initializeCore` it is first logged as `error 'the app could not start'` (to `telemetry.otlpBaseUrl` once the config is read, else the default `/otel`) |
 | 4 | (consent) | The SDK's default: essential only (v1). A consent manager would call `setConsentProvider` here |
 | 5 | `initializeTracing`, `initializeLogging`, `initializeMetrics` (`cfg.telemetry`), `installGlobalErrorHandlers()`, `startWebVitals()` | |
-| 6 | `setFlagProvider(runtimeConfigFlagProvider())`; `registerShellMessages(cfg.i18n.defaultLocale)` (`platform/shellMessages.ts`) | Platform flags only, until P-35. The `shell` namespace is registered and loaded for the default locale (`registerNamespace` + `setLocale`) before any screen, so the sign-in screens never show keys; step 14 then picks the user's locale |
+| 6 | `setFlagProvider(runtimeConfigFlagProvider())`; `registerShellMessages(cfg.i18n.defaultLocale)` (`infrastructure/i18n/shellMessages.ts`) | Platform flags only, until P-35. The `shell` namespace is registered and loaded for the default locale (`registerNamespace` + `setLocale`) before any screen, so the sign-in screens never show keys; step 14 then picks the user's locale |
 | 7 | `idp = createOidcProvider(cfg.auth, workspaceResolver)`, `setTokenSource(initializeAuth(idp))`, `session = await idp.init()` | May redirect once with `prompt=none` and never settle |
 | 8 | Anonymous → §6.1 and return | The app is not rendered |
 | 9 | `isWrongWorkspace(session.workspace, session.user)` → `showWrongWorkspace(idp)` and return | Not cached, never rendered |
@@ -410,7 +416,7 @@ Validated strictly by the SDK (unknown keys rejected). Schema: SDK LLD §12.1.
 |---|---|---|
 | `@bcbp-solutions-fzc-llc/frontend-sdk:*` (workspace cache, session id, last activity, last user, signed-out mark) | `localStorage` | SDK. No tokens |
 | `@bcbp-solutions-fzc-llc/frontend-sdk:storage:<namespace>:<appId>:<key>` | `localStorage` | Remotes through `storage(appId)`; cleared on sign-out. Values under the pre-alpha.4 keys are not read |
-| `bcbp.rememberEmail`, `bcbp.loginEmail` | `localStorage` | `platform/rememberedEmail.ts` (the domain's `RememberedEmailRepository`), only when "Remember Email" is checked; every access in `try`. The one file exempt from `no-raw-storage` (`eslint.config.js`) |
+| `bcbp.rememberEmail`, `bcbp.loginEmail` | `localStorage` | `infrastructure/storage/rememberedEmail.ts` (the domain's `RememberedEmailRepository`), only when "Remember Email" is checked; every access in `try`. The one file exempt from `no-raw-storage` (`eslint.config.js`) |
 
 ---
 
@@ -520,7 +526,7 @@ Details: [VERSIONING.md](../../VERSIONING.md).
 
 | # | Item | Owner |
 |---|---|---|
-| 1 | Official Privacy, Terms, Trust & Security and Help URLs: set them in `src/pages/links.ts` (hidden until then; none exists on bcbpsolutions.com) | product / legal |
+| 1 | Official Privacy, Terms, Trust & Security and Help URLs: set them in `src/shared/constants/links.ts` (hidden until then; none exists on bcbpsolutions.com) | product / legal |
 | 3 | Consent is essential only in v1 (decision; the SDK's default). A consent manager would be installed with `setConsentProvider` in the bootstrap | product |
 | 5 | Deploy in pairs: web-shell `0.2.0` + mfe-dashboard `0.3.0` (manifest key `dashboard`, `/remotes/dashboard/0.3.0/`), or `0.1.0` + `0.2.0` (`app2`). After a pair is deployed, environments may set `auth.signInUrl` (older SDKs refuse the key), then `SMOKE_MODE=live` | operators |
 | 6 | PUB-1 and P-35 must exist behind `/api` in every environment; they are stubbed only in dev | IAM |

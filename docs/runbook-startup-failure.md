@@ -4,7 +4,7 @@
 
 ## Signal
 
-When `bootstrap()` throws after `initializeCore`, the shell logs one **essential error** before it shows "The app is unavailable right now." (`src/bootstrap.tsx`, LLD §5 step 3, §11):
+When `bootstrap()` throws after `initializeCore`, the shell logs one **essential error** before it shows "The app is unavailable right now." (`src/app/bootstrap/bootstrap.tsx`, LLD §5 step 3, §11):
 
 | Field | Value |
 |---|---|

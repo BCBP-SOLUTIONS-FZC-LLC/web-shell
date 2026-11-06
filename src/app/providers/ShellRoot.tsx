@@ -4,7 +4,7 @@
 import { useMemo, useSyncExternalStore, type JSX, type ReactNode } from 'react'
 import type { SessionContext } from '@bcbp-solutions-fzc-llc/frontend-sdk/auth'
 import { PlatformProvider, useLocale, type ShellContextValue } from '@bcbp-solutions-fzc-llc/frontend-sdk/react'
-import type { Store } from './sessionContext'
+import type { Store } from '../../application/use-cases/loadSessionContext'
 
 export function ShellRoot(p: {
   shell: Omit<ShellContextValue, 'locale' | 'context'>

@@ -6,7 +6,7 @@ How the shell fits the platform's three metric tiers, what it emits, and how a m
 
 | | Value | Set by |
 |---|---|---|
-| `domain` | `portal` (registry vocabulary) | `initializeCore` in `src/bootstrap.tsx` |
+| `domain` | `portal` (registry vocabulary) | `initializeCore` in `src/app/bootstrap/bootstrap.tsx` |
 | `service` | `web-shell` | same |
 | `environment` | `local`, `dev`, `test`, `staging` or `prod` | the deployed `runtime.json` `environment` (SDK alpha.6), else build-time `PLATFORM_ENVIRONMENT` |
 | Tier 3 prefix | `portal_web_shell_` | the SDK's `ServicePrefix` (`<domain>_<service>_`, snake_case) |

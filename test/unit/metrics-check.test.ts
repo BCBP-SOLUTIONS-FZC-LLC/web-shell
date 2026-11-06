@@ -12,7 +12,7 @@ const root = join(import.meta.dirname, '..', '..')
 const svc = (name: string, type: 'counter' | 'histogram' = 'counter', labels: string[] = []) =>
   sdkVerdict({ tier: 'service', type, name, labels })
 
-beforeAll(() => useIdentity(identityOf(readFileSync(join(root, 'src/bootstrap.tsx'), 'utf8'))))
+beforeAll(() => useIdentity(identityOf(readFileSync(join(root, 'src/app/bootstrap/bootstrap.tsx'), 'utf8'))))
 
 describe("the SDK's verdict, passed through", () => {
   it('accepts what the SDK accepts', () => {
@@ -90,8 +90,8 @@ describe('inventory and identity', () => {
 })
 
 describe('this repository', () => {
-  it('passes: identity from src/bootstrap.tsx, and the inventory lists no metric yet', () => {
-    expect(identityOf(readFileSync(join(root, 'src/bootstrap.tsx'), 'utf8'))).toEqual({ service: 'web-shell', domain: 'portal' })
+  it('passes: identity from src/app/bootstrap/bootstrap.tsx, and the inventory lists no metric yet', () => {
+    expect(identityOf(readFileSync(join(root, 'src/app/bootstrap/bootstrap.tsx'), 'utf8'))).toEqual({ service: 'web-shell', domain: 'portal' })
     expect(inventoryNames(readFileSync(join(root, 'docs/observability.md'), 'utf8')).size).toBe(0)
   })
 })

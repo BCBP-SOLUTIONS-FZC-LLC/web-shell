@@ -2,7 +2,7 @@
 // The Enterprise Platform Observability Standard, checked at build time for the shell's own metrics
 // (docs/observability.md). The rules are not restated here: each metric src/ creates is created
 // once more with the SDK's own meters (getServiceMeter / getDomainMeter, under the shell's identity
-// from src/bootstrap.tsx), and whatever InvalidMetricError the SDK throws (namespace, suffix,
+// from src/app/bootstrap/bootstrap.tsx), and whatever InvalidMetricError the SDK throws (namespace, suffix,
 // registry, prohibited_label, required_labels, label_vocabulary) fails the build. The registry is the
 // SDK's (platform-gincommon obsregistry). This script only adds what the SDK cannot see:
 //
@@ -80,11 +80,11 @@ export function inventoryNames(markdown) {
   return new Set([...section.matchAll(/^\|\s*`([a-z0-9_]+)`\s*\|/gm)].map((m) => m[1]))
 }
 
-/** The shell's identity, read from initializeCore in src/bootstrap.tsx (one source). */
+/** The shell's identity, read from initializeCore in src/app/bootstrap/bootstrap.tsx (one source). */
 export function identityOf(bootstrapSource) {
   const service = /serviceName:\s*['"]([^'"]+)['"]/.exec(bootstrapSource)?.[1]
   const domain = /domain:\s*['"]([^'"]+)['"]/.exec(bootstrapSource)?.[1]
-  if (!service || !domain) throw new Error('metrics-check: initializeCore serviceName/domain not found in src/bootstrap.tsx')
+  if (!service || !domain) throw new Error('metrics-check: initializeCore serviceName/domain not found in src/app/bootstrap/bootstrap.tsx')
   return { service, domain }
 }
 
@@ -110,7 +110,7 @@ function walk(dir) {
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   const root = process.cwd()
-  const identity = identityOf(readFileSync(join(root, 'src/bootstrap.tsx'), 'utf8'))
+  const identity = identityOf(readFileSync(join(root, 'src/app/bootstrap/bootstrap.tsx'), 'utf8'))
   useIdentity(identity)
   const inventory = inventoryNames(readFileSync(join(root, 'docs/observability.md'), 'utf8'))
   const files = walk(join(root, 'src')).map((p) => ({ path: relative(root, p), source: readFileSync(p, 'utf8') }))

@@ -1,9 +1,9 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
-import LoginLatest from '../../src/pages/LoginPage'
-import { localStorageRememberedEmail as remembered } from '../../src/platform/rememberedEmail'
-import { EMAIL_FIRST } from '../../src/pages/useEmailSignIn'
+import LoginLatest from '../../src/presentation/pages/login/LoginPage'
+import { localStorageRememberedEmail as remembered } from '../../src/infrastructure/storage/rememberedEmail'
+import { EMAIL_FIRST } from '../../src/presentation/pages/login/useEmailSignIn'
 import en from '../../src/shared/i18n/en.json'
 
 const pages = [['latest', LoginLatest]] as const

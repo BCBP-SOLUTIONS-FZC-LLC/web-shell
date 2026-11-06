@@ -7,7 +7,7 @@ import { dirname, join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createTestPlatform, mockApi, mockProblem } from '@bcbp-solutions-fzc-llc/frontend-sdk/testing'
 import { PlatformProblemTypes } from '@bcbp-solutions-fzc-llc/frontend-sdk/problem'
-import { loadSessionContextOnce, sessionContextSource, toSessionContext, toWorkspace, workspaceResolver } from '../../src/platform/iam'
+import { loadSessionContextOnce, sessionContextSource, toSessionContext, toWorkspace, workspaceResolver } from '../../src/infrastructure/api/iam'
 
 interface Cases<C> {
   path: string

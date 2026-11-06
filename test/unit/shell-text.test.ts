@@ -37,7 +37,7 @@ describe('the shell namespace', () => {
   })
 
   it('with en-GB as the default locale the screens read English', async () => {
-    const { registerShellMessages } = await import('../../src/platform/shellMessages')
+    const { registerShellMessages } = await import('../../src/infrastructure/i18n/shellMessages')
     await initializeI18n({ defaultLocale: 'en-GB', supported: ['en-GB'] })
     await registerShellMessages('en-GB')
     expect(shellText('login.heading')).toBe('Login to your account')
@@ -87,7 +87,8 @@ function files(dir: string): string[] {
 
 describe('no hard-coded user-facing text', () => {
   const root = join(import.meta.dirname, '..', '..', 'src')
-  const presentation = [...files(join(root, 'pages')), ...files(join(root, 'components')), join(root, 'platform', 'SessionScreens.tsx'), join(root, 'App.tsx'), join(root, 'index.ts')]
+  // Everything that renders: presentation/, and app/ (routes, layouts, the unavailable page).
+  const presentation = [...files(join(root, 'presentation')), ...files(join(root, 'app'))]
 
   it.each(presentation.map((f) => [f.slice(root.length + 1), f]))('%s', (_name, file) => {
     expect(literals(file, readFileSync(file, 'utf8'))).toEqual([])

@@ -54,16 +54,19 @@ describe('arch-lint', () => {
   describe('with probes', () => {
     let found: string[]
     beforeAll(() => {
-      write('src/domain/probe.ts', `import { useState } from 'react'\nimport { workspaceResolver } from '../platform/iam'\nimport { createApiClient } from '${SDK}/http'\nexport const p = [useState, workspaceResolver, createApiClient]\n`)
-      write('src/application/probe.ts', `import LoginPage from '../pages/LoginPage'\nexport const p = LoginPage\n`)
-      write('src/pages/Probe.tsx', `import { localStorageRememberedEmail } from '../platform/rememberedEmail'\nimport { useSignOut } from '${SDK}/react'\nexport const p = [localStorageRememberedEmail, useSignOut]\n`)
-      write('src/shared/i18n/probe.ts', `import { workspaceResolver } from '../../platform/iam'\nexport const p = workspaceResolver\n`)
+      write('src/domain/probe.ts', `import { useState } from 'react'\nimport { workspaceResolver } from '../infrastructure/api/iam'\nimport { createApiClient } from '${SDK}/http'\nexport const p = [useState, workspaceResolver, createApiClient]\n`)
+      write('src/application/probe.ts', `import LoginPage from '../presentation/pages/login/LoginPage'\nexport const p = LoginPage\n`)
+      write('src/presentation/pages/login/Probe.tsx', `import { localStorageRememberedEmail } from '../../../infrastructure/storage/rememberedEmail'\nimport { useSignOut } from '${SDK}/react'\nexport const p = [localStorageRememberedEmail, useSignOut]\n`)
+      write('src/shared/i18n/probe.ts', `import { workspaceResolver } from '../../infrastructure/api/iam'\nexport const p = workspaceResolver\n`)
       write('src/session/probe.ts', `import { WorkspaceNotFoundError } from '../domain/errors'\nexport const p = WorkspaceNotFoundError\n`)
+      write('src/infrastructure/api/probe.ts', `import LoginPage from '../../presentation/pages/login/LoginPage'\nexport const p = LoginPage\n`)
+      write('src/presentation/features/session-screens/probe.ts', `import { showScreen } from '../../../app/layouts/screen'\nexport const p = showScreen\n`)
+      write('src/presentation/pages/login/probeValue.ts', `import { resolveWorkspaceUseCase } from '../../../application/use-cases/resolveWorkspace'\nexport const p = resolveWorkspaceUseCase\n`)
       write('src/domain/cycleA.ts', `import { b } from './cycleB'\nexport const a = () => b\n`)
       write('src/domain/cycleB.ts', `import { a } from './cycleA'\nexport const b = () => a\n`)
       write('src/domain/missing.ts', `import { x } from './nowhere'\nexport const m = x\n`)
       // The session screens taking a sign-in function, not only /auth types (no login without a click)
-      write('src/platform/SessionScreens.tsx', `${readFileSync(join(root, 'src/platform/SessionScreens.tsx'), 'utf8')}\nimport { signInAgain } from '${SDK}/auth'\nexport const probe = signInAgain\n`)
+      write('src/presentation/features/session-screens/SessionScreens.tsx', `${readFileSync(join(root, 'src/presentation/features/session-screens/SessionScreens.tsx'), 'utf8')}\nimport { signInAgain } from '${SDK}/auth'\nexport const probe = signInAgain\n`)
       // allowed: a use case with a domain import and an SDK port type
       write('src/application/use-cases/ok.ts', `import type { WorkspaceResolver } from '${SDK}/auth'\nimport { WorkspaceNotFoundError } from '../../domain/errors'\nexport const ok = (r: WorkspaceResolver) => [r, WorkspaceNotFoundError]\n`)
       found = archLint(project).map((v) => `${v.rule.name}: ${v.from} → ${v.to.replace(/^node_modules\/(@bcbp-solutions-fzc-llc\/frontend-sdk\/dist\/[^/]+|[^/]+).*/, '$1')}`)
@@ -72,28 +75,39 @@ describe('arch-lint', () => {
     it('domain: no React, no other component, no SDK runtime (types only)', () => {
       expect(found).toEqual(expect.arrayContaining([
         'not-in-allowed: src/domain/probe.ts → react',
-        'not-in-allowed: src/domain/probe.ts → src/platform/iam.ts',
+        'not-in-allowed: src/domain/probe.ts → src/infrastructure/api/iam.ts',
         `not-in-allowed: src/domain/probe.ts → @bcbp-solutions-fzc-llc/frontend-sdk/dist/http`,
       ]))
     })
 
     it('application: never presentation', () => {
-      expect(found).toContain('not-in-allowed: src/application/probe.ts → src/pages/LoginPage.tsx')
+      expect(found).toContain('not-in-allowed: src/application/probe.ts → src/presentation/pages/login/LoginPage.tsx')
     })
 
     it('pages: never infrastructure or the SDK', () => {
       expect(found).toEqual(expect.arrayContaining([
-        'not-in-allowed: src/pages/Probe.tsx → src/platform/rememberedEmail.ts',
-        'not-in-allowed: src/pages/Probe.tsx → @bcbp-solutions-fzc-llc/frontend-sdk/dist/react',
+        'not-in-allowed: src/presentation/pages/login/Probe.tsx → src/infrastructure/storage/rememberedEmail.ts',
+        'not-in-allowed: src/presentation/pages/login/Probe.tsx → @bcbp-solutions-fzc-llc/frontend-sdk/dist/react',
       ]))
     })
 
     it('session screens: /auth types only, never its functions', () => {
-      expect(found).toContain('not-in-allowed: src/platform/SessionScreens.tsx → @bcbp-solutions-fzc-llc/frontend-sdk/dist/auth')
+      expect(found).toContain('not-in-allowed: src/presentation/features/session-screens/SessionScreens.tsx → @bcbp-solutions-fzc-llc/frontend-sdk/dist/auth')
+    })
+
+    it('presentation: never app/ (the screens do not mount themselves), and application/ types only', () => {
+      expect(found).toEqual(expect.arrayContaining([
+        'not-in-allowed: src/presentation/features/session-screens/probe.ts → src/app/layouts/screen.tsx',
+        'not-in-allowed: src/presentation/pages/login/probeValue.ts → src/application/use-cases/resolveWorkspace.ts',
+      ]))
+    })
+
+    it('infrastructure: never presentation', () => {
+      expect(found).toContain('not-in-allowed: src/infrastructure/api/probe.ts → src/presentation/pages/login/LoginPage.tsx')
     })
 
     it('shared: no shell layer', () => {
-      expect(found).toContain('not-in-allowed: src/shared/i18n/probe.ts → src/platform/iam.ts')
+      expect(found).toContain('not-in-allowed: src/shared/i18n/probe.ts → src/infrastructure/api/iam.ts')
     })
 
     it('a file in no component fails', () => {

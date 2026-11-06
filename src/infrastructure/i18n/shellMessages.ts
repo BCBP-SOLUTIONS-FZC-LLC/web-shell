@@ -1,8 +1,8 @@
 // Registers the shell's text with the SDK's /i18n. Infrastructure: it changes the page's locale, so
-// only the composition root calls it (presentation cannot import platform/).
+// only the composition root calls it (presentation cannot import infrastructure/).
 import { registerNamespace, setLocale } from '@bcbp-solutions-fzc-llc/frontend-sdk/i18n'
-import { catalogueFor } from '../shared/i18n/catalogues'
-import { SHELL_NAMESPACE } from '../shared/i18n'
+import { catalogueFor } from '../../shared/i18n/catalogues'
+import { SHELL_NAMESPACE } from '../../shared/i18n'
 
 /**
  * Registers the `shell` namespace and loads it for `defaultLocale` before the first screen renders:

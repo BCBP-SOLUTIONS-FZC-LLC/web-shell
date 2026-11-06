@@ -32,15 +32,15 @@ import { loadManifest, startVersionPolling } from '@bcbp-solutions-fzc-llc/front
 import { registerNavigator } from '@bcbp-solutions-fzc-llc/frontend-sdk/nav'
 import { installTrustedTypesPolicy } from '@bcbp-solutions-fzc-llc/frontend-sdk/security'
 import { installGlobalErrorHandlers } from '@bcbp-solutions-fzc-llc/frontend-sdk/react'
-import App from './App'
-import type { SignInUseCases } from './application/signIn'
-import { requestPasswordResetUseCase } from './application/use-cases/requestPasswordReset'
-import { resolveWorkspaceUseCase } from './application/use-cases/resolveWorkspace'
-import { loadSessionContextOnce, sessionContextSource, workspaceResolver } from './platform/iam'
-import { passwordResetUrl } from './platform/passwordReset'
-import { localStorageRememberedEmail } from './platform/rememberedEmail'
-import { shellNavigator } from './platform/navigator'
-import { permissions } from './platform/permissions'
+import App from '../routes/App'
+import type { SignInUseCases } from '../../application/signIn'
+import { requestPasswordResetUseCase } from '../../application/use-cases/requestPasswordReset'
+import { resolveWorkspaceUseCase } from '../../application/use-cases/resolveWorkspace'
+import { loadSessionContextOnce, sessionContextSource, workspaceResolver } from '../../infrastructure/api/iam'
+import { passwordResetUrl } from '../../infrastructure/auth/passwordReset'
+import { localStorageRememberedEmail } from '../../infrastructure/storage/rememberedEmail'
+import { shellNavigator } from '../../infrastructure/federation/navigator'
+import { permissions } from '../../domain/rules/permissions'
 import {
   askForWorkspace,
   showDeviceClock,
@@ -48,16 +48,16 @@ import {
   showSignedOut,
   showWorkspaceNotFound,
   showWrongWorkspace,
-} from './platform/SessionScreens'
-import { hideScreen } from './platform/screen'
-import { createStore, isTransient, retrySessionContext } from './platform/sessionContext'
-import { ShellRoot } from './platform/ShellRoot'
-import { registerShellMessages } from './platform/shellMessages'
+} from '../layouts/sessionScreens'
+import { hideScreen } from '../layouts/screen'
+import { createStore, isTransient, retrySessionContext } from '../../application/use-cases/loadSessionContext'
+import { ShellRoot } from '../providers/ShellRoot'
+import { registerShellMessages } from '../../infrastructure/i18n/shellMessages'
 // Self-hosted fonts (Fontsource, SIL OFL 1.1): served from /assets/, as the platform CSP requires
 // (font-src 'self', style-src 'self').
 import '@fontsource-variable/geist'
 import '@fontsource-variable/inter'
-import './index.css'
+import '../../shared/ui/index.css'
 
 /** Where the platform's telemetry goes when the runtime config could not be read (its default). */
 const DEFAULT_OTLP_BASE_URL = '/otel'

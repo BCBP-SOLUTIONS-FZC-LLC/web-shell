@@ -1,10 +1,10 @@
 import { act, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { localStorageRememberedEmail as remembered } from '../../src/platform/rememberedEmail'
+import { localStorageRememberedEmail as remembered } from '../../src/infrastructure/storage/rememberedEmail'
 import { hasPermission, roleMapAuthorizer, setAuthorizer, setAuthzSubject } from '@bcbp-solutions-fzc-llc/frontend-sdk/authz'
 import { createTestPlatform } from '@bcbp-solutions-fzc-llc/frontend-sdk/testing'
-import { IAM_ROLES, permissions } from '../../src/platform/permissions'
-import { hideScreen, resetScreen, showScreen } from '../../src/platform/screen'
+import { IAM_ROLES, permissions } from '../../src/domain/rules/permissions'
+import { hideScreen, resetScreen, showScreen } from '../../src/app/layouts/screen'
 
 describe('localStorageRememberedEmail (the RememberedEmailRepository)', () => {
   it('round-trips and clears', () => {

@@ -1,12 +1,12 @@
-// The shell's session screens (SDK design doc §C1 /auth, §C2 step 7). None of them signs in on its
-// own: every login starts from the user's click.
+// The shell's session screens (SDK design doc §C1 /auth, §C2 step 7), as components: what each one
+// shows and which callback a click calls. None of them signs in on its own: every login starts from
+// the user's click. app/layouts/sessionScreens.tsx mounts them over the page.
 import { useEffect, useRef, type ReactNode } from 'react'
-import type { IdentityProvider, SessionState, Workspace } from '@bcbp-solutions-fzc-llc/frontend-sdk/auth'
-import type { SignInUseCases } from '../application/signIn'
-import { WorkspaceNotFoundError } from '../domain/errors'
-import LoginPage from '../pages/LoginPage'
-import { shellText, useShellText, type ShellKey } from '../shared/i18n'
-import { hideScreen, showScreen } from './screen'
+import type { SessionState, Workspace } from '@bcbp-solutions-fzc-llc/frontend-sdk/auth'
+import type { SignInUseCases } from '../../../application/signIn'
+import { WorkspaceNotFoundError } from '../../../domain/errors'
+import LoginPage from '../../pages/login/LoginPage'
+import { shellText, useShellText, type ShellKey } from '../../../shared/i18n'
 
 /** Generic on purpose: never says whether the email or the workspace was the problem. */
 export const WORKSPACE_NOT_FOUND: ShellKey = 'login.workspaceNotFound'
@@ -75,78 +75,67 @@ async function withPageMessage<T>(work: Promise<T>, otherwise: ShellKey): Promis
 
 /**
  * The email-first sign-in screen. Calls the sign-in use cases (application layer) it is given: it
- * reaches no API, storage or browser navigation itself.
+ * reaches no API, storage or browser navigation itself. `onChosen` gets the workspace and the email.
  */
-export function askForWorkspace(useCases: SignInUseCases, notice?: ShellKey): Promise<SignInChoice> {
-  return new Promise((resolve) => {
-    showScreen(
-      <LoginPage
-        notice={notice ?? null}
-        rememberedEmail={useCases.rememberedEmail}
-        onContinue={async (email) => {
-          resolve({ workspace: await withPageMessage(useCases.resolveWorkspace(email), 'login.error.signIn'), loginHint: email })
-        }}
-        onForgotPassword={(email) => withPageMessage(useCases.requestPasswordReset(email), 'login.error.passwordReset')}
-      />,
-    )
-  })
+export function SignInScreen({ useCases, notice, onChosen }: { useCases: SignInUseCases; notice?: ShellKey | undefined; onChosen: (choice: SignInChoice) => void }) {
+  return (
+    <LoginPage
+      notice={notice ?? null}
+      rememberedEmail={useCases.rememberedEmail}
+      onContinue={async (email) => {
+        onChosen({ workspace: await withPageMessage(useCases.resolveWorkspace(email), 'login.error.signIn'), loginHint: email })
+      }}
+      onForgotPassword={(email) => withPageMessage(useCases.requestPasswordReset(email), 'login.error.passwordReset')}
+    />
+  )
 }
 
-export function showWorkspaceNotFound(): void {
-  showScreen(
+export function WorkspaceNotFoundDialog({ onClose }: { onClose: () => void }) {
+  return (
     <Dialog title="session.workspaceNotFound.title" role="alertdialog">
       <Text id="session.workspaceNotFound.text" />
-      <Button onClick={hideScreen} label="common.ok" />
-    </Dialog>,
+      <Button onClick={onClose} label="common.ok" />
+    </Dialog>
   )
 }
 
 /** After a logout: never sign in automatically, or the live SSO session would undo the logout. */
-export function showSignedOut(signIn: () => Promise<void>): void {
-  showScreen(
+export function SignedOutDialog({ onSignIn }: { onSignIn: () => void }) {
+  return (
     <Dialog title="session.signedOut.title">
-      <Button onClick={() => void signIn()} label="common.signIn" />
-    </Dialog>,
+      <Button onClick={onSignIn} label="common.signIn" />
+    </Dialog>
   )
 }
 
 /** Sign-in refused because the device clock is far off: another attempt would fail the same way. */
-export function showDeviceClock(signIn: () => Promise<void>): void {
-  showScreen(
+export function DeviceClockDialog({ onRetry }: { onRetry: () => void }) {
+  return (
     <Dialog title="session.deviceClock.title" role="alertdialog">
       <Text id="session.deviceClock.text" />
-      <Button onClick={() => void signIn()} label="common.tryAgain" />
-    </Dialog>,
+      <Button onClick={onRetry} label="common.tryAgain" />
+    </Dialog>
   )
 }
 
 /** Expired during use. serverEnded covers a trial → paid move ("your workspace has moved"). */
-export function showSessionEnded(s: Extract<SessionState, { status: 'expired' }>, signIn: () => Promise<void>): void {
-  const text: ShellKey = s.serverEnded ? 'session.ended.serverEnded' : s.idle ? 'session.ended.idle' : 'session.ended.default'
-  showScreen(
+export function SessionEndedDialog({ state, onSignIn }: { state: Extract<SessionState, { status: 'expired' }>; onSignIn: () => void }) {
+  const text: ShellKey = state.serverEnded ? 'session.ended.serverEnded' : state.idle ? 'session.ended.idle' : 'session.ended.default'
+  return (
     <Dialog title="session.ended.title" role="alertdialog">
       <Text id={text} />
-      <Button
-        onClick={() => {
-          hideScreen()
-          void signIn()
-        }}
-        label="common.signIn"
-      />
-    </Dialog>,
+      <Button onClick={onSignIn} label="common.signIn" />
+    </Dialog>
   )
 }
 
 /** A trial login that landed in another tenant than the invitation's: never cached, app not rendered. */
-export function showWrongWorkspace(idp: IdentityProvider, useCases: SignInUseCases): void {
-  showScreen(
+export function WrongWorkspaceDialog({ onSignOut, onSwitch }: { onSignOut: () => void; onSwitch: () => void }) {
+  return (
     <Dialog title="session.wrongWorkspace.title" role="alertdialog">
       <Text id="session.wrongWorkspace.text" />
-      <Button onClick={() => void idp.logout()} label="common.signOut" />
-      <Button
-        onClick={() => void askForWorkspace(useCases).then(({ workspace }) => idp.switchWorkspace(workspace))}
-        label="session.wrongWorkspace.switch"
-      />
-    </Dialog>,
+      <Button onClick={onSignOut} label="common.signOut" />
+      <Button onClick={onSwitch} label="session.wrongWorkspace.switch" />
+    </Dialog>
   )
 }

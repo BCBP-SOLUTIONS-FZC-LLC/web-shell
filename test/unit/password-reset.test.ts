@@ -3,7 +3,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { getConfig } from '@bcbp-solutions-fzc-llc/frontend-sdk/config'
 import { createTestPlatform } from '@bcbp-solutions-fzc-llc/frontend-sdk/testing'
-import { passwordResetUrl } from '../../src/platform/passwordReset'
+import { passwordResetUrl } from '../../src/infrastructure/auth/passwordReset'
 
 let platform: ReturnType<typeof createTestPlatform> | undefined
 afterEach(() => platform?.reset())

@@ -1,7 +1,7 @@
 // The shell's user-facing text: the `shell` namespace of the SDK's /i18n (the platform's localisation
 // framework; constitution assessment V4, ADR 0005). Presentation reaches the SDK's i18n runtime only
 // through this module, which offers text lookup and nothing else. The composition root registers the
-// catalogue (platform/shellMessages.ts).
+// catalogue (infrastructure/i18n/shellMessages.ts).
 import { t } from '@bcbp-solutions-fzc-llc/frontend-sdk/i18n'
 import { useT } from '@bcbp-solutions-fzc-llc/frontend-sdk/react'
 import type en from './en.json'

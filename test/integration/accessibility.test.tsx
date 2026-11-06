@@ -6,13 +6,13 @@ import userEvent from '@testing-library/user-event'
 import axe from 'axe-core'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { IdentityProvider } from '@bcbp-solutions-fzc-llc/frontend-sdk/auth'
-import LoginPage from '../../src/pages/LoginPage'
-import { localStorageRememberedEmail as remembered } from '../../src/platform/rememberedEmail'
+import LoginPage from '../../src/presentation/pages/login/LoginPage'
+import { localStorageRememberedEmail as remembered } from '../../src/infrastructure/storage/rememberedEmail'
 import { resolveWorkspaceUseCase } from '../../src/application/use-cases/resolveWorkspace'
 import { requestPasswordResetUseCase } from '../../src/application/use-cases/requestPasswordReset'
 import en from '../../src/shared/i18n/en.json'
 
-const screens = await import('../../src/platform/SessionScreens')
+const screens = await import('../../src/app/layouts/sessionScreens')
 // Sign-in use cases over a resolver that finds nothing, as the screens get them from the bootstrap.
 const resolveWorkspace = resolveWorkspaceUseCase({ resolve: async () => undefined })
 const useCases = {
@@ -20,7 +20,7 @@ const useCases = {
   requestPasswordReset: requestPasswordResetUseCase({ resolveWorkspace, resetUrl: () => '', open: () => {} }),
   rememberedEmail: remembered,
 }
-const { resetScreen } = await import('../../src/platform/screen')
+const { resetScreen } = await import('../../src/app/layouts/screen')
 
 async function violations(): Promise<string[]> {
   const result = await axe.run(document.body, { rules: { 'color-contrast': { enabled: false } } })
@@ -68,7 +68,7 @@ describe('accessibility (axe)', () => {
     const app = document.createElement('div')
     app.id = 'app'
     document.body.append(app)
-    const { showUnavailable } = await import('../../src/index')
+    const { showUnavailable } = await import('../../src/app/bootstrap/index')
     showUnavailable(new Error('x'))
     expect(await violations()).toEqual([])
   })

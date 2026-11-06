@@ -20,7 +20,7 @@ vi.mock('@bcbp-solutions-fzc-llc/frontend-sdk/react', async (original) => ({
   },
 }))
 
-const { default: App, DASHBOARD_REMOTE } = await import('../../src/App')
+const { default: App, DASHBOARD_REMOTE } = await import('../../src/app/routes/App')
 
 describe('App', () => {
   it('renders the dashboard remote under the workspace basename, with no props', () => {

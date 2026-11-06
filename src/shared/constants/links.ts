@@ -1,7 +1,7 @@
 // The login page's help and legal links, in one place. A link without an `href` is not rendered, so
 // the page never shows a dead link. Set each to the official URL once it is published (none exists on
 // bcbpsolutions.com yet; checked 2026-11-04). Labels are keys of the shell's catalogue.
-import type { ShellKey } from '../shared/i18n'
+import type { ShellKey } from '../i18n'
 
 export interface PageLink {
   readonly label: ShellKey

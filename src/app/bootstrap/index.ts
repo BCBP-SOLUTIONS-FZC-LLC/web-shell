@@ -2,7 +2,7 @@
 // Identity and runtime config are fatal: without them the page shows a static message. That page
 // cannot use the SDK (it is shown when the SDK itself may have failed to load, and nothing shared may
 // be imported before the async boundary), so it reads the default catalogue directly.
-import en from './shared/i18n/en.json'
+import en from '../../shared/i18n/en.json'
 
 export function showUnavailable(error: unknown): void {
   console.error('the app could not start', error)

@@ -1,8 +1,8 @@
-// The login page's help and legal links (src/pages/links.ts): a link renders only with a URL, and
+// The login page's help and legal links (src/shared/constants/links.ts): a link renders only with a URL, and
 // opens in a new tab without giving the page a handle on the opener.
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
-import { HELP_LINK, LEGAL_LINKS, published } from '../../src/pages/links'
+import { HELP_LINK, LEGAL_LINKS, published } from '../../src/shared/constants/links'
 
 describe('published', () => {
   it('keeps only links that have a URL', () => {
@@ -19,8 +19,8 @@ describe('published', () => {
 describe('the link components, once URLs are set', () => {
   it('render the help link and the footer, with separators, in a new tab', async () => {
     vi.resetModules()
-    vi.doMock('../../src/pages/links', async (orig) => ({
-      ...(await orig<typeof import('../../src/pages/links')>()),
+    vi.doMock('../../src/shared/constants/links', async (orig) => ({
+      ...(await orig<typeof import('../../src/shared/constants/links')>()),
       HELP_LINK: { label: 'links.help', href: 'https://help.test/' },
       LEGAL_LINKS: [
         { label: 'links.privacy', href: 'https://legal.test/privacy' },
@@ -28,7 +28,7 @@ describe('the link components, once URLs are set', () => {
         { label: 'links.trust' },
       ],
     }))
-    const { HelpLink, LegalFooter } = await import('../../src/pages/PageLinks')
+    const { HelpLink, LegalFooter } = await import('../../src/presentation/components/PageLinks')
     render(
       <>
         <HelpLink className="h" />
@@ -41,6 +41,6 @@ describe('the link components, once URLs are set', () => {
     expect(help).toHaveAttribute('target', '_blank')
     expect(screen.getAllByRole('link').map((a) => a.textContent)).toEqual(['Trouble logging in?', 'Privacy Policy', 'Terms of Service'])
     expect(screen.getByRole('contentinfo').textContent).toBe('Privacy Policy|Terms of Service')
-    vi.doUnmock('../../src/pages/links')
+    vi.doUnmock('../../src/shared/constants/links')
   })
 })

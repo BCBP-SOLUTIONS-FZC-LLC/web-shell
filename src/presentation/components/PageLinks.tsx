@@ -1,5 +1,5 @@
-import { useShellText } from '../shared/i18n'
-import { HELP_LINK, LEGAL_LINKS, published } from './links'
+import { useShellText } from '../../shared/i18n'
+import { HELP_LINK, LEGAL_LINKS, published } from '../../shared/constants/links'
 
 /** "Trouble logging in?", when its URL is set. */
 export function HelpLink({ className }: { className: string }) {

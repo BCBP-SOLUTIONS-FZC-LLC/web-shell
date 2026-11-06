@@ -43,24 +43,34 @@ Local ports: shell **5001**, Keycloak **8080**, dashboard **5002**. The producti
 
 ## Project layout
 
+`src/` follows the Frontend Architecture Constitution's structure: presentation → application → domain; infrastructure implements domain contracts; `app/` is the composition root.
+
 ```
 src/
-  index.ts               ← Async boundary; "unavailable" message on a fatal start-up error
-  bootstrap.tsx          ← SDK start-up sequence, session handling, render
-  App.tsx                ← Signed-in routes, dashboard RemoteBoundary
-  platform/
-    iam.ts               ← PUB-1 resolver and P-35 session context (the SDK's /auth ports)
-    SessionScreens.tsx   ← Email sign-in, signed out, session ended, device clock, wrong workspace
-    screen.tsx           ← Full-screen host for those screens
-    permissions.ts       ← Role → UI permission map
-    rememberedEmail.ts   ← "Remember Email" in localStorage (implements the domain repository; the one raw-storage file)
-    passwordReset.ts     ← Keycloak reset-credentials URL for a workspace
-  application/           ← Use cases (no React, no browser APIs): resolveWorkspace, requestPasswordReset; signIn.ts
-  domain/                ← Contracts and errors: RememberedEmailRepository, WorkspaceNotFoundError
-  shared/i18n/           ← The shell's text: en.json (keys → English), catalogues.ts, useShellText, shellText
-  pages/                 ← Login layout and useEmailSignIn (the remembered-email repository is passed in)
-  components/            ← Shell-owned UI (BrandLogo)
-  globals.d.ts           ← __ENVIRONMENT__, __BUILD_VERSION__
+  app/
+    bootstrap/index.ts   ← Async boundary (Rsbuild's entry); "unavailable" message on a fatal start-up error
+    bootstrap/bootstrap.tsx ← Composition root: SDK start-up sequence, session handling, wiring, render
+    providers/ShellRoot.tsx ← PlatformProvider with the live session context
+    routes/App.tsx       ← Signed-in routes, dashboard RemoteBoundary, widgets with the SDK's state
+    layouts/             ← screen.tsx (full-screen host), sessionScreens.tsx (mounts the session screens)
+  presentation/
+    pages/login/         ← LoginPage, useEmailSignIn (the remembered-email repository is passed in)
+    features/session-screens/ ← Email sign-in, signed out, session ended, device clock, wrong workspace (components)
+    components/          ← BrandLogo, PageLinks
+    widgets/             ← Update notice, missing-permissions notice (state passed in)
+  application/           ← Use cases (no React, no browser APIs): resolveWorkspace, requestPasswordReset, loadSessionContext; signIn.ts
+  domain/                ← Contracts, errors, rules: RememberedEmailRepository, WorkspaceNotFoundError, permissions (role map)
+  infrastructure/
+    api/iam.ts           ← PUB-1 resolver and P-35 session context (the SDK's /auth ports)
+    auth/passwordReset.ts ← Keycloak reset-credentials URL for a workspace
+    storage/rememberedEmail.ts ← "Remember Email" in localStorage (the one raw-storage file)
+    federation/navigator.ts ← The router as the SDK's navigate() target
+    i18n/shellMessages.ts ← Registers the shell's text before any screen
+  shared/
+    i18n/                ← The shell's text: en.json (keys → English), catalogues.ts, useShellText, shellText
+    constants/links.ts   ← Help and legal links (shown only with an official URL)
+    ui/                  ← Images, theme, index.css
+    types/globals.d.ts   ← __ENVIRONMENT__, __BUILD_VERSION__
 rsbuild.config.ts       ← Platform plugin, React, Tailwind, dev server
 config/                  ← Dev only: runtime.local.json, remotes.local.json, dev-platform.mjs
 public/config/runtime.json  ← Runtime config the image ships (production defaults)
@@ -91,7 +101,7 @@ docs/lld/web-shell-lld.md ← Low-level design (the contract)
 
 ### Adding a route
 
-1. Add the route in `src/App.tsx` inside the existing `BrowserRouter`. It renders only for a signed-in user, under the `/t/<slug>` basename.
+1. Add the route in `src/app/routes/App.tsx` inside the existing `BrowserRouter`. It renders only for a signed-in user, under the `/t/<slug>` basename.
 2. Keep unknown paths on the catch-all redirect to `/dashboard` unless the new route is part of the public contract.
 3. Call `useRouteTemplate('/t/:slug/…')` in the route's component so telemetry groups by template.
 4. Add a test in `test/integration/app.test.tsx` that visits the path.
@@ -100,7 +110,7 @@ docs/lld/web-shell-lld.md ← Low-level design (the contract)
 ### Changing sign-in or session behaviour
 
 1. PKCE, tokens, refresh, idle timeout and cross-tab sign-out belong to the SDK (`@bcbp-solutions-fzc-llc/frontend-sdk/auth`). Change them in `platform-reactcommon`, not here.
-2. The shell's part is `src/bootstrap.tsx` (which screen, when to call `idp.login`), the screens in `src/platform/SessionScreens.tsx`, and the IAM ports in `src/platform/iam.ts`.
+2. The shell's part is `src/app/bootstrap/bootstrap.tsx` (which screen, when to call `idp.login`), the screens in `src/presentation/features/session-screens/` (mounted by `src/app/layouts/sessionScreens.tsx`), and the IAM ports in `src/infrastructure/api/iam.ts`.
 3. No screen may sign in without a click after a logout, an expiry or a device-clock refusal.
 4. Cover a new branch in `test/integration/bootstrap.test.tsx` (SDK subpaths are fakes there) or `test/integration/session-screens.test.tsx`. A change the user sees in the sign-in or sign-out flow also gets a case in `test/e2e/shell.test.tsx`, which runs the real SDK.
 5. Update LLD §5–§6 and `.claude/request-flows.md`.
@@ -110,12 +120,12 @@ docs/lld/web-shell-lld.md ← Low-level design (the contract)
 1. Add the remote to `config/remotes.local.json` for development. Each environment's `/remotes/manifest.json` comes from the deploy pipeline.
 2. Render it with `<RemoteBoundary remote="<name>" module="./<Module>" props={…} />`. The remote must be built with `@bcbp-solutions-fzc-llc/webpack-preset` (`role: 'remote'`).
 3. The shared map comes from the preset; do not add entries in `rsbuild.config.ts`. Bumping the SDK raises the version remotes require; see [VERSIONING.md](./VERSIONING.md).
-4. `dashboard` `./App` gets no props (`src/App.tsx`). Data a remote needs from the shell goes into the `PlatformProvider` shell value and is read through SDK hooks, never props. Update the federation table in `README.md`.
+4. `dashboard` `./App` gets no props (`src/app/routes/App.tsx`). Data a remote needs from the shell goes into the `PlatformProvider` shell value and is read through SDK hooks, never props. Update the federation table in `README.md`.
 
 ### Adding a runtime config key or a build constant
 
 1. Runtime settings live in `/config/runtime.json` and are validated by the SDK, which rejects unknown keys. A new key is an SDK schema change; add it there first, then to `public/config/runtime.json` and `config/runtime.local.json`.
-2. A build-time constant goes in `rsbuild.config.ts` `source.define`, `src/globals.d.ts`, and `vitest.config.ts` `define`. If the image needs it, add a Dockerfile `ARG` and pass it from the workflows' `build-args`.
+2. A build-time constant goes in `rsbuild.config.ts` `source.define`, `src/shared/types/globals.d.ts`, and `vitest.config.ts` `define`. If the image needs it, add a Dockerfile `ARG` and pass it from the workflows' `build-args`.
 3. Add a row to the configuration tables in `README.md`.
 4. Runtime config is served to every browser. Do not put secrets in it.
 
@@ -179,26 +189,29 @@ The text report prints uncovered lines. Cover the branch you changed. The gate i
 
 ## Lint and typecheck
 
-`npm run lint` runs ESLint with typescript-eslint, the React hooks rules, and `@bcbp-solutions-fzc-llc/eslint-plugin`'s recommended rules on `src/`: SDK imports through public subpaths only, no identity headers, no raw `window.localStorage` / `sessionStorage`, no unsafe HTML, API route templates. It also enforces the layer rules (`eslint.config.js`, proven by `test/unit/layer-rules.test.ts`): `domain/` imports no React, SDK runtime, other layer or browser global; `application/` no React, presentation, infrastructure, SDK runtime or browser global; `pages/` and `components/` nothing from `platform/` or the SDK; `platform/SessionScreens.tsx` no other infrastructure module and only `/auth` types from the SDK. Presentation never uses `fetch`, `XMLHttpRequest`, storage, IndexedDB, `location`, `history`, `navigator` or `open`, bare or through `window`, `globalThis`, `self` or `document.location`. A use case needs something from outside: the bootstrap injects it. `validate-quality` runs it with `--max-warnings 0`, then `npm run arch-lint` and `npm run typecheck`.
+`npm run lint` runs ESLint with typescript-eslint, the React hooks rules, and `@bcbp-solutions-fzc-llc/eslint-plugin`'s recommended rules on `src/`: SDK imports through public subpaths only, no identity headers, no raw `window.localStorage` / `sessionStorage`, no unsafe HTML, API route templates. It also enforces the layer rules (`eslint.config.js`, proven by `test/unit/layer-rules.test.ts`): `domain/` imports no React, SDK runtime, other layer or browser global; `application/` no React, presentation, infrastructure, `app/`, SDK runtime (except the `/problem` error classes) or browser global; `infrastructure/` no presentation, application or `app/`; `presentation/` nothing from `infrastructure/`, `app/` or the SDK, except `/auth` types in `presentation/features/`. Presentation never uses `fetch`, `XMLHttpRequest`, storage, IndexedDB, `location`, `history`, `navigator` or `open`, bare or through `window`, `globalThis`, `self` or `document.location`. A use case needs something from outside: the bootstrap injects it. `validate-quality` runs it with `--max-warnings 0`, then `npm run arch-lint` and `npm run typecheck`.
 
 ### Architecture lint
 
-`npm run arch-lint` is the shell's counterpart of the IAM services' `go-arch-lint`. `.dependency-cruiser.cjs` declares the **components** (where each lives) and the **deps** (`mayDependOn` other components, `vendors` packages, `typeOnlyVendors` for SDK port types), and dependency-cruiser checks every import in `src/` in allowed mode: an undeclared dependency fails, and so does a file in no component, a cycle or an unresolvable import.
+`npm run arch-lint` is the shell's counterpart of the IAM services' `go-arch-lint`. `.dependency-cruiser.cjs` declares the **components** (where each lives) and the **deps** (`mayDependOn` other components, `typeOnlyDependOn` for types only, `vendors` packages, `typeOnlyVendors` for SDK port types), and dependency-cruiser checks every import in `src/` in allowed mode: an undeclared dependency fails, and so does a file in no component, a cycle or an unresolvable import.
 
 | Component | In | May depend on |
 |---|---|---|
 | `domain` | `src/domain/` | SDK types only |
-| `application` | `src/application/` | `domain`; SDK types only |
+| `application` | `src/application/` | `domain`; SDK types and `/problem` errors |
+| `infrastructure` | `src/infrastructure/` | `domain`, `i18n`; the SDK |
 | `i18n` | `src/shared/i18n/` | SDK `/i18n`, `/react` |
-| `assets` | `src/assets/`, `index.css`, `theme/` | — |
-| `components` | `src/components/` | `assets` |
-| `pages` | `src/pages/` | `components`, `assets`, `i18n`, `domain`, `application`; React |
-| `screen_host` | `platform/screen.tsx` | React |
-| `session_screens` | `platform/SessionScreens.tsx` | `pages`, `screen_host`, `i18n`, `domain`, `application`; React; SDK `/auth` types only |
-| `infrastructure` | the other `platform/` modules | `domain`, `i18n`; React, the SDK |
-| `routes` | `App.tsx` | `i18n`; React, React Router, SDK `/react` |
-| `composition_root` | `bootstrap.tsx` | everything |
-| `entry` | `index.ts` | `composition_root` (dynamic), `i18n` (`en.json`) |
+| `constants` | `src/shared/constants/` | `i18n` |
+| `ui_assets` | `src/shared/ui/` | — |
+| `components` | `src/presentation/components/` | `ui_assets`, `i18n`, `constants`; React |
+| `widgets` | `src/presentation/widgets/` | `i18n`; React |
+| `pages` | `src/presentation/pages/` | `components`, `ui_assets`, `i18n`, `constants`, `domain`; `application` types only; React |
+| `features` | `src/presentation/features/` | `pages`, `components`, `i18n`, `domain`; `application` types only; React; SDK `/auth` types only |
+| `layouts` | `src/app/layouts/` | `features`, `i18n`, `application`; React; SDK `/auth` types |
+| `providers` | `src/app/providers/` | `application`; React, SDK `/react`; SDK `/auth` types |
+| `routes` | `src/app/routes/` | `widgets`, `i18n`; React, React Router, SDK `/react` |
+| `bootstrap` | `src/app/bootstrap/bootstrap.tsx` | everything |
+| `entry` | `src/app/bootstrap/index.ts` | `bootstrap` (dynamic), `i18n` (`en.json`) |
 
 A new folder or module: add it to a component (or a new one, with its deps) in the same PR; keep this table and ARCHITECTURE's in step. `test/unit/arch-lint.test.ts` proves each rule fires on probe files. ESLint keeps the per-layer import rules for editor feedback, and owns what a dependency graph cannot see (browser globals).
 
@@ -221,8 +234,8 @@ A new folder or module: add it to a component (or a new one, with its deps) in t
 | What changed | Documents to update |
 |---|---|
 | Route, sign-in step, or storage key | `README.md` (routes, sign-in, storage table), `docs/lld/web-shell-lld.md` (§5, §6, §9.3), `.claude/request-flows.md` |
-| Remote, `dashboard` props, or SDK version | `src/App.tsx`, `config/remotes.local.json`, `README.md` federation table, `VERSIONING.md` when the bump class changes |
-| Runtime config key or build constant | `public/config/runtime.json`, `config/runtime.local.json`, `src/globals.d.ts`, `README.md` configuration tables, Dockerfile `ARG` and the workflow build-args when the image must bake it |
+| Remote, `dashboard` props, or SDK version | `src/app/routes/App.tsx`, `config/remotes.local.json`, `README.md` federation table, `VERSIONING.md` when the bump class changes |
+| Runtime config key or build constant | `public/config/runtime.json`, `config/runtime.local.json`, `src/shared/types/globals.d.ts`, `README.md` configuration tables, Dockerfile `ARG` and the workflow build-args when the image must bake it |
 | nginx path or listen port | `nginx/default.conf`, `test/smoke/deployment.test.ts`, `README.md` nginx table, LLD §10.1, `.claude/architecture.md`, PR deployment notes |
 | SDK version | `package.json` (all three, exact), README, ARCHITECTURE, VERSIONING, LLD header, `.claude/CLAUDE.md`, CHANGELOG (`.claude/operations.md` checklist) |
 | A diagram | `docs/architecture/mermaid/*.mmd` and the identical block in `ARCHITECTURE.md` (`node .claude/hooks/check-diagrams.mjs`) |

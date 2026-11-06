@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
-import { BrandLogo } from '../../src/components/BrandLogo'
+import { BrandLogo } from '../../src/presentation/components/BrandLogo'
 
 describe('BrandLogo', () => {
   it('renders the cube mark at the default size', () => {

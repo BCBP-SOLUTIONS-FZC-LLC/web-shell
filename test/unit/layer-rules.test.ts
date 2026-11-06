@@ -23,7 +23,7 @@ describe('domain (src/domain/): framework-free and browser-free', () => {
       'src/domain/probe.ts',
       `import { useState } from 'react'
        import { createApiClient } from '@bcbp-solutions-fzc-llc/frontend-sdk/http'
-       import { workspaceResolver } from '../platform/iam'
+       import { workspaceResolver } from '../infrastructure/api/iam'
        export const x = [useState, createApiClient, workspaceResolver, localStorage.getItem('k'), window.location.href]`,
     )
     expect(found).toEqual([
@@ -52,8 +52,8 @@ describe('application (src/application/): no React, no browser, infrastructure i
     const found = await violations(
       'src/application/use-cases/probe.ts',
       `import { useEffect } from 'react'
-       import LoginPage from '../../pages/LoginPage'
-       import { passwordResetUrl } from '../../platform/passwordReset'
+       import LoginPage from '../../presentation/pages/login/LoginPage'
+       import { passwordResetUrl } from '../../infrastructure/auth/passwordReset'
        import { getConfig } from '@bcbp-solutions-fzc-llc/frontend-sdk/config'
        export const x = [useEffect, LoginPage, passwordResetUrl, getConfig, fetch('/api')]`,
     )
@@ -66,55 +66,64 @@ describe('application (src/application/): no React, no browser, infrastructure i
     ])
   })
 
-  it('allows domain imports and SDK types', async () => {
+  it('allows domain imports, SDK types and the /problem error classes', async () => {
     expect(
       await violations(
         'src/application/use-cases/probe.ts',
-        `import type { WorkspaceResolver } from '@bcbp-solutions-fzc-llc/frontend-sdk/auth'\nimport { WorkspaceNotFoundError } from '../../domain/errors'\nexport const f = (r: WorkspaceResolver) => [r, WorkspaceNotFoundError]`,
+        `import type { WorkspaceResolver } from '@bcbp-solutions-fzc-llc/frontend-sdk/auth'\nimport { NetworkError } from '@bcbp-solutions-fzc-llc/frontend-sdk/problem'\nimport { WorkspaceNotFoundError } from '../../domain/errors'\nexport const f = (r: WorkspaceResolver) => [r, NetworkError, WorkspaceNotFoundError]`,
       ),
     ).toEqual([])
   })
 })
 
-describe('pages and components: never platform/ or the SDK; no network, storage or navigation', () => {
+describe('pages, components and widgets: never infrastructure, app/ or the SDK; no network, storage or navigation', () => {
   it('refuses infrastructure, the SDK (even /react), the network, storage and navigation', async () => {
     const found = await violations(
-      'src/pages/Probe.tsx',
-      `import { localStorageRememberedEmail } from '../platform/rememberedEmail'
-       import { can } from '../platform/permissions'
+      'src/presentation/pages/login/Probe.tsx',
+      `import { localStorageRememberedEmail } from '../../../infrastructure/storage/rememberedEmail'
+       import { showScreen } from '../../../app/layouts/screen'
        import { useSignOut } from '@bcbp-solutions-fzc-llc/frontend-sdk/react'
        import { signInAgain } from '@bcbp-solutions-fzc-llc/frontend-sdk/auth'
-       export const x = [localStorageRememberedEmail, can, useSignOut, signInAgain, fetch('/api'), sessionStorage,
+       export const x = [localStorageRememberedEmail, showScreen, useSignOut, signInAgain, fetch('/api'), sessionStorage,
          window.location.assign('/'), window.XMLHttpRequest, globalThis.fetch, self.localStorage, history.pushState, document.location, navigator.sendBeacon]`,
     )
     expect(found).toEqual([
-      expect.stringContaining('never import platform/'),
-      expect.stringContaining('never import platform/'),
+      expect.stringContaining('never imports infrastructure or app/'),
+      expect.stringContaining('never imports infrastructure or app/'),
       expect.stringContaining('never import the SDK'),
       expect.stringContaining('never import the SDK'),
       ...Array(9).fill(expect.stringContaining('call a use case')),
     ])
   })
 
-  it('allows domain and application types, and other pages', async () => {
+  it('covers any presentation folder, and allows application/ types only', async () => {
+    const found = await violations(
+      'src/presentation/hooks/probe.ts',
+      `import { resolveWorkspaceUseCase } from '../../application/use-cases/resolveWorkspace'
+       export const x = [resolveWorkspaceUseCase, fetch('/api')]`,
+    )
+    expect(found).toEqual([expect.stringContaining('application/ types only'), expect.stringContaining('call a use case')])
+  })
+
+  it('allows domain and application types, shared/ and other presentation', async () => {
     expect(
       await violations(
-        'src/components/Probe.tsx',
-        `import type { RememberedEmailRepository } from '../domain/repositories/rememberedEmail'\nimport type { SignInUseCases } from '../application/signIn'\nimport { published } from '../pages/links'\nexport type T = [RememberedEmailRepository, SignInUseCases, typeof published]`,
+        'src/presentation/widgets/Probe.tsx',
+        `import type { RememberedEmailRepository } from '../../domain/repositories/rememberedEmail'\nimport type { SignInUseCases } from '../../application/signIn'\nimport { published } from '../../shared/constants/links'\nimport { BrandLogo } from '../components/BrandLogo'\nexport type T = [RememberedEmailRepository, SignInUseCases, typeof published, typeof BrandLogo]`,
       ),
     ).toEqual([])
   })
 })
 
-describe('the session screens (platform/SessionScreens.tsx): presentation next to infrastructure', () => {
+describe('features (the session screens): /auth types only, never infrastructure or app/', () => {
   it('refuses the infrastructure beside them, /auth values and other SDK subpaths', async () => {
     const found = await violations(
-      'src/platform/SessionScreens.tsx',
-      `import { workspaceResolver } from './iam'
-       import { can } from './permissions'
+      'src/presentation/features/session-screens/SessionScreens.tsx',
+      `import { workspaceResolver } from '../../../infrastructure/api/iam'
+       import { showScreen } from '../../../app/layouts/screen'
        import { signInAgain } from '@bcbp-solutions-fzc-llc/frontend-sdk/auth'
        import { useT } from '@bcbp-solutions-fzc-llc/frontend-sdk/react'
-       export const r = [workspaceResolver, can, signInAgain, useT, window.location]`,
+       export const r = [workspaceResolver, showScreen, signInAgain, useT, window.location]`,
     )
     expect(found).toEqual([
       expect.stringContaining('not infrastructure'),
@@ -125,11 +134,11 @@ describe('the session screens (platform/SessionScreens.tsx): presentation next t
     ])
   })
 
-  it('allows /auth types, the screen host, the pages and the use cases', async () => {
+  it('allows /auth types, the pages and the use cases', async () => {
     expect(
       await violations(
-        'src/platform/SessionScreens.tsx',
-        `import type { SessionState } from '@bcbp-solutions-fzc-llc/frontend-sdk/auth'\nimport { showScreen } from './screen'\nimport LoginPage from '../pages/LoginPage'\nimport type { SignInUseCases } from '../application/signIn'\nexport type T = [SessionState, typeof showScreen, typeof LoginPage, SignInUseCases]`,
+        'src/presentation/features/session-screens/SessionScreens.tsx',
+        `import type { SessionState } from '@bcbp-solutions-fzc-llc/frontend-sdk/auth'\nimport LoginPage from '../../pages/login/LoginPage'\nimport type { SignInUseCases } from '../../../application/signIn'\nexport type T = [SessionState, typeof LoginPage, SignInUseCases]`,
       ),
     ).toEqual([])
   })
@@ -139,7 +148,7 @@ describe('shared (src/shared/): no shell layer; the SDK for text only', () => {
   it('refuses shell layers, other SDK subpaths and the browser', async () => {
     const found = await violations(
       'src/shared/i18n/probe.ts',
-      `import { workspaceResolver } from '../../platform/iam'
+      `import { workspaceResolver } from '../../infrastructure/api/iam'
        import { createApiClient } from '@bcbp-solutions-fzc-llc/frontend-sdk/http'
        export const x = [workspaceResolver, createApiClient, localStorage]`,
     )
@@ -155,9 +164,25 @@ describe('shared (src/shared/): no shell layer; the SDK for text only', () => {
   })
 })
 
-describe('infrastructure and the composition root are not restricted by these rules', () => {
-  it('platform/ may use storage and the SDK runtime; bootstrap.tsx wires everything', async () => {
-    expect(await violations('src/platform/probe.ts', `import { createApiClient } from '@bcbp-solutions-fzc-llc/frontend-sdk/http'\nexport const c = createApiClient`)).toEqual([])
-    expect(await violations('src/bootstrap.tsx', `import { workspaceResolver } from './platform/iam'\nexport const r = workspaceResolver`)).toEqual([])
+describe('infrastructure (src/infrastructure/): implements domain contracts', () => {
+  it('refuses presentation, application and app/', async () => {
+    const found = await violations(
+      'src/infrastructure/api/probe.ts',
+      `import LoginPage from '../../presentation/pages/login/LoginPage'
+       import { resolveWorkspaceUseCase } from '../../application/use-cases/resolveWorkspace'
+       import { showScreen } from '../../app/layouts/screen'
+       export const x = [LoginPage, resolveWorkspaceUseCase, showScreen]`,
+    )
+    expect(found).toEqual(Array(3).fill(expect.stringContaining('implements domain contracts')))
+  })
+
+  it('may use the SDK runtime and the domain', async () => {
+    expect(await violations('src/infrastructure/api/probe.ts', `import { createApiClient } from '@bcbp-solutions-fzc-llc/frontend-sdk/http'\nimport type { RememberedEmailRepository } from '../../domain/repositories/rememberedEmail'\nexport const c: [typeof createApiClient, RememberedEmailRepository?] = [createApiClient]`)).toEqual([])
+  })
+})
+
+describe('app/ (the composition root) is not restricted by these rules', () => {
+  it('bootstrap.tsx wires everything', async () => {
+    expect(await violations('src/app/bootstrap/bootstrap.tsx', `import { workspaceResolver } from '../../infrastructure/api/iam'\nimport LoginPage from '../../presentation/pages/login/LoginPage'\nexport const r = [workspaceResolver, LoginPage]`)).toEqual([])
   })
 })

@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { NetworkError, TimeoutError, parseProblemResponse, typeForStatus } from '@bcbp-solutions-fzc-llc/frontend-sdk/problem'
 import { mockProblem } from '@bcbp-solutions-fzc-llc/frontend-sdk/testing'
 import type { SessionContext } from '@bcbp-solutions-fzc-llc/frontend-sdk/auth'
-import { createStore, isTransient, retrySessionContext } from '../../src/platform/sessionContext'
+import { createStore, isTransient, retrySessionContext } from '../../src/application/use-cases/loadSessionContext'
 
 const ctx = { tenantId: 't-1', slug: 'acme', roles: ['member'] } as unknown as SessionContext
 /**
