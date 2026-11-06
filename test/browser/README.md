@@ -23,11 +23,14 @@ npx playwright install chromium firefox webkit   # once, if the browsers are mis
 | Case | Locks |
 |---|---|
 | Login page | No CSP violation; Geist loaded from `/assets/`; carousel images hashed under `/assets/`; no third-party request |
+| Hero opening | Every `cine-*` animation of the sign-in hero ends by 2.5 s (its own timing), then nothing runs; the email field takes input while the opening is held mid-frame; no CSP violation (the grain is a bundled `data:` SVG) |
+| Reduced motion | Under `prefers-reduced-motion: reduce` no animation runs, the letterbox bars are hidden, and the headline and subline are at full opacity |
 | Sign-in | PKCE through the fake Keycloak, `/t/acme/dashboard`, the remote's entry loaded with its integrity through Trusted Types, role map (`Invite` for an owner), no token in storage |
 | `navigate()` | A remote's navigation under the basename changes the URL without a reload (`registerNavigator`) |
 | Sign-out | The form POST reaches Keycloak under `form-action` with `client_id`, `id_token_hint`, `post_logout_redirect_uri`; "You are signed out"; the next sign-in sends `prompt=login` |
 | Start-up failure | A missing `/config/runtime.json` shows the unavailable page and `the app could not start` reaches `/otel/v1/logs` |
-| Colour contrast | axe `color-contrast` over the login page. The page is served without its CSP for this case only (axe is an injected script). The "BCBP SOLUTIONS" logotype (`data-logotype`) is exempt: WCAG 1.4.3 sets no contrast requirement for text that is part of a logo |
+| Colour contrast | axe `color-contrast` over the login page's resting frame (after the hero's opening finishes). The page is served without its CSP for this case only (axe is an injected script). The "BCBP SOLUTIONS" logotype (`data-logotype`) is exempt: WCAG 1.4.3 sets no contrast requirement for text that is part of a logo |
+| Hero contrast | axe leaves text over a photograph incomplete, so the hero is measured from pixels: on each of the 9 slides at rest, the headline (3:1), subline and fact chips (4.5:1) against the 98th-percentile brightest pixel behind them. The "BCBP SOLUTIONS" eyebrow is a logotype (`data-logotype`) and exempt |
 
 After every case, any report the browser sent to `/csp-report` fails it.
 

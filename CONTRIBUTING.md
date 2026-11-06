@@ -202,7 +202,7 @@ Follow [docs/observability.md § Adding a metric](docs/observability.md#adding-a
 | Integration | `test/integration/` | No | The login page and carousel, session screens, `App`, bootstrap order and branches. SDK subpaths are `vi.mock` fakes where needed; axe-core over every shell screen (`accessibility.test.tsx`) |
 | End to end | `test/e2e/` | No | The real shell and SDK against `test/fixtures/` fakes (Keycloak, network, BroadcastChannel); only the remote's entry script is stubbed |
 | Smoke | `test/smoke/`, CI `smoke` job | Image or deployment | `.github/scripts/smoke-tests.sh`: image ≤ 200 MB and the startup gate, then `npm run test-smoke` against the container (SPA rule, Cache-Control, integrity, 404s, SDK-validated runtime files). [test/smoke/README.md](./test/smoke/README.md) |
-| Browser | `test/browser/`, CI `browser` job | `dist/` | Playwright over HTTPS with the production CSP: fonts, sign-in, the remote with integrity, `navigate()`, sign-out POST, start-up report, contrast |
+| Browser | `test/browser/`, CI `browser` job | `dist/` | Playwright over HTTPS with the production CSP: fonts, sign-in, the remote with integrity, `navigate()`, sign-out POST, start-up report, the hero's opening and reduced motion, contrast |
 | Dashboard contract | `test/browser/dashboard.spec.ts`, CI `dashboard-contract` | A built mfe-dashboard `dist/` (`REMOTE_DIST`) | The real remote in this shell: integrity, CSS, role map, navigation, Logout |
 
 Run one file:

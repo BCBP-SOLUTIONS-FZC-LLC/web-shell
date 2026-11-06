@@ -27,7 +27,7 @@ Condensed from [ARCHITECTURE.md](../ARCHITECTURE.md) and the [LLD](../docs/lld/w
 | `src/infrastructure/i18n/shellMessages.ts` | `registerShellMessages`: registers the `shell` namespace and loads it before any screen (bootstrap only) |
 | `src/shared/i18n/` | `en.json` (every user-facing word, keyed), `catalogues.ts` (tag → language → English), `index.ts`: `useShellText` (React), `shellText`, `ShellKey` |
 | `src/shared/constants/links.ts` | Help and legal links (labels are keys; URLs unset until official) |
-| `src/shared/ui/` | `assets/images/` (carousel photos and logo, content-hashed under `/assets/`), `theme/`, `index.css` |
+| `src/shared/ui/` | `assets/images/` (carousel photos and logo, content-hashed under `/assets/`; `grain.svg`, inlined into the CSS as a `data:` URI), `theme/`, `index.css` |
 | `src/shared/types/globals.d.ts` | `__ENVIRONMENT__`, `__BUILD_VERSION__` |
 | `rsbuild.config.ts` | `pluginReact`, `pluginPlatform({ role: 'shell' })`, `pluginVersionJson`; output, CSS, dev server |
 | `config/` | Dev only: `runtime.local.json`, `remotes.local.json`, `dev-platform.mjs` (+ `.d.mts`) |
@@ -84,5 +84,5 @@ No CSP or HSTS in the image. CloudFront sends the platform's; until it exists (n
 | `test/e2e/shell.test.tsx` | Real bootstrap and SDK. `load(path)` = unmount roots, clear `globalThis[Symbol.for('@bcbp-solutions-fzc-llc/frontend-sdk')]`, `vi.resetModules()`, import the bootstrap again. Needs `server.deps.inline` for the SDK in `vitest.config.ts`. Stubs: the remote's entry `<script>` (defines `window.__platform_mfe_dashboard`), `location.assign/replace` (recorded), `HTMLFormElement#submit` (the sign-out POST, recorded), `createRoot` (tracked) |
 | `test/fixtures` | `FakeKeycloak` (`approve()`, token endpoint, PKCE check, refresh rotation, `now` for clock skew), `FakeNetwork` (`on('GET /path', …)`, `sent(path)`), `FakeBroadcastChannel` |
 | `test/smoke` | `vitest.smoke.config.ts`; `SMOKE_BASE_URL` required; `SMOKE_MODE` `image` (localhost default) or `live` (CSP incl. `form-action`, HSTS, nosniff) |
-| `test/browser/shell.spec.ts` | Production build in Chromium, Firefox, WebKit over HTTPS with the production CSP; fake Keycloak on a second origin; a stub remote on the shared SDK. 6 cases × 3 engines. Not in `npm test` |
+| `test/browser/shell.spec.ts` | Production build in Chromium, Firefox, WebKit over HTTPS with the production CSP; fake Keycloak on a second origin; a stub remote on the shared SDK. 9 cases × 3 engines. Not in `npm test` |
 | `test/browser/dashboard.spec.ts` | Same, with a real mfe-dashboard build (`REMOTE_DIST`). 4 cases × 3 engines; CI `Dashboard contract` (informational) |
