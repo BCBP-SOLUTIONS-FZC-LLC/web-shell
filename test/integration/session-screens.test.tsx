@@ -2,6 +2,7 @@ import { act, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { IdentityProvider, Workspace } from '@bcbp-solutions-fzc-llc/frontend-sdk/auth'
+import en from '../../src/shared/i18n/en.json'
 
 const resolve = vi.fn<(identifier: string) => Promise<Workspace | undefined>>()
 const opened = vi.fn<(url: string) => void>()
@@ -48,15 +49,15 @@ describe('askForWorkspace', () => {
 
   it('shows one generic message for not found and for an unreachable resolver', async () => {
     resolve.mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error('429'))
-    void screens.askForWorkspace(useCases, 'Your session has ended.')
-    expect(await screen.findByText('Your session has ended.')).toBeInTheDocument()
+    void screens.askForWorkspace(useCases, 'session.ended.default')
+    expect(await screen.findByText(en['session.ended.default'])).toBeInTheDocument()
     await typeEmail('ada@acme.com')
-    expect(await screen.findByText(screens.WORKSPACE_NOT_FOUND)).toBeInTheDocument()
+    expect(await screen.findByText(en[screens.WORKSPACE_NOT_FOUND])).toBeInTheDocument()
     await userEvent.setup().click(screen.getByRole('button', { name: /continue with email/i }))
     await waitFor(() => expect(resolve).toHaveBeenCalledTimes(2))
-    expect(screen.getByText(screens.WORKSPACE_NOT_FOUND)).toBeInTheDocument()
+    expect(screen.getByText(en[screens.WORKSPACE_NOT_FOUND])).toBeInTheDocument()
     // Announced to screen readers, as is the bootstrap's notice.
-    expect(screen.getAllByRole('alert').map((e) => e.textContent)).toEqual(['Your session has ended.', screens.WORKSPACE_NOT_FOUND])
+    expect(screen.getAllByRole('alert').map((e) => e.textContent)).toEqual([en['session.ended.default'], en[screens.WORKSPACE_NOT_FOUND]])
   })
 
   it("Forgot your password? resolves the email and goes to that realm's reset page", async () => {
@@ -75,24 +76,39 @@ describe('askForWorkspace', () => {
     const user = userEvent.setup()
     await user.type(await screen.findByRole('textbox', { name: /work email address/i }), 'nobody@else.com')
     await user.click(screen.getByRole('button', { name: 'Forgot your password?' }))
-    expect(await screen.findByText(screens.WORKSPACE_NOT_FOUND)).toBeInTheDocument()
+    expect(await screen.findByText(en[screens.WORKSPACE_NOT_FOUND])).toBeInTheDocument()
     expect(opened).not.toHaveBeenCalled()
   })
 })
 
 describe('askForWorkspace, other failures', () => {
-  it("shows a use case's own error as is: only WorkspaceNotFoundError becomes the generic message", async () => {
+  it("never shows an error's own message (untranslated, maybe a server's): the password reset says it could not start", async () => {
     void screens.askForWorkspace({
       ...useCases,
       requestPasswordReset: async () => {
-        throw new Error('The reset page is unavailable.')
+        throw new Error('upstream said: reset page 503')
       },
     })
     const user = userEvent.setup()
     await user.type(await screen.findByRole('textbox', { name: /work email address/i }), 'ada@acme.com')
     await user.click(screen.getByRole('button', { name: 'Forgot your password?' }))
-    expect(await screen.findByText('The reset page is unavailable.')).toBeInTheDocument()
-    expect(screen.queryByText(screens.WORKSPACE_NOT_FOUND)).toBeNull()
+    expect(await screen.findByText(en['login.error.passwordReset'])).toBeInTheDocument()
+    expect(screen.queryByText(/upstream said/)).toBeNull()
+    expect(screen.queryByText(en[screens.WORKSPACE_NOT_FOUND])).toBeNull()
+  })
+
+  it('and Continue says sign-in could not start', async () => {
+    void screens.askForWorkspace({
+      ...useCases,
+      resolveWorkspace: async () => {
+        throw new TypeError('Failed to fetch')
+      },
+    })
+    const user = userEvent.setup()
+    await user.type(await screen.findByRole('textbox', { name: /work email address/i }), 'ada@acme.com')
+    await user.click(screen.getByRole('button', { name: 'Continue with Email' }))
+    expect(await screen.findByText(en['login.error.signIn'])).toBeInTheDocument()
+    expect(screen.queryByText('Failed to fetch')).toBeNull()
   })
 })
 

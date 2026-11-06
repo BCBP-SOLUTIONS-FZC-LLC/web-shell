@@ -8,6 +8,7 @@ import {
   useRouteTemplate,
   useSessionContext,
 } from '@bcbp-solutions-fzc-llc/frontend-sdk/react'
+import { useShellText } from './shared/i18n'
 
 /** The remote that renders the dashboard, as named in /remotes/manifest.json. */
 export const DASHBOARD_REMOTE = 'dashboard'
@@ -26,7 +27,8 @@ function Loading({ children }: { children: string }) {
  */
 function Dashboard() {
   useRouteTemplate('/t/:slug/dashboard')
-  return <RemoteBoundary remote={DASHBOARD_REMOTE} module="./App" fallback={<Loading>Loading dashboard…</Loading>} />
+  const text = useShellText()
+  return <RemoteBoundary remote={DASHBOARD_REMOTE} module="./App" fallback={<Loading>{text('app.loadingDashboard')}</Loading>} />
 }
 
 /**
@@ -34,18 +36,19 @@ function Dashboard() {
  * so instead of leaving the user to guess, and offer a reload (the bootstrap loads it again).
  */
 function ContextUnavailable() {
+  const text = useShellText()
   return (
     <div
       role="status"
       className="fixed inset-x-0 bottom-0 z-40 flex flex-wrap items-center justify-center gap-3 bg-amber-50 px-4 py-2 text-center font-sans text-sm text-amber-900 shadow"
     >
-      <span>We couldn't load your permissions, so some actions are hidden.</span>
+      <span>{text('app.contextUnavailable')}</span>
       <button
         type="button"
         onClick={() => window.location.reload()}
         className="cursor-pointer rounded border border-amber-300 bg-white px-3 py-1 font-medium text-amber-900"
       >
-        Reload
+        {text('common.reload')}
       </button>
     </div>
   )
@@ -57,19 +60,20 @@ function ContextUnavailable() {
  */
 function UpdateAvailable() {
   const update = useAppUpdate()
+  const text = useShellText()
   if (!update.available) return null
   return (
     <div
       role="status"
       className="fixed inset-x-0 top-0 z-40 flex flex-wrap items-center justify-center gap-3 bg-[#1a1030] px-4 py-2 text-center font-sans text-sm text-white shadow"
     >
-      <span>A new version is available.</span>
+      <span>{text('app.updateAvailable')}</span>
       <button
         type="button"
         onClick={() => update.reload()}
         className="cursor-pointer rounded border border-white/30 bg-white px-3 py-1 font-medium text-[#1a1030]"
       >
-        Reload
+        {text('common.reload')}
       </button>
     </div>
   )

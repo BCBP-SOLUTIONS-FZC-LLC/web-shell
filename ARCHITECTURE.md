@@ -111,6 +111,8 @@ graph LR
     links(["pages/links.ts\npages/PageLinks.tsx"])
     reset(["platform/passwordReset.ts"])
     logo(["BrandLogo.tsx"])
+    text(["shared/i18n\nshell namespace, en.json"])
+    msgs(["platform/shellMessages.ts"])
     sdk(["frontend-sdk subpaths"])
 
     index --> boot
@@ -139,6 +141,16 @@ graph LR
     login --> links
     hook --> domain
     iam --> sdk
+    boot --> msgs
+    msgs --> text
+    msgs --> sdk
+    app --> text
+    screens --> text
+    login --> text
+    hook --> text
+    links --> text
+    index -. en.json .-> text
+    text --> sdk
 ```
 
 `App.tsx` renders `dashboard` through `RemoteBoundary`. That edge is not a file in this repo.
@@ -147,15 +159,17 @@ graph LR
 |---|---|
 | `platform/iam.ts`, `permissions.ts`, `passwordReset.ts` | SDK subpaths only |
 | `platform/screen.tsx` | `react-dom/client` |
-| `platform/SessionScreens.tsx` | `LoginPage`, `screen`, `application/signIn` (use cases it is given), `domain/errors`, SDK `/auth` types. No other `platform/` module, no SDK runtime, no browser navigation |
+| `platform/SessionScreens.tsx` | `LoginPage`, `screen`, `application/signIn` (use cases it is given), `domain/errors`, `shared/i18n` (text lookup), SDK `/auth` types. No other `platform/` module, no other SDK runtime, no browser navigation |
 | `application/` (use cases) | `domain/`, SDK types. No React, no browser APIs (ports injected) |
 | `domain/` | Nothing but SDK types: repository contracts, errors |
 | `platform/rememberedEmail.ts` | `domain/` (implements `RememberedEmailRepository` over `localStorage`) |
 | `platform/sessionContext.ts`, `ShellRoot.tsx`, `navigator.ts` | SDK subpaths (`/auth` and `/problem` types, `/react`), React |
-| `pages/*`, `BrandLogo.tsx` | Each other, `domain/` and `application/` types (the remembered-email repository and the use cases are passed in). Never `platform/`, the SDK, storage, the network or navigation |
-| `App.tsx` | `react-router-dom`, SDK `/react` (`RemoteBoundary`, `useRouteTemplate`, `useSessionContext`, `useAppUpdate`). It hands the router's `navigate` to the bootstrap through `onRouter` instead of importing `/nav` |
+| `pages/*`, `BrandLogo.tsx` | Each other, `domain/` and `application/` types (the remembered-email repository and the use cases are passed in), `shared/i18n` (their words). Never `platform/`, the SDK, storage, the network or navigation |
+| `shared/i18n` | SDK `/i18n` (`t`) and `/react` (`useT`), no shell layer: `en.json`, `catalogues.ts`, `useShellText`, `shellText`, `ShellKey`. Every user-facing word of the shell is a key here. Text lookup only: presentation reaches the SDK's i18n runtime through it and nothing else |
+| `platform/shellMessages.ts` | `shared/i18n`, SDK `/i18n`: `registerShellMessages` (`registerNamespace` + `setLocale`). It changes the page's locale, so only the bootstrap calls it |
+| `App.tsx` | `react-router-dom`, `shared/i18n`, SDK `/react` (`RemoteBoundary`, `useRouteTemplate`, `useSessionContext`, `useAppUpdate`). It hands the router's `navigate` to the bootstrap through `onRouter` instead of importing `/nav` |
 | `bootstrap.tsx` | Everything above (the composition root: builds the sign-in use cases from infrastructure), every SDK subpath it initialises, `index.css` |
-| `index.ts` | `bootstrap.tsx`, dynamically |
+| `index.ts` | `bootstrap.tsx`, dynamically; `shared/i18n/en.json` statically (the unavailable page cannot use the SDK) |
 | `rsbuild.config.ts` | The platform plugin, React, Tailwind, `/version.json`, `config/dev-platform.mjs`. `src/` does not import it |
 | Tests | Production modules. `test/integration` replaces SDK subpaths with `vi.mock` fakes; `test/e2e` uses the real SDK with `test/fixtures/` fakes around it |
 
@@ -214,8 +228,8 @@ sequenceDiagram
 ```
 
 1. `installTrustedTypesPolicy()`, then `loadRuntimeConfig()` fetches `/config/runtime.json` and validates it.
-2. `initializeCore({ serviceName: 'web-shell', domain: 'portal', environment: cfg.environment ?? __ENVIRONMENT__, buildVersion: __BUILD_VERSION__ })`, then `setRuntimeConfig(cfg)`: the deployed `/config/runtime.json` names its environment (`environment`, SDK alpha.6) and the page takes it from there, so one build serves every environment; until every deployed file has the key, the build-time `PLATFORM_ENVIRONMENT` fills in. When the config cannot be loaded, the identity takes the build-time environment so the failure can still be reported. A throw from here on is logged as an essential error (`the app could not start`; logging starts on the default `/otel` when the config never arrived), then reaches `index.ts`, which replaces `#app` with "The app is unavailable right now."
-3. Consent stays the SDK's default (essential only), then tracing, logging and metrics against `telemetry.otlpBaseUrl`, `installGlobalErrorHandlers()`, `startWebVitals()`, platform flags from the runtime config.
+2. `initializeCore({ serviceName: 'web-shell', domain: 'portal', environment: cfg.environment ?? __ENVIRONMENT__, buildVersion: __BUILD_VERSION__ })`, then `setRuntimeConfig(cfg)`: the deployed `/config/runtime.json` names its environment (`environment`, SDK alpha.6) and the page takes it from there, so one build serves every environment; until every deployed file has the key, the build-time `PLATFORM_ENVIRONMENT` fills in. When the config cannot be loaded, the identity takes the build-time environment so the failure can still be reported. A throw from here on is logged as an essential error (`the app could not start`; logging starts on the default `/otel` when the config never arrived), then reaches `index.ts`, which replaces `#app` with "The app is unavailable right now." (the one text read from `en.json` directly: it shows when the SDK may not have loaded, before the async boundary)
+3. Consent stays the SDK's default (essential only), then tracing, logging and metrics against `telemetry.otlpBaseUrl`, `installGlobalErrorHandlers()`, `startWebVitals()`, platform flags from the runtime config. Then `registerShellMessages(cfg.i18n.defaultLocale)` (`platform/shellMessages.ts`): the shell's `shell` namespace is registered and loaded for the default locale (`setLocale`), so the sign-in screens, which show before step 8, never show raw keys.
 4. `createOidcProvider(cfg.auth, workspaceResolver)`, `setTokenSource(initializeAuth(idp))`, `idp.init()`. On a reload or a new tab `init()` may redirect once with `prompt=none` and never settle.
 5. Anonymous: see the sign-in flow. The bootstrap returns without rendering the app.
 6. Authenticated in the wrong workspace (a trial login through an invitation that landed in another tenant): `showWrongWorkspace`. The app never renders and the workspace is not cached.

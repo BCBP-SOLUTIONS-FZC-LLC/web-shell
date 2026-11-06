@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest'
 import LoginLatest from '../../src/pages/LoginPage'
 import { localStorageRememberedEmail as remembered } from '../../src/platform/rememberedEmail'
 import { EMAIL_FIRST } from '../../src/pages/useEmailSignIn'
+import en from '../../src/shared/i18n/en.json'
 
 const pages = [['latest', LoginLatest]] as const
 
@@ -29,7 +30,7 @@ describe.each(pages)('login page %s', (_name, LoginPage) => {
   })
 
   it('shows a notice from the bootstrap', () => {
-    render(<LoginPage rememberedEmail={remembered} onContinue={vi.fn()} notice="Your session has ended." />)
+    render(<LoginPage rememberedEmail={remembered} onContinue={vi.fn()} notice="session.ended.default" />)
     expect(screen.getByText('Your session has ended.')).toBeInTheDocument()
   })
 
@@ -93,7 +94,7 @@ describe.each(pages)('login page %s', (_name, LoginPage) => {
     const onForgotPassword = vi.fn(async () => {})
     render(<LoginPage rememberedEmail={remembered} onContinue={vi.fn()} onForgotPassword={onForgotPassword} />)
     await userEvent.setup().click(screen.getByRole('button', { name: 'Forgot your password?' }))
-    expect(await screen.findByRole('alert')).toHaveTextContent(EMAIL_FIRST)
+    expect(await screen.findByRole('alert')).toHaveTextContent(en[EMAIL_FIRST])
     expect(onForgotPassword).not.toHaveBeenCalled()
   })
 

@@ -12,8 +12,12 @@ Object.defineProperty(globalThis, 'crypto', {
 // real fetch against a local server.
 const dom = typeof window !== 'undefined'
 
-beforeEach(() => {
+beforeEach(async () => {
   if (!dom) return
+  // The shell's catalogue, as the bootstrap loads it before the first screen: components rendered on
+  // their own show their English text, not keys.
+  const { registerShellMessages } = await import('../src/platform/shellMessages')
+  await registerShellMessages('en')
   sessionStorage.clear()
   localStorage.clear()
   window.history.replaceState({}, '', '/')

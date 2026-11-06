@@ -52,6 +52,7 @@ import {
 import { hideScreen } from './platform/screen'
 import { createStore, isTransient, retrySessionContext } from './platform/sessionContext'
 import { ShellRoot } from './platform/ShellRoot'
+import { registerShellMessages } from './platform/shellMessages'
 // Self-hosted fonts (Fontsource, SIL OFL 1.1): served from /assets/, as the platform CSP requires
 // (font-src 'self', style-src 'self').
 import '@fontsource-variable/geist'
@@ -118,6 +119,8 @@ async function start(cfg: RuntimeConfig, report: { otlpBaseUrl: string }): Promi
   installGlobalErrorHandlers()
   startWebVitals()
   setFlagProvider(runtimeConfigFlagProvider())
+  // The shell's text, loaded before the first screen (initializeI18n, after sign-in, picks the locale).
+  await registerShellMessages(cfg.i18n.defaultLocale)
 
   // Composition root: the sign-in use cases, built from infrastructure (PUB-1 port, the reset URL,
   // the remembered email in localStorage, browser navigation) and given to the screens.

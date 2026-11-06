@@ -6,8 +6,8 @@ import { HELP_LINK, LEGAL_LINKS, published } from '../../src/pages/links'
 
 describe('published', () => {
   it('keeps only links that have a URL', () => {
-    expect(published([{ label: 'a' }, { label: 'b', href: '' }, { label: 'c', href: 'https://x.test/c' }])).toEqual([
-      { label: 'c', href: 'https://x.test/c' },
+    expect(published([{ label: 'links.help' }, { label: 'links.privacy', href: '' }, { label: 'links.terms', href: 'https://x.test/c' }])).toEqual([
+      { label: 'links.terms', href: 'https://x.test/c' },
     ])
   })
 
@@ -21,11 +21,11 @@ describe('the link components, once URLs are set', () => {
     vi.resetModules()
     vi.doMock('../../src/pages/links', async (orig) => ({
       ...(await orig<typeof import('../../src/pages/links')>()),
-      HELP_LINK: { label: 'Trouble logging in?', href: 'https://help.test/' },
+      HELP_LINK: { label: 'links.help', href: 'https://help.test/' },
       LEGAL_LINKS: [
-        { label: 'Privacy Policy', href: 'https://legal.test/privacy' },
-        { label: 'Terms of Service', href: 'https://legal.test/terms' },
-        { label: 'Trust & Security' },
+        { label: 'links.privacy', href: 'https://legal.test/privacy' },
+        { label: 'links.terms', href: 'https://legal.test/terms' },
+        { label: 'links.trust' },
       ],
     }))
     const { HelpLink, LegalFooter } = await import('../../src/pages/PageLinks')
