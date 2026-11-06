@@ -10,6 +10,13 @@ Pull requests that change the shell, its dependencies, or the image add an entry
 
 ## [Unreleased]
 
+### Fixed (2026-11-06 — Claude Code tooling input handling)
+
+- **The edit guard compares canonical paths (`.claude/hooks/guard.sh`).** A security review of the tooling from #52 and #56 found no vulnerability (every input comes from the developer or the model, who could already run the same `git`/`npm` commands), but the guard did not do what it claims: it matched the raw path, so `src/../node_modules/x.js`, `./.env`, a differently-cased project root (the macOS volume ignores case) and `../MFE-Dashboard/…` were allowed. It now resolves `..`, `.` and symlinks, compares lower-case, and blocks `.env` and `docker.local.env` at any depth; `*.example` files stay editable. Tested: 9 bypasses blocked, 5 normal paths allowed.
+  *(Previously: only the exact spelling `<root>/node_modules/…`, `<root>/dist/…`, `<root>/.env` was blocked.)*
+- **`stack-sync` refuses a branch or base that is not a commit** (`sync.sh`): a value starting with `-` reached `git diff` as an option (`--output=<path>` wrote a file). Both arguments must resolve with `git rev-parse --verify`.
+- **`sdk-upgrade` refuses a version that is not exact before installing** (`bump.sh`): a spec such as `file:…` or `--registry=…` was installed before the pin check rejected it.
+
 ### Changed (2026-11-06 — documentation modelled on the IAM services)
 
 - **CHANGELOG keeps the format the IAM services' changelogs use (`2026-11-06`).** `[Unreleased]` is regrouped, with no entry lost, into sections typed and dated with their topic (`### Added|Changed|Fixed|Removed|Security (date — topic)`), newest first, with *(Previously: …)* on the behaviour changes. It also gains current `Removed`, `Security`, `Known gaps` and `Current architecture notes`; the `0.1.0` ones stay as its record. The format is described at the top of this file, in CONTRIBUTING's documentation checklist and in the `doc-sync-reviewer` rule.

@@ -14,6 +14,13 @@ set -euo pipefail
 branch=${1:?usage: sync.sh <branch> <old base branch or sha>}
 base=${2:?usage: sync.sh <branch> <old base branch or sha>}
 cd "$(git rev-parse --show-toplevel)"
+# Both arguments must name existing commits; a value starting with "-" would reach git as an option.
+for ref in "$branch" "$base"; do
+  case "$ref" in -*) echo "✗ \"$ref\" is not a branch or commit" >&2; exit 1 ;; esac
+done
+git rev-parse --verify --quiet "$branch^{commit}" >/dev/null || { echo "✗ no branch or commit \"$branch\"" >&2; exit 1; }
+git rev-parse --verify --quiet "$base^{commit}" >/dev/null || git rev-parse --verify --quiet "origin/$base^{commit}" >/dev/null \
+  || { echo "✗ no branch or commit \"$base\" (locally or on origin)" >&2; exit 1; }
 [ -z "$(git status --porcelain)" ] || { echo "✗ working tree not clean" >&2; exit 1; }
 
 git fetch -q origin
