@@ -8,6 +8,7 @@
 | `npm run dev` / `preview` | Rsbuild on :5001 with `config/dev-platform.mjs` (`DEV_API_URL`, `DEV_REALM`, `DEV_ROLES`) |
 | `npm run keycloak:setup` | Keycloak 26.8.1 on :8080, realm `tenant-bcbp`, client `app1`, seed user |
 | `npm run lint` / `typecheck` / `build` | ESLint (platform rules) / `tsc -p tsconfig.test.json` / `tsc && rsbuild build` |
+| `npm run arch-lint` | dependency-cruiser over `src/` with `.dependency-cruiser.cjs`: the component map (`components`, `deps.mayDependOn`, `vendors`, `typeOnlyVendors`) in allowed mode, plus no cycles and no unresolvable imports. Like go-arch-lint |
 | `npm test`, `test-unit`, `test-int`, `test-e2e` | Vitest (all, or one layer) |
 | `npm run test:ci` | Coverage + `.github/scripts/coverage-gate.mjs` (95%) |
 | `npm run metrics-check` | `.github/scripts/metrics-check.mjs`: creates every metric `src/` defines once more with the SDK's own `getServiceMeter` / `getDomainMeter` (identity from `src/bootstrap.tsx`), so the SDK's `InvalidMetricError` is the verdict; adds only what the SDK cannot see: metrics created outside the SDK, non-literal names or labels, and the `docs/observability.md` Inventory. No rule is restated here |
@@ -24,7 +25,7 @@ Image locally: `docker build --secret id=npm_token,env=NODE_AUTH_TOKEN -t web-sh
 | Job | Gate |
 |---|---|
 | `Validate / Test / test` | `npm ci`, coverage, gate 95%, build, size budget |
-| `Validate / Quality / quality` | ESLint `--max-warnings 0`, `metrics-check`, typecheck, workflow LF and literal operators, digest pins, `.dockerignore`, `npm audit --omit=dev --audit-level=high` |
+| `Validate / Quality / quality` | ESLint `--max-warnings 0`, `arch-lint`, `metrics-check`, typecheck, workflow LF and literal operators, digest pins, `.dockerignore`, `npm audit --omit=dev --audit-level=high` |
 | `Build image (cache)` | Hadolint, Buildx `web-shell-ci-test` (secret `npm_token`) |
 | `Trivy CVE scan` | Unfixed CRITICAL/HIGH/UNKNOWN fail; `.trivyignore` with reason and expiry |
 | `Smoke tests` | Node 26 + `npm ci`, then `smoke-tests.sh`: ≤ 200 MB, `/healthz`, startup gate, `npm run test-smoke` (`SMOKE_MODE=image`) |

@@ -14,6 +14,7 @@
 
 | Date | Change |
 |---|---|
+| 2026-11-06 | Architecture lint: `.dependency-cruiser.cjs` component map, `npm run arch-lint` in `Validate / Quality` |
 | 2026-11-06 | Constitution step 5: every user-facing word in the `shell` namespace of the SDK's `/i18n` (`shared/i18n`, `en.json`), loaded before any screen (`platform/shellMessages.ts`); sign-in errors never show an error's own message |
 | 2026-11-06 | Constitution step 4: the layer rules are ESLint errors (`test/unit/layer-rules.test.ts`) |
 | 2026-11-06 | Constitution step 3: use cases (`application/`) and repository contracts (`domain/`); presentation no longer reaches storage, PUB-1 or browser navigation |
@@ -179,7 +180,7 @@ test/                       unit, integration, e2e, fixtures, smoke, browser (§
 
 The SDK is imported through public subpaths only. `@bcbp-solutions-fzc-llc/eslint-plugin` `configs.recommended` on `src/` fails a root or deep import, identity headers, raw `window.*Storage`, unsafe HTML and non-template API paths; `npm run lint` runs with `--max-warnings 0` in `validate-quality`.
 
-The rows for `domain/`, `application/`, `pages/*`, `components/*` and `platform/SessionScreens.tsx` are lint errors (`eslint.config.js`: `@typescript-eslint/no-restricted-imports`, `no-restricted-globals`, `no-restricted-properties`); `test/unit/layer-rules.test.ts` lints a violation of each rule to prove it fires. Presentation may not use `fetch`, `XMLHttpRequest`, storage, IndexedDB, `location`, `history`, `navigator` or `open`, bare or through `window`, `globalThis`, `self` (and `document.location`); domain and application may not use any browser global. Infrastructure (`platform/`) and the composition root (`bootstrap.tsx`) are not restricted by these rules.
+The rows for `domain/`, `application/`, `pages/*`, `components/*` and `platform/SessionScreens.tsx` are lint errors (`eslint.config.js`: `@typescript-eslint/no-restricted-imports`, `no-restricted-globals`, `no-restricted-properties`); `test/unit/layer-rules.test.ts` lints a violation of each rule to prove it fires. Presentation may not use `fetch`, `XMLHttpRequest`, storage, IndexedDB, `location`, `history`, `navigator` or `open`, bare or through `window`, `globalThis`, `self` (and `document.location`); domain and application may not use any browser global. Infrastructure (`platform/`) and the composition root (`bootstrap.tsx`) are not restricted by these rules. The component graph is also declared in `.dependency-cruiser.cjs` and checked by `npm run arch-lint` (allowed mode: an undeclared dependency, a file in no component, a cycle or an unresolvable import fails; `test/unit/arch-lint.test.ts`).
 
 SDK subpaths `src/` uses: `/core`, `/config`, `/tracing`, `/logging`, `/metrics`, `/flags`, `/auth`, `/http`, `/authz`, `/i18n`, `/mfe`, `/security`, `/react`.
 

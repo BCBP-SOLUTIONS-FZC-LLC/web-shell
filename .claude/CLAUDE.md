@@ -21,6 +21,7 @@ export NODE_AUTH_TOKEN=$(gh auth token)   # once per shell; needs read:packages
 npm ci
 npm run dev               # :5001 with config/dev-platform.mjs stand-ins (Keycloak: npm run keycloak:setup)
 npm run lint              # ESLint + platform rules (CI: --max-warnings 0)
+npm run arch-lint         # component boundaries, .dependency-cruiser.cjs (like go-arch-lint)
 npm run typecheck         # tsc over src/ and test/
 npm test                  # Vitest: unit, integration, e2e
 npm run test:ci           # + coverage gate 95% (100% today)
@@ -56,6 +57,7 @@ Run one test: `npx vitest run test/e2e/shell.test.tsx -t "sign-out"`. Full list:
 - **Sibling repos are read-only from here:** `../mfe-dashboard` (another session/team owns it) and `../../../XPertSharedLib/react/platform-reactcommon`. Read them; change them in their own PRs.
 - **Diagrams:** edit `docs/architecture/mermaid/*.mmd` and keep the block under its `> Source:` line in `ARCHITECTURE.md` identical (the post-edit hook checks).
 - **Metrics follow the Enterprise Platform Observability Standard** (`docs/observability.md`): only through the SDK meters (`getServiceMeter` for Tier 3 `portal_web_shell_*`, `getDomainMeter` for registry Tier 2); never `platform_*` (SDK-bound after ratification), never a label the SDK injects (`domain`, `service`, `environment`) or an unbounded one; every metric listed in the Inventory. `metrics-check` enforces it in CI.
+- **Architecture lint stays green** (`npm run arch-lint`, `.dependency-cruiser.cjs`). A new module joins a component; a new dependency is declared in `deps`, never by widening `anyVendorDeps` or adding a component to the composition root's exceptions. `test/unit/arch-lint.test.ts` proves the rules fire.
 - **Coverage gate stays at 95%.** Required checks keep their names: `Validate / Test / test`, `Validate / Quality / quality`, `changelog`, `Smoke tests`.
 
 ## Conventions
