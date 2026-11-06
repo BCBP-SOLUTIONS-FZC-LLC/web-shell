@@ -147,17 +147,19 @@ graph LR
 |---|---|
 | `platform/iam.ts`, `permissions.ts`, `passwordReset.ts` | SDK subpaths only |
 | `platform/screen.tsx` | `react-dom/client` |
-| `platform/SessionScreens.tsx` | `LoginPage`, `screen`, `application/signIn` (use cases it is given), `domain/errors`, SDK types. Not `iam`, `passwordReset` or browser navigation |
-| `application/` (use cases) | `domain/`, SDK `/auth` types. No React, no browser APIs (ports injected) |
-| `domain/` | Nothing but SDK `/auth` types: repository contracts, errors |
+| `platform/SessionScreens.tsx` | `LoginPage`, `screen`, `application/signIn` (use cases it is given), `domain/errors`, SDK `/auth` types. No other `platform/` module, no SDK runtime, no browser navigation |
+| `application/` (use cases) | `domain/`, SDK types. No React, no browser APIs (ports injected) |
+| `domain/` | Nothing but SDK types: repository contracts, errors |
 | `platform/rememberedEmail.ts` | `domain/` (implements `RememberedEmailRepository` over `localStorage`) |
 | `platform/sessionContext.ts`, `ShellRoot.tsx`, `navigator.ts` | SDK subpaths (`/auth` and `/problem` types, `/react`), React |
-| `pages/*`, `BrandLogo.tsx` | Each other and `domain/` types (the remembered-email repository is passed in). Never `platform/`, storage or the SDK |
+| `pages/*`, `BrandLogo.tsx` | Each other, `domain/` and `application/` types (the remembered-email repository and the use cases are passed in). Never `platform/`, the SDK, storage, the network or navigation |
 | `App.tsx` | `react-router-dom`, SDK `/react` (`RemoteBoundary`, `useRouteTemplate`, `useSessionContext`, `useAppUpdate`). It hands the router's `navigate` to the bootstrap through `onRouter` instead of importing `/nav` |
 | `bootstrap.tsx` | Everything above (the composition root: builds the sign-in use cases from infrastructure), every SDK subpath it initialises, `index.css` |
 | `index.ts` | `bootstrap.tsx`, dynamically |
 | `rsbuild.config.ts` | The platform plugin, React, Tailwind, `/version.json`, `config/dev-platform.mjs`. `src/` does not import it |
 | Tests | Production modules. `test/integration` replaces SDK subpaths with `vi.mock` fakes; `test/e2e` uses the real SDK with `test/fixtures/` fakes around it |
+
+The rows for `domain/`, `application/`, `pages/*`, `components/*` and `platform/SessionScreens.tsx` are lint errors (`eslint.config.js`: `@typescript-eslint/no-restricted-imports`, `no-restricted-globals`, `no-restricted-properties`); `test/unit/layer-rules.test.ts` lints a violation of each rule to prove it fires. Presentation may not use `fetch`, `XMLHttpRequest`, storage, IndexedDB, `location`, `history`, `navigator` or `open`, bare or through `window`, `globalThis`, `self` (and `document.location`); domain and application may not use any browser global. Infrastructure (`platform/`) and the composition root (`bootstrap.tsx`) are not restricted by these rules.
 
 ---
 

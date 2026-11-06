@@ -17,6 +17,14 @@ Pull requests that change the shell, its dependencies, or the image add an entry
 
 ### Changed
 
+- **Frontend Architecture Constitution, step 4: the layer rules are lint errors (`2026-11-06`).** `eslint.config.js` now enforces the dependency rules step 3 introduced, so violations V2 and V3 of the assessment cannot come back (roadmap step 4, §5):
+  - **Domain** (`src/domain/`, `.ts` and `.tsx`): no React, no SDK runtime (type imports allowed), no other shell layer, no browser global (`window`, `document`, `globalThis`, `self`, `localStorage`, `fetch`, `location`, …).
+  - **Application** (`src/application/`): no React, no presentation or infrastructure, no SDK runtime (type imports allowed; the runtime is injected), no browser global.
+  - **Pages and components:** nothing from `platform/` or the SDK (the rule CLAUDE.md already stated, now checked).
+  - **Session screens** (`platform/SessionScreens.tsx`): no other `platform/` module but `screen`; from the SDK, `/auth` types only, so they cannot sign in on their own (no login without a click).
+  - **All presentation:** no `fetch`, `XMLHttpRequest`, storage, IndexedDB, `location`, `history`, `navigator` or `open`, bare or through `window`, `globalThis`, `self` or `document.location`.
+  `test/unit/layer-rules.test.ts` lints a violation of each rule under its layer's path and checks the allowed imports pass (10 tests), so the rules are proven to fire. No source change was needed: `src/` already passes. 161 tests at 100%.
+
 - **Frontend Architecture Constitution, step 3: use cases and repositories (`2026-11-06`).** Presentation no longer reaches storage, the IAM API or browser navigation (violations V2 and V3 of `docs/architecture/constitution-assessment.md`):
   - **Domain** (`src/domain/`): the `RememberedEmailRepository` contract and `WorkspaceNotFoundError` (no user-facing text).
   - **Application** (`src/application/`): `resolveWorkspaceUseCase` (PUB-1 through the SDK's `WorkspaceResolver` port; not found, rate-limited and unreachable alike) and `requestPasswordResetUseCase` (reset URL and navigation injected); no React, no browser APIs.
