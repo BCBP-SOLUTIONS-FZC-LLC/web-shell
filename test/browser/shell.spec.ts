@@ -1,7 +1,7 @@
 // The shell's production build in real engines under the production CSP (test/browser/README.md):
 // what happy-dom cannot check. Trusted Types, script-src 'self', integrity on the remote's entry,
 // Module Federation's share scope, self-hosted fonts, the sign-out form POST under form-action, the
-// start-up failure report, and colour contrast.
+// start-up failure report, the sign-in hero's one-time opening and reduced motion, and colour contrast.
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { expect, test, type Page } from '@playwright/test'
@@ -57,6 +57,50 @@ test('the login page renders under the production CSP with its self-hosted fonts
   expect(await slide.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0)).toBe(true)
   expect(thirdParty).toEqual([])
   expect(await violations(page)).toEqual([])
+})
+
+/** Every CSS animation and transition in the page, with its play state (the hero's opening is the only one on /). */
+const animations = (page: Page) =>
+  page.evaluate(() =>
+    document.getAnimations().map((a) => `${(a as Partial<CSSAnimation>).animationName ?? 'transition'}:${a.playState}`),
+  )
+
+test('the sign-in hero opens in about 2.4 s and is then still; the form takes input from the first frame', async ({ page }) => {
+  await page.goto(`${APP}/`)
+  // Hold the opening mid-frame (bars, grain and hidden copy on screen): the email field already takes input.
+  const held = await page.evaluate(() => {
+    const opening = document.getAnimations().filter((a) => (a as Partial<CSSAnimation>).animationName?.startsWith('cine-'))
+    const unfinished = opening.filter((a) => a.playState !== 'finished').length
+    opening.forEach((a) => a.pause())
+    return unfinished
+  })
+  expect(held).toBeGreaterThan(0)
+  const email = page.getByRole('textbox', { name: /work email address/i })
+  await email.fill(EMAIL)
+  await expect(email).toHaveValue(EMAIL)
+  await page.evaluate(() => document.getAnimations().forEach((a) => a.play()))
+  // Every animation of the opening ends by 2.5 s (its own timing, not the wall clock); then nothing runs.
+  const ends = await page.evaluate(() =>
+    document
+      .getAnimations()
+      .filter((a) => (a as Partial<CSSAnimation>).animationName?.startsWith('cine-'))
+      .map((a) => Number(a.effect?.getComputedTiming().endTime)),
+  )
+  expect(ends.length).toBeGreaterThan(0)
+  expect(Math.max(...ends)).toBeLessThanOrEqual(2500)
+  await expect.poll(() => animations(page), { timeout: 10_000 }).not.toContainEqual(expect.stringMatching(/:running$/))
+  await expect(page.getByRole('heading', { level: 1 })).toHaveCSS('opacity', '1')
+  await expect(page.locator('.cine-bar').first()).toHaveCSS('transform', /matrix\(1, 0, 0, 0,/)
+  expect(await violations(page)).toEqual([])
+})
+
+test('under prefers-reduced-motion the sign-in hero shows its final frame with no animation', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  await page.goto(`${APP}/`)
+  await expect(page.getByRole('heading', { level: 1 })).toHaveCSS('opacity', '1')
+  expect(await animations(page)).toEqual([])
+  await expect(page.locator('.cine-bar').first()).toBeHidden()
+  await expect(page.getByText(/Access your unified workspace/)).toHaveCSS('opacity', '1')
 })
 
 test('signs in through Keycloak (PKCE) and loads the dashboard remote with its integrity, keeping tokens out of storage', async ({ page }) => {
@@ -130,6 +174,8 @@ test.describe('colour contrast (axe, WCAG 2 AA)', () => {
     await page.goto(`${APP}/`)
     await expect(page.getByRole('textbox', { name: /work email address/i })).toBeVisible()
     await page.evaluate(() => document.fonts.ready)
+    // Check the hero's resting frame, not a frame of its opening.
+    await page.evaluate(() => Promise.all(document.getAnimations().map((a) => a.finished)))
     await page.addScriptTag({ content: axe })
     const result = await page.evaluate(async () => {
       // The "BCBP SOLUTIONS" logotype is exempt (WCAG 1.4.3: text that is part of a logo); all other text is checked.
@@ -141,5 +187,77 @@ test.describe('colour contrast (axe, WCAG 2 AA)', () => {
       )
     })
     expect(result).toEqual([])
+  })
+
+  // axe leaves text over a photograph "incomplete", so the hero is measured from pixels: on each of
+  // the 9 slides at rest, the text is made transparent, its box is captured, and the 98th-percentile
+  // brightest background pixel is held against the text colour (WCAG 2 AA: 3:1 large, 4.5:1 normal).
+  test('the sign-in hero text keeps AA contrast over every photograph', async ({ page }) => {
+    test.setTimeout(90_000)
+    await page.emulateMedia({ reducedMotion: 'reduce' })
+    await page.route(`${APP}/`, async (route) => {
+      const response = await route.fetch()
+      const headers = { ...response.headers() }
+      delete headers['content-security-policy']
+      await route.fulfill({ response, headers })
+    })
+    await page.goto(`${APP}/`)
+    await page.evaluate(() => document.fonts.ready)
+    const targets = [
+      { name: 'headline', locator: page.getByRole('heading', { level: 1 }), fg: [255, 255, 255, 1], min: 3 },
+      { name: 'subline', locator: page.locator('[aria-live] p'), fg: [255, 255, 255, 0.8], min: 4.5 },
+      { name: 'facts', locator: page.locator('section li'), fg: [255, 255, 255, 1], min: 4.5 },
+    ] as const
+    const failures: string[] = []
+    for (let n = 1; n <= 9; n++) {
+      if (n > 1) await page.getByRole('button', { name: `Show slide ${n}` }).click()
+      // At rest: the slide's photograph decoded and on top, no animation or transition running.
+      await expect
+        .poll(() =>
+          page.evaluate(
+            () =>
+              [...document.querySelectorAll<HTMLImageElement>('section img.opacity-100')].some(
+                (img) => img.complete && img.naturalWidth > 0,
+              ) && document.getAnimations().every((a) => a.playState !== 'running'),
+          ),
+        )
+        .toBe(true)
+      await page.waitForTimeout(1000)
+      for (const t of targets) {
+        for (const element of await t.locator.all()) {
+          await element.evaluate((el: HTMLElement) => el.style.setProperty('color', 'transparent', 'important'))
+          const png = (await element.screenshot({ animations: 'disabled' })).toString('base64')
+          await element.evaluate((el: HTMLElement) => el.style.removeProperty('color'))
+          const ratio = await page.evaluate(
+            async ({ png, fg }) => {
+              const img = new Image()
+              img.src = `data:image/png;base64,${png}`
+              await img.decode()
+              const canvas = document.createElement('canvas')
+              canvas.width = img.naturalWidth
+              canvas.height = img.naturalHeight
+              const ctx = canvas.getContext('2d')!
+              ctx.drawImage(img, 0, 0)
+              const px = ctx.getImageData(0, 0, canvas.width, canvas.height).data
+              const lin = (c: number) => ((c /= 255) <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4)
+              const lum = (r: number, g: number, b: number) => 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b)
+              const ratios: number[] = []
+              for (let i = 0; i < px.length; i += 4) {
+                const [r, g, b] = [px[i]!, px[i + 1]!, px[i + 2]!]
+                const a = fg[3]!
+                const text = lum(fg[0]! * a + r * (1 - a), fg[1]! * a + g * (1 - a), fg[2]! * a + b * (1 - a))
+                const ground = lum(r, g, b)
+                ratios.push((Math.max(text, ground) + 0.05) / (Math.min(text, ground) + 0.05))
+              }
+              ratios.sort((x, y) => x - y)
+              return ratios[Math.floor(ratios.length * 0.02)]!
+            },
+            { png, fg: [...t.fg] },
+          )
+          if (ratio < t.min) failures.push(`slide ${n} ${t.name}: ${ratio.toFixed(2)} < ${t.min}`)
+        }
+      }
+    }
+    expect(failures).toEqual([])
   })
 })

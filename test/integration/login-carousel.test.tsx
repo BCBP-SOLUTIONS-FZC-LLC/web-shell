@@ -8,16 +8,20 @@ describe('login hero carousel', () => {
     vi.useRealTimers()
   })
 
-  it('advances on a timer and follows the slide controls', async () => {
+  it('stays on the first slide after its opening and follows the slide controls', async () => {
     vi.useFakeTimers()
     render(<LoginPage rememberedEmail={remembered} onContinue={async () => {}} />)
 
     expect(screen.getByRole('heading', { name: /Next-Gen System/ })).toBeInTheDocument()
     expect(screen.getByText(/Access your unified workspace/)).toBeInTheDocument()
 
+    // No autoplay: after the opening the hero stays still.
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(6000)
+      await vi.advanceTimersByTimeAsync(30_000)
     })
+    expect(screen.getByRole('heading', { name: /Next-Gen System/ })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Show slide 2' }))
     expect(screen.getByRole('heading', { name: /Airside programs/ })).toBeInTheDocument()
     expect(screen.getByText(/apron stays in motion/)).toBeInTheDocument()
 
@@ -42,18 +46,33 @@ describe('login hero carousel', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Show slide 2' }))
     expect(screen.getByRole('heading', { name: /Airside programs/ })).toBeInTheDocument()
+  })
 
-    fireEvent.mouseEnter(screen.getByRole('region', { name: 'Product highlights' }))
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(6000)
-    })
-    expect(screen.getByRole('heading', { name: /Airside programs/ })).toBeInTheDocument()
+  it('plays the cinematic opening once, then drops it when the user picks a slide', () => {
+    const { container } = render(<LoginPage rememberedEmail={remembered} onContinue={async () => {}} />)
+    const heading = screen.getByRole('heading', { name: /Next-Gen System/ })
+    expect(heading).toHaveClass('cine-rise', 'cine-d1')
+    expect(screen.getByText(/Access your unified workspace/)).toHaveClass('cine-rise', 'cine-d2')
+    expect(container.querySelectorAll('.cine-bar')).toHaveLength(2)
+    expect(container.querySelector('img.cine-settle')).not.toBeNull()
+    // The form beside it never animates: it takes input from the first frame.
+    const form = container.querySelector('form')!
+    expect(form.closest('[class*="cine-"]')).toBeNull()
+    expect(form.querySelector('[class*="cine-"]')).toBeNull()
 
-    fireEvent.mouseLeave(screen.getByRole('region', { name: 'Product highlights' }))
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(6000)
-    })
-    expect(screen.getByRole('heading', { name: /Port calls/ })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Next slide' }))
+    expect(screen.getByRole('heading', { name: /Airside programs/ })).not.toHaveClass('cine-rise')
+    expect(container.querySelectorAll('.cine-bar')).toHaveLength(0)
+    expect(container.querySelector('.cine-settle')).toBeNull()
+    expect(container.querySelector('.hero-copy-in')).not.toBeNull()
+  })
+
+  it('keeps the slide dots out of the Tab order, never hides the controls, and announces a new slide', () => {
+    const { container } = render(<LoginPage rememberedEmail={remembered} onContinue={async () => {}} />)
+    expect(screen.getByRole('button', { name: 'Next slide' }).closest('[class*="cine-"]')).toBeNull()
+    expect(container.querySelector('[aria-live="polite"]')).toContainElement(screen.getByRole('heading', { level: 1 }))
+    expect(screen.getByRole('button', { name: 'Show slide 1' })).toHaveAttribute('tabindex', '-1')
+    expect(screen.getByRole('button', { name: 'Next slide' })).not.toHaveAttribute('tabindex')
   })
 
   it('cross-fades to a slide once its image has loaded, and ignores a click on the current slide', async () => {

@@ -33,7 +33,8 @@ const SLIDES = [
   { image: image9, title: 'login.slide.9.title', body: 'login.slide.9.body' },
 ] as const satisfies readonly { image: string; title: ShellKey; body: ShellKey }[]
 
-const SLIDE_MS = 6000
+/** The hero's one-time opening (index.css, cine-*): on until the user picks another slide. */
+const rise = (opening: boolean, delay: 'cine-d1' | 'cine-d2' | 'cine-d3') => (opening ? ` cine-rise ${delay}` : '')
 
 export default function LoginPage({ onContinue, onForgotPassword, rememberedEmail, notice = null }: LoginPageProps) {
   const { email, setEmail, remember, setRemember, submitting, error, handleSubmit, handleForgotPassword } =
@@ -43,7 +44,8 @@ export default function LoginPage({ onContinue, onForgotPassword, rememberedEmai
   const [slide, setSlide] = useState(0)
   const [settledSlide, setSettledSlide] = useState(0)
   const [loadedSlides, setLoadedSlides] = useState<ReadonlySet<number>>(() => new Set())
-  const [slidePaused, setSlidePaused] = useState(false)
+  // The slides change only on a click: after the opening the hero stays still.
+  const [opening, setOpening] = useState(true)
   const [slideDirection, setSlideDirection] = useState<1 | -1>(1)
 
   function markSlideLoaded(index: number) {
@@ -61,17 +63,6 @@ export default function LoginPage({ onContinue, onForgotPassword, rememberedEmai
     return () => window.clearTimeout(timer)
   }, [slide, loadedSlides, settledSlide])
 
-  useEffect(() => {
-    if (slidePaused) {
-      return
-    }
-    const timer = window.setInterval(() => {
-      setSlideDirection(1)
-      setSlide((current) => (current + 1) % SLIDES.length)
-    }, SLIDE_MS)
-    return () => window.clearInterval(timer)
-  }, [slidePaused])
-
   function showSlide(next: number) {
     const count = SLIDES.length
     const normalized = ((next % count) + count) % count
@@ -81,6 +72,7 @@ export default function LoginPage({ onContinue, onForgotPassword, rememberedEmai
     const forward = (normalized - slide + count) % count
     const backward = (slide - normalized + count) % count
     setSlideDirection(forward <= backward ? 1 : -1)
+    setOpening(false)
     setSlide(normalized)
   }
 
@@ -93,8 +85,6 @@ export default function LoginPage({ onContinue, onForgotPassword, rememberedEmai
         className="relative z-0 min-h-[68vh] flex-1 overflow-hidden lg:min-h-dvh"
         aria-roledescription={text('login.carousel.role')}
         aria-label={text('login.carousel')}
-        onMouseEnter={() => setSlidePaused(true)}
-        onMouseLeave={() => setSlidePaused(false)}
       >
         {SLIDES.map((item, index) => {
           const isIncoming = index === slide && index !== settledSlide && loadedSlides.has(index)
@@ -116,50 +106,74 @@ export default function LoginPage({ onContinue, onForgotPassword, rememberedEmai
                 if (node?.complete && node.naturalWidth > 0) markSlideLoaded(index)
               }}
               className={`pointer-events-none absolute inset-0 h-full w-full object-cover ${
-                isIncoming ? 'z-[1] hero-image-in' : isBase ? 'z-0 opacity-100' : 'z-0 opacity-0'
+                isIncoming
+                  ? 'z-[1] hero-image-in'
+                  : isBase
+                    ? `z-0 opacity-100${opening ? ' cine-settle' : ''}`
+                    : 'z-0 opacity-0'
               }`}
               style={isIncoming ? { ['--hero-shift' as string]: heroShift } : undefined}
               aria-hidden
             />
           )
         })}
+        {/* Film grade: a teal-black wash, the light leak, grain, then the letterbox bars (all still after 2.4 s). */}
         <div
-          className="pointer-events-none absolute inset-0 z-[2] bg-gradient-to-t from-black/55 via-black/15 to-transparent"
+          className="pointer-events-none absolute inset-0 z-[2] bg-[linear-gradient(180deg,rgb(6_16_24/0.35)_0%,rgb(6_16_24/0.15)_25%,rgb(6_16_24/0.7)_50%,rgb(6_16_24/0.92)_100%)]"
           aria-hidden
         />
+        <div className="cine-leak pointer-events-none absolute inset-0 z-[3]" aria-hidden />
+        <div className="cine-grain pointer-events-none absolute z-[3]" aria-hidden />
+        {opening ? (
+          <>
+            <div className="cine-bar pointer-events-none absolute inset-x-0 top-0 z-[4] bg-black" aria-hidden />
+            <div className="cine-bar cine-bar-bottom pointer-events-none absolute inset-x-0 bottom-0 z-[4] bg-black" aria-hidden />
+          </>
+        ) : null}
         <div className="relative z-10 flex min-h-[68vh] flex-col justify-end px-8 pb-12 pt-16 sm:px-12 lg:min-h-dvh lg:px-16 lg:pb-16 xl:px-20">
-          <BrandLogo size={84} />
-          <p className="mt-8 text-[clamp(1.75rem,3vw,2.6rem)] font-extrabold tracking-[0.08em] text-[#ff2d9a]">
-            BCBP SOLUTIONS
-          </p>
-          <div
-            key={slide}
-            className="hero-copy-in"
-            style={{ ['--hero-shift' as string]: slideDirection === 1 ? '1.5rem' : '-1.5rem' }}
-          >
-            <h1 className="mt-4 max-w-[22em] text-[clamp(1.85rem,2.7vw,3rem)] font-bold leading-[1.12] tracking-tight text-white">
-              {text(activeSlide.title).split('\n').map((line, index) => (
-                <span key={line}>
-                  {index > 0 ? <br /> : null}
-                  {line}
-                </span>
-              ))}
-            </h1>
-            <p className="mt-5 max-w-[36rem] text-[clamp(0.95rem,1.4vw,1.15rem)] leading-relaxed text-white/90">
-              {text(activeSlide.body)}
+          <div className={rise(opening, 'cine-d1')}>
+            <BrandLogo size={72} />
+            {/* The brand name as logotype: exempt from text contrast (WCAG 1.4.3), as in the form panel. */}
+            <p className="mt-6 text-[0.85rem] font-bold uppercase tracking-[0.24em] text-[#ff2d9a]" data-logotype>
+              BCBP SOLUTIONS
             </p>
           </div>
-          <ul className="mt-8 flex list-none flex-wrap gap-2.5">
+          {/* A carousel that moves only on a click announces the new slide (ARIA carousel pattern). */}
+          <div aria-live="polite">
+            <div
+              key={slide}
+              className={opening ? '' : 'hero-copy-in'}
+              style={{ ['--hero-shift' as string]: slideDirection === 1 ? '1.5rem' : '-1.5rem' }}
+            >
+              <h1
+                className={`mt-4 max-w-[24em] text-balance text-[clamp(2rem,3.1vw,3.4rem)] font-[650] leading-[1.05] tracking-[-0.02em] text-white${rise(opening, 'cine-d1')}`}
+              >
+                {text(activeSlide.title).split('\n').map((line, index) => (
+                  <span key={line}>
+                    {index > 0 ? <br /> : null}
+                    {line}
+                  </span>
+                ))}
+              </h1>
+              <p
+                className={`mt-5 max-w-[36rem] text-[clamp(1rem,1.3vw,1.2rem)] leading-relaxed text-white/80${rise(opening, 'cine-d2')}`}
+              >
+                {text(activeSlide.body)}
+              </p>
+            </div>
+          </div>
+          <ul className={`mt-8 flex list-none flex-wrap gap-2.5 p-0${rise(opening, 'cine-d3')}`}>
             {FEATURES.map(({ dotClass, label }) => (
               <li
                 key={label}
-                className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-[#1a1030]/80 px-3.5 py-2 text-[clamp(0.7rem,1vw,0.85rem)] font-medium text-white"
+                className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-black/45 px-3.5 py-2 text-[clamp(0.7rem,1vw,0.85rem)] font-medium text-white"
               >
                 <span className={`h-2 w-2 shrink-0 rounded-full ${dotClass}`} />
                 {text(label)}
               </li>
             ))}
           </ul>
+          {/* Not part of the rise: focusable controls are never invisible. */}
           <div className="mt-8 flex items-center gap-3">
             <button
               type="button"
@@ -176,6 +190,8 @@ export default function LoginPage({ onContinue, onForgotPassword, rememberedEmai
                   type="button"
                   aria-label={text('login.carousel.show', { number: index + 1 })}
                   aria-current={index === slide ? 'true' : undefined}
+                  // Pointer shortcuts: the keyboard uses ‹ ›, so Tab reaches the form after two stops.
+                  tabIndex={-1}
                   onClick={() => showSlide(index)}
                   className={`h-2.5 cursor-pointer rounded-full transition-all ${
                     index === slide ? 'w-7 bg-[#ff2d9a]' : 'w-2.5 bg-white/70'

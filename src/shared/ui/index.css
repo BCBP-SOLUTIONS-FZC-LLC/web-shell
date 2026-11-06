@@ -57,9 +57,125 @@
   animation: hero-copy-in 0.7s ease-out both;
 }
 
+/*
+ * The sign-in hero's opening (LoginPage): plays once on load, over 2.4 s, then the page is still.
+ *   0–1.2 s  letterbox bars open      0–1.6 s  the photograph settles
+ *   0–2.4 s  light leak and grain drift, then rest
+ *   0.5 s    logo, eyebrow, headline  1.0 s    subline  1.4 s  facts and controls
+ * Every layer is pointer-events: none; the form beside it never animates.
+ */
+@keyframes cine-letterbox {
+  from {
+    transform: scaleY(1);
+  }
+  to {
+    transform: scaleY(0);
+  }
+}
+
+@keyframes cine-settle {
+  from {
+    opacity: 0;
+    transform: scale(1.08);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes cine-leak {
+  from {
+    opacity: 0.9;
+    transform: translate3d(-12%, 6%, 0);
+  }
+  to {
+    opacity: 0.35;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes cine-grain {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(-4%, 3%, 0);
+  }
+}
+
+@keyframes cine-rise {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 24px, 0);
+    filter: blur(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+    filter: blur(0);
+  }
+}
+
+.cine-bar {
+  height: 12vh;
+  transform: scaleY(0);
+  transform-origin: top;
+  animation: cine-letterbox 1.2s cubic-bezier(0.65, 0, 0.35, 1) both;
+}
+
+.cine-bar-bottom {
+  transform-origin: bottom;
+}
+
+.cine-settle {
+  animation: cine-settle 1.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.cine-leak {
+  opacity: 0.35;
+  background:
+    radial-gradient(60% 50% at 20% 30%, rgb(255 45 154 / 0.28), transparent 70%),
+    radial-gradient(50% 40% at 80% 75%, rgb(0 200 212 / 0.18), transparent 70%);
+  animation: cine-leak 2.4s ease-out both;
+}
+
+.cine-grain {
+  inset: -5%;
+  opacity: 0.12;
+  background-image: url('./assets/images/grain.svg');
+  background-size: 240px 240px;
+  mix-blend-mode: overlay;
+  animation: cine-grain 2.4s steps(8) both;
+}
+
+.cine-rise {
+  animation: cine-rise 0.8s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.cine-d1 {
+  animation-delay: 0.5s;
+}
+
+.cine-d2 {
+  animation-delay: 1s;
+}
+
+.cine-d3 {
+  animation-delay: 1.4s;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .hero-image-in,
-  .hero-copy-in {
+  .hero-copy-in,
+  .cine-settle,
+  .cine-leak,
+  .cine-grain,
+  .cine-rise {
     animation: none;
+  }
+
+  .cine-bar {
+    display: none;
   }
 }

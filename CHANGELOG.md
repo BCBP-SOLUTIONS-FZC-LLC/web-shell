@@ -10,7 +10,18 @@ Pull requests that change the shell, its dependencies, or the image add an entry
 
 ## [Unreleased]
 
-Nothing yet.
+### Changed (2026-11-06 — a cinematic opening for the sign-in hero)
+
+- **The sign-in hero opens like a film title, once, then stays still.**
+  - *The opening:* the whole opening takes 2.4 s. The letterbox bars open (1.2 s), the photograph settles from 1.08× scale (1.6 s), and a light leak and film grain drift and stop (2.4 s). The logo, eyebrow and headline rise from 0.5 s, the subline from 1.0 s, and the facts and slide controls from 1.4 s (0.8 s each).
+  - *How it's built:* CSS keyframes only (`cine-*` in `src/shared/ui/index.css`). The grain is a bundled SVG (`src/shared/ui/assets/images/grain.svg`, inlined as a `data:` URI, which `img-src` allows). No script, inline style or third-party request is added.
+  - *Grade and type:* a teal-black grade under the copy. The headline is Geist at `clamp(2rem, 3.1vw, 3.4rem)` with balanced lines. The fact chips are neutral black, no longer violet.
+  - *Reduced motion:* under `prefers-reduced-motion` the page shows the final frame, with no bars and no animation.
+  - *The form:* the panel never animates, so it takes input from the first frame.
+  - *Tests:* `test/integration/login-carousel.test.tsx`; `test/browser/shell.spec.ts` (Hero opening, with the email filled while the opening is held mid-frame; Reduced motion; contrast on the resting frame).
+  - *(Previously: the slides advanced every 6 s and paused on hover.)*
+- **The carousel changes slide only on a click.** The ‹ › and dot controls still pick a slide; picking a slide ends the opening, and the slide cross-fades as before. The dot buttons are now out of the Tab order (`tabIndex={-1}`): the keyboard uses ‹ ›, so Tab reaches the email field after two stops instead of eleven. The ‹ › row does not take part in the opening, so a focusable control is never invisible. The slide copy sits in an `aria-live="polite"` region, so a new slide is announced.
+- **The hero's text contrast is measured over every photograph.** axe leaves text over an image incomplete, so a new browser case makes the hero text transparent on each of the 9 slides at rest and checks the brightest background pixels: headline at least 3:1, subline and fact chips at least 4.5:1. The subline measured 6.0–7.8:1. The hero's "BCBP SOLUTIONS" eyebrow is marked `data-logotype` (a brand name; WCAG 1.4.3 exempts logotypes), as the form panel's already was.
 
 ## [0.3.0] - 2026-11-06
 
