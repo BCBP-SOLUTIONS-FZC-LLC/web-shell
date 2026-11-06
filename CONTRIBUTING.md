@@ -311,7 +311,7 @@ A new folder or module: add it to a component (or a new one, with its deps) in t
 | SDK version | `package.json` (all three, exact), README, ARCHITECTURE, VERSIONING, LLD header, `.claude/CLAUDE.md`, CHANGELOG (`.claude/operations.md` checklist) |
 | A diagram | `docs/architecture/mermaid/*.mmd` and the identical block in `ARCHITECTURE.md` (`node .claude/hooks/check-diagrams.mjs`) |
 | Release, tag, or image-signing behavior | `VERSIONING.md` and `.github/workflows/release.yml` |
-| User-visible shell, dependency, image, or nginx change | `CHANGELOG.md` under `[Unreleased]` |
+| User-visible shell, dependency, image, or nginx change | `CHANGELOG.md` under `[Unreleased]`, in a section typed and dated with its topic (`### Fixed (YYYY-MM-DD — topic)`), with *(Previously: …)* for a behaviour change; update `### Known gaps` and `### Current architecture notes` when they change (the Format paragraph at the top of `CHANGELOG.md`) |
 
 ## Branch naming
 
