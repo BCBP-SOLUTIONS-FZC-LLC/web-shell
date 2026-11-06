@@ -343,6 +343,9 @@ describe('bootstrap, signed in', () => {
     await act(() => bootstrap())
     act(() => subscriber!({ status: 'expired', serverEnded: false, idle: true }))
     expect(screen.getByText(/period of inactivity/)).toBeInTheDocument()
+    // No login without a click after an expiry.
+    expect(signInAgain).not.toHaveBeenCalled()
+    expect(idp.login).not.toHaveBeenCalled()
     resolve.mockResolvedValue(acme)
     await userEvent.setup().click(screen.getByRole('button', { name: 'Sign in' }))
     await typeEmail('ada@acme.com')
