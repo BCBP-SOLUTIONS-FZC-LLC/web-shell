@@ -1,4 +1,4 @@
-// axe-core over every screen the shell owns: both login layouts (empty, and with a notice and an
+// axe-core over every screen the shell owns: the login page (empty, and with a notice and an
 // error), each session dialog, and the "unavailable" page. Colour contrast needs real layout, which
 // happy-dom does not compute, so that rule is left to a browser check.
 import { act, render, screen } from '@testing-library/react'

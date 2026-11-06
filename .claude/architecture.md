@@ -47,10 +47,10 @@ Condensed from [ARCHITECTURE.md](../ARCHITECTURE.md) and the [LLD](../docs/lld/w
 | `domain/` | SDK types only | React, the browser, any other layer |
 | `application/` | `domain/`; SDK types and `/problem` error classes | React, the browser, `infrastructure/`, `presentation/`, `app/` (ports are injected) |
 | `infrastructure/` | `domain/`, `shared/i18n`, the SDK | `presentation/`, `application/`, `app/` |
-| `presentation/` (any folder) | `domain/`, `application/` types, `shared/`; pages → components; features → pages, components; widgets `shared/i18n` only | `infrastructure/`, `app/`, the SDK, `application/` values; `fetch`, storage, `location`, `history`, `navigator`, `open` |
+| `presentation/` (any folder) | pages: components, `domain/`, `application/` types, `shared/`; features: pages, components, `domain/`, `application/` types, `shared/i18n`; components: `shared/` only; widgets: `shared/i18n` only | `infrastructure/`, `app/`, the SDK, `application/` values; `fetch`, storage, `location`, `history`, `navigator`, `open` |
 | `presentation/features/` (session screens) | as above, plus SDK `/auth` types | SDK `/auth` values (no login without a click) |
-| `shared/` | SDK `/i18n`, `/react` (text); each other | any shell layer |
-| `app/` | `bootstrap.tsx`: every layer (the only importer of `infrastructure/`, the only module that renders `#app`); `routes`, `providers`, `layouts`: only what they render or provide (arch-lint) | — |
+| `shared/` | `i18n`: SDK `/i18n`, `/react` (text); `constants`: `i18n`; `ui`, `types`: nothing | any shell layer |
+| `app/` | `bootstrap.tsx`: every layer except presentation and `shared/constants`, which it reaches through `layouts`, `providers` and `routes` (the only importer of `infrastructure/`, the only module that renders `#app`); `routes`, `providers`, `layouts`: only what they render or provide (arch-lint) | — |
 
 Enforced twice: `eslint.config.js` (editor feedback, browser globals; `test/unit/layer-rules.test.ts`) and `.dependency-cruiser.cjs` (`npm run arch-lint`: every dependency declared per component; `test/unit/arch-lint.test.ts`). Fix a violation by injecting a port or passing a prop from `app/`, never by widening a rule.
 
@@ -85,4 +85,4 @@ No CSP or HSTS in the image. CloudFront sends the platform's; until it exists (n
 | `test/fixtures` | `FakeKeycloak` (`approve()`, token endpoint, PKCE check, refresh rotation, `now` for clock skew), `FakeNetwork` (`on('GET /path', …)`, `sent(path)`), `FakeBroadcastChannel` |
 | `test/smoke` | `vitest.smoke.config.ts`; `SMOKE_BASE_URL` required; `SMOKE_MODE` `image` (localhost default) or `live` (CSP incl. `form-action`, HSTS, nosniff) |
 | `test/browser/shell.spec.ts` | Production build in Chromium, Firefox, WebKit over HTTPS with the production CSP; fake Keycloak on a second origin; a stub remote on the shared SDK. 6 cases × 3 engines. Not in `npm test` |
-| `test/browser/dashboard.spec.ts` | Same, with a real mfe-dashboard build (`REMOTE_DIST`). 3 cases × 3 engines; CI `Dashboard contract` (informational) |
+| `test/browser/dashboard.spec.ts` | Same, with a real mfe-dashboard build (`REMOTE_DIST`). 4 cases × 3 engines; CI `Dashboard contract` (informational) |

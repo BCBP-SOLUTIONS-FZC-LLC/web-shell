@@ -10,7 +10,7 @@ We use [SemVer 2.0.0](https://semver.org/): `MAJOR.MINOR.PATCH` (e.g. `v1.2.3`).
 
 | Bump | When you change | Examples |
 |------|-----------------|----------|
-| **MAJOR** | Breaking change in the runtime contract (§ below) | Removing or renaming a prop the shell passes to `dashboard`, moving to an SDK major (or an alpha `N`) that refuses remotes built against the current one, removing a route, changing the redirect path or the `/t/<slug>/` prefix, requiring a new runtime config key, removing `/healthz` or `/`, changing the image listen port |
+| **MAJOR** | Breaking change in the runtime contract (§ below) | Renaming the remote (`dashboard`) or its container global, removing or changing a field of the `PlatformProvider` shell value the remote reads (the shell passes remotes no props), moving to an SDK major (or an alpha `N`) that refuses remotes built against the current one, removing a route, changing the redirect path or the `/t/<slug>/` prefix, requiring a new runtime config key, removing `/healthz` or `/`, changing the image listen port |
 | **MINOR** | New backward-compatible capability | An SDK minor bump within the same major (remotes built against the older minor still load), a new optional runtime config key, a new route that does not remove an existing one, a new remote |
 | **PATCH** | Backward-compatible fix | Sign-in or routing bug fix, visual fix that does not change the federation contract, dependency bump with no observable behavior change, documentation-only correction |
 
@@ -32,7 +32,7 @@ This shell has no package for another app to import from npm. Its public contrac
 
 ### Guarantees
 
-- **Pre-`v1.0.0` (current status):** per [SemVer §4](https://semver.org/#spec-item-4), anything may change at any time while the major version is `0`. This shell has not yet committed to a stable contract via a Git tag. The table above still indicates what is *more* disruptive than what within `v0.x`, but a host should not yet assume `v0.x` compatibility across a MINOR bump the way it could once `v1.0.0` ships.
+- **Pre-`v1.0.0` (current status):** per [SemVer §4](https://semver.org/#spec-item-4), anything may change at any time while the major version is `0`. Tags exist (`v0.1.0`, `v0.2.0`), but the major version is `0`, so the contract is not yet stable. The table above still indicates what is *more* disruptive than what within `v0.x`, but a host should not yet assume `v0.x` compatibility across a MINOR bump the way it could once `v1.0.0` ships.
 - **MAJOR (once `v1` ships):** breaking changes to the runtime contract ship as `v2.0.0` with migration notes in the CHANGELOG.
 - **MINOR:** safe to roll the image forward without rebuilding the dashboard remote or changing the environment's runtime config, unless you opt into a new capability.
 - **PATCH:** drop-in image replacement. Upgrade recommended for security fixes. Every image is CVE-scanned (see below).
@@ -52,14 +52,14 @@ Do not add this repository as an npm dependency. Run the **shell image** (or ser
 
 ### Pull and verify the image
 
-Once a tag exists:
+A tag publishes the image (`release.yml`; `v0.1.0` and `v0.2.0` are released):
 
 ```bash
 # Git tag v0.1.0 publishes the image as 0.1.0 (the v prefix is not part of the image tag)
 docker pull ghcr.io/bcbp-solutions-fzc-llc/web-shell:0.1.0
 ```
 
-**Today** only images from a push to `main` or `master` are published (see CI below). Every image pushed from `ci.yml` is signed keylessly via Sigstore/Cosign (no long-lived key). Verify before deploying:
+Images are published from a release tag (`release.yml`) and from every push to `main` (`ci.yml`, tagged by commit; see CI below). Every image pushed from `ci.yml` is signed keylessly via Sigstore/Cosign (no long-lived key). Verify before deploying:
 
 ```bash
 # main-branch builds (signed by ci.yml's push job)
@@ -127,8 +127,10 @@ When cutting a tagged release:
 
    ```bash
    npm run lint      # ESLint with the platform rules
+   npm run arch-lint # component boundaries (.dependency-cruiser.cjs)
    npm run typecheck # sources and tests
-   npm run test:ci   # unit and integration, then the 95% coverage gate
+   npm run metrics-check # observability standard
+   npm run test:ci   # unit, integration and e2e, then the 95% coverage gate
    npm run build     # tsc and the production bundle
    ```
 
@@ -144,7 +146,7 @@ When cutting a tagged release:
    Or run the workflow manually (`workflow_dispatch`) with the existing tag name.
 
 6. **The release workflow** (`.github/workflows/release.yml`) runs:
-   - `validate-test` / `validate-quality` — the same reusable gates `ci.yml` uses, checked out at the tag. Test runs the suite and the 95% coverage gate, then `npm run build`. Quality runs ESLint and the typecheck, and checks workflow hygiene, digest-pinned `FROM` lines, and `npm audit` for production dependencies.
+   - `validate-test` / `validate-quality` — the same reusable gates `ci.yml` uses, checked out at the tag. Test runs the suite and the 95% coverage gate, then `npm run build`. Quality runs ESLint, arch-lint, metrics-check and the typecheck, and checks workflow hygiene, digest-pinned `FROM` lines, and `npm audit` for production dependencies.
    - `build` — verifies the tag matches HEAD (`verify-release-tag.sh`), verifies the CHANGELOG section (`verify-changelog-entry.sh`), and packs `dist/` without source maps as `web-shell_<tag>_dist.tar.gz` (`prepare-release-asset.sh`).
    - `docker` — builds the `linux/amd64` image and pushes it **by digest only**, fails the release on unfixed CRITICAL/HIGH CVEs, writes a CycloneDX SBOM and SLSA provenance, signs with Cosign, verifies the signature, and only then adds the semver tags and `latest` (see the tag scheme above; `.github/scripts/tag-signed-image.sh` checks every tag resolves to the signed digest). A failure before that leaves an untagged digest: no version tag or `latest` moves.
    - `publish` — creates the GitHub Release from the CHANGELOG section and attaches the tarball, checksums, SBOM, and provenance. It runs only after `build` and `docker` succeed.
@@ -165,6 +167,8 @@ Both match the `v[0-9]*.[0-9]*.[0-9]*-*` tag trigger and produce a signed, scann
 | web-shell | Node | React | Platform SDK | Dashboard remote |
 |-----------|------|-------|--------------|------------------|
 | Unreleased (`main`) | 26 (image builder `node:26-bookworm`, CI `node-version: 26`) | `^19.0.0` (strict singleton, from the preset) | `@bcbp-solutions-fzc-llc/*` `1.0.0-alpha.6`, all three on one version | From `/remotes/manifest.json`. Must be built with `webpack-preset` `1.0.0-alpha.4`, `alpha.5` or `alpha.6` (container global `__platform_mfe_<name>`; a remote requires `^<its SDK>`, so never newer than this shell's); an alpha.3 build defines the old global, which this shell does not read. Not versioned in this repo |
+| `0.2.0` | 26 | `^19.0.0` | `1.0.0-alpha.5`, all three | Remote `dashboard` (container `__platform_mfe_dashboard`): mfe-dashboard `v0.3.0` (alpha.5). A dashboard built on alpha.6 needs a shell on alpha.6 (`main`) |
+| `0.1.0` | 26 | `^19.0.0` | `1.0.0-alpha.5`, all three | Remote `app2`: mfe-dashboard `v0.1.1`–`v0.2.0` |
 
 Keycloak itself is not a library dependency of the image. The shell talks to the `auth.idpOrigin` and `auth.clientId` in `/config/runtime.json`, and to the realm PUB-1 resolves for the workspace. The runtime image is nginx and the static files.
 
@@ -172,7 +176,7 @@ Keycloak itself is not a library dependency of the image. The shell talks to the
 
 | File | Purpose |
 |------|---------|
-| [CHANGELOG.md](./CHANGELOG.md) | User-facing history per version. Currently entirely `[Unreleased]` |
+| [CHANGELOG.md](./CHANGELOG.md) | User-facing history per version: released sections `0.1.0` and `0.2.0`; `[Unreleased]` for `main` |
 | [README.md](./README.md) | What the shell is |
 | [ARCHITECTURE.md](./ARCHITECTURE.md) | Module layout, bootstrap, sign-in flow, storage, threat model |
 | [docs/lld/web-shell-lld.md](./docs/lld/web-shell-lld.md) | Low-level design; §14 compatibility |

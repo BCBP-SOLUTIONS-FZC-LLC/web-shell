@@ -34,27 +34,27 @@ graph LR
     boot --> nav
     boot --> msgs
     boot --> sdk
-    root --> usecases
+    root -. types .-> usecases
     root --> sdk
     host --> screens
     host --> screen
     screens --> login
-    screens --> usecases
+    screens -. types, signIn.ts .-> usecases
     screens --> domain
     screens --> text
     login --> comps
-    login --> domain
+    login -. types .-> domain
     login --> text
     comps --> links
     comps --> text
-    links --> text
+    links -. types .-> text
     app --> widgets
     app --> text
     app --> sdk
     widgets --> text
     usecases --> domain
     usecases -. types, /problem .-> sdk
-    remember --> domain
+    remember -. types .-> domain
     iam --> sdk
     reset --> sdk
     msgs --> text

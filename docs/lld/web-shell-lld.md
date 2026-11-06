@@ -150,13 +150,14 @@ src/
     pages/login/                LoginPage, useEmailSignIn
     features/session-screens/   SignInScreen and the dialogs (components; callbacks in, no mounting)
     components/                 BrandLogo, PageLinks
-    widgets/                    UpdateAvailable, ContextUnavailable (state as props)
+    widgets/                    UpdateAvailable, ContextUnavailable (state as props), AppError (the error page)
   application/                  signIn.ts (SignInUseCases); use-cases/ resolveWorkspace, requestPasswordReset,
                                 loadSessionContext (isTransient, retrySessionContext, createStore)
   domain/                       repositories/rememberedEmail.ts (contract), errors.ts (WorkspaceNotFoundError),
                                 rules/permissions.ts (IAM_ROLES, permissions: role → action:resource)
   infrastructure/
-    api/iam.ts                  toWorkspace, toSessionContext, workspaceResolver, sessionContextSource
+    api/iam.ts                  toWorkspace, toSessionContext, workspaceResolver, sessionContextSource,
+                                loadSessionContextOnce
     auth/passwordReset.ts       passwordResetUrl (Keycloak reset-credentials)
     storage/rememberedEmail.ts  localStorageRememberedEmail (implements RememberedEmailRepository)
     federation/navigator.ts     shellNavigator: the router as the SDK's navigate() target
@@ -179,10 +180,10 @@ test/                           unit, integration, e2e, fixtures, smoke, browser
 | `domain/` | SDK types only | React, the browser, any other layer |
 | `application/` | `domain/`; SDK types and the `/problem` error classes | React, the browser, `infrastructure/`, `presentation/`, `app/` (ports are injected by the bootstrap) |
 | `infrastructure/` | `domain/`, `shared/i18n`, SDK subpaths | `presentation/`, `application/`, `app/` |
-| `presentation/` (any folder) | `domain/`, `application/` types, `shared/`; pages → components; features → pages, components. Widgets: `shared/i18n` only; components: `shared/` only | `infrastructure/`, `app/`, the SDK, `application/` values, storage, the network, navigation |
+| `presentation/` (any folder) | pages: components, `domain/`, `application/` types, `shared/`; features: pages, components, `domain/`, `application/` types, `shared/i18n`; components: `shared/` only; widgets: `shared/i18n` only | `infrastructure/`, `app/`, the SDK, `application/` values, storage, the network, navigation |
 | `presentation/features/` | as above, plus SDK `/auth` types | SDK `/auth` values (no login without a click) |
-| `shared/` | SDK `/i18n` (`t`), `/react` (`useT`); each other | any shell layer. `shared/i18n` exposes text lookup only |
-| `app/` | `bootstrap.tsx` (the composition root, the only module that imports `infrastructure/`) wires every layer; `routes`, `providers` and `layouts` only what they render or provide (CONTRIBUTING § Architecture lint). `bootstrap.tsx` builds the use cases from infrastructure and passes them to the screens; `index.ts` imports `bootstrap.tsx` dynamically and `shared/i18n/en.json` statically (the unavailable page cannot use the SDK) | — |
+| `shared/` | `i18n`: SDK `/i18n` (`t`), `/react` (`useT`); `constants`: `shared/i18n`; `ui`, `types`: nothing | any shell layer. `shared/i18n` exposes text lookup only |
+| `app/` | `bootstrap.tsx` (the composition root, the only module that imports `infrastructure/`) wires every layer except presentation and `shared/constants`, which it reaches through `layouts`, `providers` and `routes`; `routes`, `providers` and `layouts` only what they render or provide (CONTRIBUTING § Architecture lint). `bootstrap.tsx` builds the use cases from infrastructure and passes them to the screens; `index.ts` imports `bootstrap.tsx` dynamically and `shared/i18n/en.json` statically (the unavailable page cannot use the SDK) | — |
 
 The SDK is imported through public subpaths only. `@bcbp-solutions-fzc-llc/eslint-plugin` `configs.recommended` on `src/` fails a root or deep import, identity headers, raw `window.*Storage`, unsafe HTML and non-template API paths; `npm run lint` runs with `--max-warnings 0` in `validate-quality`.
 
@@ -285,7 +286,7 @@ Keys are IAM's closed role set: `member`, `tenant_owner`, `tenant_admin`, `tende
 | 6 | `setFlagProvider(runtimeConfigFlagProvider())`; `registerShellMessages(cfg.i18n.defaultLocale)` (`infrastructure/i18n/shellMessages.ts`) | Platform flags only, until P-35. The `shell` namespace is registered and loaded for the default locale (`registerNamespace` + `setLocale`) before any screen, so the sign-in screens never show keys; step 14 then picks the user's locale |
 | 7 | `idp = createOidcProvider(cfg.auth, workspaceResolver)`, `setTokenSource(initializeAuth(idp))`, `session = await idp.init()` | May redirect once with `prompt=none` and never settle |
 | 8 | Anonymous → §6.1 and return | The app is not rendered |
-| 9 | `isWrongWorkspace(session.workspace, session.user)` → `showWrongWorkspace(idp)` and return | Not cached, never rendered |
+| 9 | `isWrongWorkspace(session.workspace, session.user)` → `showWrongWorkspace(idp, signInUseCases)` and return | Not cached, never rendered |
 | 10 | `idp.subscribe(...)` | §6.4, §6.5 |
 | 11 | `setAuthorizer(roleMapAuthorizer(permissions))`; `sessionContextSource.load()` into a store | Failure → `warn 'session context unavailable'`, context `undefined`. A sign-out from here on stops the boot (checked after every await) |
 | 12 | `setAuthzSubject(context && { roles, tenantId })` | |
@@ -314,7 +315,7 @@ Keys are IAM's closed role set: `member`, `tenant_owner`, `tenant_admin`, `tende
 
 1. The workspace a failed silent attempt named (`reason: 'login-required'`).
 2. `chooseWorkspace({ pathname, resolver, cfg })`: the `/t/<slug>` in the URL (cached or resolved through PUB-1), else the most recently cached workspace.
-3. `askForWorkspace()`: the email screen. PUB-1 resolves the email; "not found", 429 and unreachable all show "We could not find a workspace for that email."
+3. `askForWorkspace(signInUseCases)`: the email screen. PUB-1 resolves the email; "not found", 429 and unreachable all show "We could not find a workspace for that email."
 
 Then `idp.login({ workspace, loginHint? })`. The hint is the typed email, or the remembered email for a known workspace. `returnUrl` defaults to the current page in the SDK, and after a sign-out the SDK adds `prompt=login` itself; the shell passes neither.
 
@@ -399,6 +400,7 @@ Validated strictly by the SDK (unknown keys rejected). Schema: SDK LLD §12.1.
 
 | Key | Image default (`public/config/runtime.json`) | Local (`config/runtime.local.json`) |
 |---|---|---|
+| `environment` | none: each deployment writes its own; the identity takes it (SDK alpha.6), else `__ENVIRONMENT__` | `local` |
 | `api` | `/api`, `timeoutMs` 35000, `propagationAllowlist` `[]` | same |
 | `telemetry` | `/otel`, `sampleRatio` 0.1, `info`, `sendSessionHeader` | `/otel`, 1, `debug` |
 | `auth.idpOrigin` · `clientId` | `https://auth.bcbpsolutions.com` · `tender-web` | `http://localhost:8080` · `app1` |
@@ -406,6 +408,7 @@ Validated strictly by the SDK (unknown keys rejected). Schema: SDK LLD §12.1.
 | `auth.scopes` · `idleTimeoutMs` · `redirectPath` | `["openid"]` · 1800000 · `/auth/callback` | same |
 | `remotes` | `killSwitch` `[]`, 10000 ms, `retries` 2, `allowedOrigins` `[]` | `retries` 1, `allowedOrigins` `["http://localhost:5002"]` |
 | `i18n` · `appUpdate` | `en` · 300000 ms | same |
+| `flags` | `{}` (platform flags; tenant flags come from P-35) | same |
 
 ### 9.2 Build-time constants
 
@@ -451,7 +454,7 @@ Builder `node:26-bookworm@sha256:…`: `npm ci` with the `npm_token` secret, `np
 | `POST /otel/*` | `204` |
 | `GET /api/v1/public/tenants/resolve` | Any non-empty identifier → `DEV_REALM` (default `tenant-bcbp`), `dedicated` |
 | `GET /api/v1/me/session-context` | 401 without a bearer; else slug from the realm, roles `DEV_ROLES` (default `member,tenant_owner`) |
-| other `/api/*` | 404 problem, or proxied to `DEV_API_URL` (502 problem when unreachable) |
+| other `/api/*` | 404 problem, or proxied to `DEV_API_URL` (503 problem when unreachable) |
 
 None of it reaches the bundle or the image.
 
@@ -459,7 +462,7 @@ None of it reaches the bundle or the image.
 
 ## 11. Observability
 
-Identity: `service.name` `web-shell`, domain `portal`, environment `__ENVIRONMENT__`, version `__BUILD_VERSION__`. Telemetry goes to same-origin `/otel` and is consent-gated. v1 grants `essential` only (decision: no analytics consent manager), so only `error` and essential `warn` logs leave the page.
+Identity: `service.name` `web-shell`, domain `portal`, environment from `runtime.json` `environment`, else the build-time `__ENVIRONMENT__`, version `__BUILD_VERSION__`. Telemetry goes to same-origin `/otel` and is consent-gated. v1 grants `essential` only (decision: no analytics consent manager), so only `error` and essential `warn` logs leave the page.
 
 | Event | Level | When |
 |---|---|---|
@@ -478,15 +481,14 @@ Vitest 5, happy-dom at `http://localhost:5001/`, Testing Library. `vitest.config
 
 | Layer | Path | Real SDK | What it locks |
 |---|---|---|---|
-| Unit | `test/unit/` | partly (`createTestPlatform`, `mockApi`, `roleMapAuthorizer`) | The layer rules firing (`layer-rules.test.ts`); the `shell` catalogue, its fallback for a default locale without one, and no hard-coded user-facing text in presentation (`shell-text.test.ts`, on the TypeScript syntax tree); PUB-1/P-35 mappings against the SDK's contract cases, the entry point, remember-email, the role map, the screen host, `BrandLogo`, the login variant, the dev middleware (node env, real HTTP) |
-| Integration | `test/integration/` | no (`vi.mock` recording fakes) | The bootstrap's exact order and every branch, login layouts and carousel (only current and next photo fetched), session screens (alerts, dialog focus), `App` routes and the missing-context notice, axe-core over every shell screen (`accessibility.test.tsx`, colour contrast excluded) |
+| Unit | `test/unit/` | partly (`createTestPlatform`, `mockApi`, `roleMapAuthorizer`) | The layer rules firing (`layer-rules.test.ts`); the `shell` catalogue, its fallback for a default locale without one, and no hard-coded user-facing text in presentation (`shell-text.test.ts`, on the TypeScript syntax tree); PUB-1/P-35 mappings against the SDK's contract cases, the entry point, remember-email, the role map, the screen host, `BrandLogo`, the dev middleware (node env, real HTTP) |
+| Integration | `test/integration/` | no (`vi.mock` recording fakes) | The bootstrap's exact order and every branch, the login page and carousel (only current and next photo fetched), session screens (alerts, dialog focus), `App` routes and the missing-context notice, axe-core over every shell screen (`accessibility.test.tsx`, colour contrast excluded) |
 | End to end | `test/e2e/shell.test.tsx` | yes | Email → PUB-1 → PKCE → callback → `dashboard` under `/t/acme/dashboard`; tokens never stored; deep link; role map reaching the remote; deny-all; failing remote and Try again; global sign-out (form POST to Keycloak) with no silent sign-in after; device clock; unknown email |
 | Smoke | `test/smoke/deployment.test.ts` | yes (config and manifest validation) | Against `SMOKE_BASE_URL`: the SPA rule, Cache-Control, entry integrity, no maps, 404s, `/healthz`; `image` mode adds nginx's baseline headers, gzip, no version, dotfile 404s; `live` mode adds CloudFront's CSP (including `form-action` allowing the IdP), HSTS and nosniff |
-
-E2E seams (`test/fixtures/`): `FakeKeycloak` (authorize via `approve()`, token endpoint with PKCE check and refresh rotation), `FakeNetwork` (route table on the page origin; `/otel` → 204), `FakeBroadcastChannel`. Only the remote's entry `<script>` is stubbed: it defines `window.__platform_mfe_dashboard` exposing a dashboard built on SDK hooks. A page load clears `globalThis[Symbol.for('@bcbp-solutions-fzc-llc/frontend-sdk')]`, resets modules, and imports the bootstrap again; storage is kept.
-
 | Browser | `test/browser/shell.spec.ts` (Playwright) | the production build | Chromium, Firefox, WebKit over HTTPS with the production CSP and Trusted Types (`server.ts`), a fake Keycloak on a second origin, a remote stub on the shared SDK: fonts and hashed images with no third-party request, PKCE sign-in and the remote with integrity, `navigate()` without a reload, the sign-out form POST under `form-action`, the start-up failure at `/otel`, axe colour contrast (the logotype is exempt, WCAG 1.4.3). Any CSP report fails the test |
 | Dashboard contract | `test/browser/dashboard.spec.ts` (`REMOTE_DIST`) | the production build | A real mfe-dashboard build served as `dashboard` with its own `remote-manifest-entry.json` integrity: it loads with its CSS and no CSP violation, every image it shows loads, the role map reaches it, its `NavLink` stays in the page, its Logout POSTs to Keycloak through the shell. A wrong integrity fails it |
+
+E2E seams (`test/fixtures/`): `FakeKeycloak` (authorize via `approve()`, token endpoint with PKCE check and refresh rotation), `FakeNetwork` (route table on the page origin; `/otel` → 204), `FakeBroadcastChannel`. Only the remote's entry `<script>` is stubbed: it defines `window.__platform_mfe_dashboard` exposing a dashboard built on SDK hooks. A page load clears `globalThis[Symbol.for('@bcbp-solutions-fzc-llc/frontend-sdk')]`, resets modules, and imports the bootstrap again; storage is kept.
 
 ---
 
@@ -495,7 +497,7 @@ E2E seams (`test/fixtures/`): `FakeKeycloak` (authorize via `approve()`, token e
 | Workflow | Gate |
 |---|---|
 | `ci.yml` → `validate-test.yml` | `npm ci`, `npm run test:coverage`, coverage gate 95%, `npm run build`, `npm run budget` (entry 12 KB, JS+CSS 300 KB, largest 85 KB gzip; images 2.7 MB) |
-| `ci.yml` → `validate-quality.yml` | ESLint `--max-warnings 0`, `npm run typecheck`, workflow hygiene, LF, digest pins, `.dockerignore`, `npm audit --omit=dev --audit-level=high` |
+| `ci.yml` → `validate-quality.yml` | ESLint `--max-warnings 0`, `npm run arch-lint`, `npm run metrics-check`, `npm run typecheck`, workflow hygiene, LF, digest pins, `.dockerignore`, `npm audit --omit=dev --audit-level=high` |
 | `ci.yml` `build-image` | Hadolint, Buildx cache build `web-shell-ci-test` |
 | `ci.yml` `trivy` | Unfixed CRITICAL/HIGH/UNKNOWN fail; SBOM artifact |
 | `ci.yml` `smoke` | `smoke-tests.sh`: ≤ 200 MB, startup gate, then `npm run test-smoke` (`SMOKE_MODE=image`) against the container |
@@ -516,7 +518,7 @@ Every `npm ci` reads `@bcbp-solutions-fzc-llc/*` from GitHub Packages with `GITH
 | SDK | Pinned exactly; the shell shares it as `1.0.0-alpha.6` under the preset's range `^1.0.0-0`. It loads remotes built on alpha.4, alpha.5 and alpha.6 (each requires `^<its SDK>`) |
 | Remotes | A remote built with the preset requires `^<its SDK version>`: it must not be newer than the shell's. **Upgrade the shell first**, then remotes. A release that changes the shell–remote contract is the exception (alpha.4 changed the container global): the shell and every remote deploy together. `npm run test-contract` checks a pairing |
 | React | Strict singleton `^19.0.0` from the preset; the shell ships 19.3 |
-| `mfe-dashboard` (remote `dashboard`) | Rsbuild remote with `pluginPlatform({ role: 'remote', name: 'dashboard' })`, async-only chunk splitting, reads the user and sign-out through SDK hooks, takes no props. alpha.4 from its `main` and tag `v0.1.0` on. Contract suite (`dashboard.spec.ts`) on 2026-11-05 against `main` `e1b04c3` and branch `0be083c` (v0.1.1 prep): 9/9 in three engines (loads with its CSS and integrity, role map reaches it, `NavLink` without a reload, Logout through the shell's form POST). Its `v0.1.0` tag has no published release (its provenance step failed); `v0.1.1` is pending. An alpha.3 build does not load in this shell |
+| `mfe-dashboard` (remote `dashboard`) | Rsbuild remote with `pluginPlatform({ role: 'remote', name: 'dashboard' })`, async-only chunk splitting, reads the user and sign-out through SDK hooks, takes no props. Released pairs: web-shell `v0.2.0` + mfe-dashboard `v0.3.0` (remote `dashboard`, alpha.5), and the rollback web-shell `v0.1.0` + mfe-dashboard `v0.2.0` (remote `app2`). `main` (alpha.6) passes the contract suite (`dashboard.spec.ts`, 12/12 in three engines) against mfe-dashboard `v0.3.0`. An alpha.3 build does not load in this shell |
 | Keycloak | Each workspace realm registers `{origin}/auth/callback` and the origin as post-logout redirect for the client |
 
 Details: [VERSIONING.md](../../VERSIONING.md).
@@ -537,3 +539,4 @@ Details: [VERSIONING.md](../../VERSIONING.md).
 | 10 | Keycloak realms need SMTP and "Forgot password" enabled for the reset flow (§6.1a); unconfirmed | Keycloak ops |
 | 11 | The `WebShellStartupFailures` alert ([runbook](../runbook-startup-failure.md)) is an example; it must be deployed to the Loki ruler | operators |
 | 12 | One build for every environment (SDK alpha.6): each deployed `runtime.json` must name its `environment` (checked by `SMOKE_MODE=live ENVIRONMENT=<target> npm run test-smoke`); then the shell drops `__ENVIRONMENT__` / `PLATFORM_ENVIRONMENT`, and a file without the key stops at the unavailable page | operators, then this repo |
+| 13 | Dependabot's npm job needs the Dependabot secret `PACKAGES_READ_TOKEN` (read:packages; an organisation secret shared with mfe-dashboard) to read GitHub Packages; until it exists every npm update run fails with 401 | org admin |

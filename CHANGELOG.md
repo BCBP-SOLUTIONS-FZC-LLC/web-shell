@@ -30,6 +30,26 @@ Pull requests that change the shell, its dependencies, or the image add an entry
 
 ### Changed
 
+- **Documentation brought in line with the code before the next release; the SDK retry rule is now checked (`2026-11-06`).** An independent review of every document against `main` (and of the code since `v0.2.0`, which found no regression) led to these fixes:
+  - **Operators:**
+    - README's sign-out is a form POST (the CSP's `form-action` must allow the IdP), not a GET.
+    - The `environment` and `flags` keys are in the README and LLD §9.1 config tables.
+    - VERSIONING and README describe the released `0.1.0` and `0.2.0`, with compatibility rows for both.
+    - The smoke README covers ingress hosting until CloudFront.
+    - LLD §15 lists the missing Dependabot secret.
+  - **Rules and diagrams:**
+    - The composition root's allowed imports and the `shared/` and presentation rows match `.dependency-cruiser.cjs`.
+    - The sign-in diagram shows the bootstrap, not the screens, calling `idp.login`. The bootstrap diagram shows the catalogue loading before any screen.
+    - Imports that carry only types (or only what the label names) and the remote's run-time load are drawn dashed.
+    - CONTRIBUTING no longer passes props to a remote.
+    - The constitution assessment has a status: V1–V4 fixed, V5 open.
+  - **CI and tests:**
+    - `validate-quality` is described with arch-lint and metrics-check everywhere.
+    - Test descriptions name the tests that exist (no consent test, one login layout).
+    - The LLD's test table renders as one table.
+  - **Stale facts:** the dev proxy answers 503, the contract suite has 4 cases, the identity's environment comes from `runtime.json`, and earlier entries in this section give the paths step 2 moved.
+  - **Code: `isTransient` checked against the SDK.** It copies the SDK ApiClient's retry rule, which the SDK does not export. A new test runs the real ApiClient against 12 statuses and fails if the two disagree, so an SDK upgrade that changes the rule breaks the build instead of silently diverging. Dropping 429 from the copy makes it fail.
+
 - **An error boundary around the shell's own screens (`2026-11-06`).** The constitution requires error boundaries. The dashboard had one (`RemoteBoundary`), but a render error in the shell's own routes or widgets left a blank page, logged only by the global handler.
   - `App.tsx` now wraps its router in the SDK's `MFEErrorBoundary` with `mfe="web-shell"`, which logs the error, records it for the SDK's web-error metric (counting once Tier 1 is ratified) and reloads once for a chunk-load error. It shows `presentation/widgets/AppError`: "Something went wrong on this page.", the trace or request reference when there is one, and Try again, which re-renders.
   - The page never shows the error's own message; its words are new catalogue keys `app.error` and `app.error.reference`.
@@ -62,7 +82,7 @@ Pull requests that change the shell, its dependencies, or the image add an entry
   - **Docs:** layout, module rules and both diagrams rewritten in ARCHITECTURE, the LLD (§2.1, §3, §3.1), `.claude/`, CONTRIBUTING and README.
 
 - **Architecture lint, like the IAM services' go-arch-lint (`2026-11-06`).** `.dependency-cruiser.cjs` declares the shell's components and what each may depend on, in the same shape as `.go-arch-lint.yml`:
-  - **Components:** `domain`, `application`, `i18n`, `assets`, `components`, `pages`, `screen_host`, `session_screens`, `infrastructure`, `routes`, `composition_root` and `entry`, each with its `in` paths.
+  - **Components:** `domain`, `application`, `i18n`, `assets`, `components`, `pages`, `screen_host`, `session_screens`, `infrastructure`, `routes`, `composition_root` and `entry` at the time; step 2 (above) replaced them with the 15 components of the new folders (`.dependency-cruiser.cjs`, CONTRIBUTING § Architecture lint), each with its `in` paths.
   - **Deps:** `mayDependOn` (other components), `vendors` (packages) and `typeOnlyVendors` (SDK port types).
   - **Checks:** `npm run arch-lint` runs dependency-cruiser in allowed mode over `src/`. An undeclared dependency fails, and so does a file in no component, a cycle or an unresolvable import. It runs in `Validate / Quality` after ESLint.
   - **Proof:** `test/unit/arch-lint.test.ts` lints a copy of `src/` with probe files and shows each rule fires (9 tests). The probes include the session screens importing a sign-in function from `/auth`, a page importing infrastructure, and a file outside any component.
@@ -72,7 +92,7 @@ Pull requests that change the shell, its dependencies, or the image add an entry
 
 - **Frontend Architecture Constitution, step 5: every user-facing word through the SDK's `/i18n` (`2026-11-06`).** Violation V4 of the assessment (ADR 0005, both in #45). The shell's user-facing text, 61 keys, moves to one English catalogue, `src/shared/i18n/en.json`, under the `shell` namespace. That covers the sign-in page and carousel, the session screens, the help and legal link labels, the app banners and the unavailable page.
   - **`src/shared/i18n`:** `useShellText()` (the SDK's `useT('shell')`), `shellText()` (its `t`) and `ShellKey` (an unknown key is a type error). It offers text lookup only, and presentation reaches the SDK's i18n runtime through it and nothing else. A new lint block lets `shared/` import no shell layer and only `/i18n` and `/react` from the SDK.
-  - **`src/platform/shellMessages.ts`:** `registerShellMessages()` registers the namespace and loads it with `setLocale(defaultLocale)`. The bootstrap calls it right after the flags, before any screen. The sign-in screens show before `initializeI18n` (after sign-in), and the SDK's `t` gives back the key until a catalogue is loaded. `initializeI18n` still picks the user's locale.
+  - **`src/platform/shellMessages.ts`** (since step 2: `src/infrastructure/i18n/shellMessages.ts`): `registerShellMessages()` registers the namespace and loads it with `setLocale(defaultLocale)`. The bootstrap calls it right after the flags, before any screen. The sign-in screens show before `initializeI18n` (after sign-in), and the SDK's `t` gives back the key until a catalogue is loaded. `initializeI18n` still picks the user's locale.
   - **Catalogue choice (`catalogueFor`):** exact tag, else language, else English. A default locale such as `en-GB`, or one not translated yet, shows words, not keys. Keys missing in a catalogue fall back to the default locale's (the SDK).
   - **Sign-in errors are words from the catalogue:** a failure other than "workspace not found" shows `login.error.signIn` or `login.error.passwordReset`, never the error's own message, which is untranslated and may be a server's. The page's `notice` is a key.
   - **`index.ts`:** the unavailable page reads `en.json` directly. It shows when the SDK may not have loaded, and nothing shared may be imported before the async boundary.
@@ -85,15 +105,15 @@ Pull requests that change the shell, its dependencies, or the image add an entry
 - **Frontend Architecture Constitution, step 4: the layer rules are lint errors (`2026-11-06`).** `eslint.config.js` now enforces the dependency rules step 3 introduced, so violations V2 and V3 of the assessment cannot come back (roadmap step 4, §5):
   - **Domain** (`src/domain/`, `.ts` and `.tsx`): no React, no SDK runtime (type imports allowed), no other shell layer, no browser global (`window`, `document`, `globalThis`, `self`, `localStorage`, `fetch`, `location`, …).
   - **Application** (`src/application/`): no React, no presentation or infrastructure, no SDK runtime (type imports allowed; the runtime is injected), no browser global.
-  - **Pages and components:** nothing from `platform/` or the SDK (the rule CLAUDE.md already stated, now checked).
-  - **Session screens** (`platform/SessionScreens.tsx`): no other `platform/` module but `screen`; from the SDK, `/auth` types only, so they cannot sign in on their own (no login without a click).
+  - **Pages and components:** nothing from `platform/` or the SDK (the rule CLAUDE.md already stated, now checked). Step 2 (above) rewrote these rules for the new folders: presentation never imports `infrastructure/`, `app/` or the SDK.
+  - **Session screens** (`platform/SessionScreens.tsx`, since step 2 `presentation/features/session-screens/` mounted by `app/layouts/sessionScreens.tsx`): no other `platform/` module but `screen`; from the SDK, `/auth` types only, so they cannot sign in on their own (no login without a click).
   - **All presentation:** no `fetch`, `XMLHttpRequest`, storage, IndexedDB, `location`, `history`, `navigator` or `open`, bare or through `window`, `globalThis`, `self` or `document.location`.
   `test/unit/layer-rules.test.ts` lints a violation of each rule under its layer's path and checks the allowed imports pass (10 tests), so the rules are proven to fire. No source change was needed: `src/` already passes. 161 tests at 100%.
 
 - **Frontend Architecture Constitution, step 3: use cases and repositories (`2026-11-06`).** Presentation no longer reaches storage, the IAM API or browser navigation (violations V2 and V3 of `docs/architecture/constitution-assessment.md`):
   - **Domain** (`src/domain/`): the `RememberedEmailRepository` contract and `WorkspaceNotFoundError` (no user-facing text).
   - **Application** (`src/application/`): `resolveWorkspaceUseCase` (PUB-1 through the SDK's `WorkspaceResolver` port; not found, rate-limited and unreachable alike) and `requestPasswordResetUseCase` (reset URL and navigation injected); no React, no browser APIs.
-  - **Infrastructure:** the remembered email's `localStorage` implementation moves from `pages/rememberEmail.ts` to `platform/rememberedEmail.ts` (the `no-raw-storage` exemption moves with it; same keys).
+  - **Infrastructure:** the remembered email's `localStorage` implementation moves from `pages/rememberEmail.ts` to `platform/rememberedEmail.ts` (since step 2 `infrastructure/storage/rememberedEmail.ts`; the `no-raw-storage` exemption moves with it; same keys).
   - **Presentation:** `LoginPage` takes the repository as a prop; `askForWorkspace` and `showWrongWorkspace` take the use cases and keep the words (`WORKSPACE_NOT_FOUND` for `WorkspaceNotFoundError`).
   - **Composition root:** the bootstrap builds the use cases from infrastructure.
   Behaviour unchanged: 153 tests at 100% (new: use-case unit tests; the session screens tested over the real use cases with a fake PUB-1); browser suite 18/18; contract 12/12 against the released mfe-dashboard `v0.3.0`. Folder names stay until roadmap step 2.

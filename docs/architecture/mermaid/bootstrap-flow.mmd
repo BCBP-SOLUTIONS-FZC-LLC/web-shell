@@ -4,7 +4,7 @@ sequenceDiagram
     participant Boot as bootstrap.tsx
     participant SDK as frontend-sdk
     participant IAM as /api (IAM)
-    participant Screens as SessionScreens
+    participant Screens as session screens (app/layouts)
 
     Browser->>Index: load document
     Index->>Boot: import('./bootstrap'), bootstrap()
@@ -12,6 +12,7 @@ sequenceDiagram
     Boot->>SDK: initializeCore (environment from runtime.json, else build-time), setRuntimeConfig
     Note over Boot,SDK: a failure is logged as an error (default /otel), then "The app is unavailable right now."
     Boot->>SDK: tracing, logging, metrics, error handlers, web vitals (consent: SDK default, essential only)
+    Boot->>SDK: registerShellMessages: registerNamespace('shell'), setLocale(defaultLocale), before any screen
     Boot->>SDK: createOidcProvider, initializeAuth, setTokenSource
     Boot->>SDK: idp.init()
     alt anonymous

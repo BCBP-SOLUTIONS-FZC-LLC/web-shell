@@ -22,7 +22,7 @@ export type LoginPageProps = {
 /** Shown when "Forgot your password?" is chosen before an email is typed. */
 export const EMAIL_FIRST: ShellKey = 'login.emailFirst'
 
-/** The email form state shared by both login layouts. */
+/** The login page's email form state: submit, remember email, forgot password. */
 export function useEmailSignIn(
   onContinue: LoginPageProps['onContinue'],
   rememberedEmail: RememberedEmailRepository,

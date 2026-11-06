@@ -119,7 +119,7 @@ docs/lld/web-shell-lld.md ← Low-level design (the contract)
 ### Adding a remote or changing what the shell passes to one
 
 1. Add the remote to `config/remotes.local.json` for development. Each environment's `/remotes/manifest.json` comes from the deploy pipeline.
-2. Render it with `<RemoteBoundary remote="<name>" module="./<Module>" props={…} />`. The remote must be built with `@bcbp-solutions-fzc-llc/webpack-preset` (`role: 'remote'`).
+2. Render it with `<RemoteBoundary remote="<name>" module="./<Module>" />`, with no props: data a remote needs goes into the `PlatformProvider` shell value and is read through SDK hooks. The remote must be built with `@bcbp-solutions-fzc-llc/webpack-preset` (`role: 'remote'`).
 3. The shared map comes from the preset; do not add entries in `rsbuild.config.ts`. Bumping the SDK raises the version remotes require; see [VERSIONING.md](./VERSIONING.md).
 4. `dashboard` `./App` gets no props (`src/app/routes/App.tsx`). Data a remote needs from the shell goes into the `PlatformProvider` shell value and is read through SDK hooks, never props. Update the federation table in `README.md`.
 
@@ -153,8 +153,8 @@ Follow [docs/observability.md § Adding a metric](docs/observability.md#adding-a
 
 | Layer | Location | Docker | Notes |
 |---|---|---|---|
-| Unit | `test/unit/` | No | IAM mappings and ports, entry point, remember-email, consent, screen host, `BrandLogo`, session-context retry, navigator, dev platform middleware |
-| Integration | `test/integration/` | No | Login layouts and carousel, session screens, `App`, bootstrap order and branches. SDK subpaths are `vi.mock` fakes where needed; axe-core over every shell screen (`accessibility.test.tsx`) |
+| Unit | `test/unit/` | No | IAM mappings and ports, entry point, remember-email, screen host, `BrandLogo`, session-context retry, navigator, dev platform middleware, layer rules, arch-lint, text catalogue, no-SDK-duplicates, metrics-check, use cases |
+| Integration | `test/integration/` | No | The login page and carousel, session screens, `App`, bootstrap order and branches. SDK subpaths are `vi.mock` fakes where needed; axe-core over every shell screen (`accessibility.test.tsx`) |
 | End to end | `test/e2e/` | No | The real shell and SDK against `test/fixtures/` fakes (Keycloak, network, BroadcastChannel); only the remote's entry script is stubbed |
 | Smoke | `test/smoke/`, CI `smoke` job | Image or deployment | `.github/scripts/smoke-tests.sh`: image ≤ 200 MB and the startup gate, then `npm run test-smoke` against the container (SPA rule, Cache-Control, integrity, 404s, SDK-validated runtime files). [test/smoke/README.md](./test/smoke/README.md) |
 | Browser | `test/browser/`, CI `browser` job | `dist/` | Playwright over HTTPS with the production CSP: fonts, sign-in, the remote with integrity, `navigate()`, sign-out POST, start-up report, contrast |
@@ -190,7 +190,7 @@ The text report prints uncovered lines. Cover the branch you changed. The gate i
 
 ## Lint and typecheck
 
-`npm run lint` runs ESLint with typescript-eslint, the React hooks rules, and `@bcbp-solutions-fzc-llc/eslint-plugin`'s recommended rules on `src/`: SDK imports through public subpaths only, no identity headers, no raw `window.localStorage` / `sessionStorage`, no unsafe HTML, API route templates. It also enforces the layer rules (`eslint.config.js`, proven by `test/unit/layer-rules.test.ts`): `domain/` imports no React, SDK runtime, other layer or browser global; `application/` no React, presentation, infrastructure, `app/`, SDK runtime (except the `/problem` error classes) or browser global; `infrastructure/` no presentation, application or `app/`; `presentation/` nothing from `infrastructure/`, `app/` or the SDK, except `/auth` types in `presentation/features/`. Presentation never uses `fetch`, `XMLHttpRequest`, storage, IndexedDB, `location`, `history`, `navigator` or `open`, bare or through `window`, `globalThis`, `self` or `document.location`. A use case needs something from outside: the bootstrap injects it. `validate-quality` runs it with `--max-warnings 0`, then `npm run arch-lint` and `npm run typecheck`.
+`npm run lint` runs ESLint with typescript-eslint, the React hooks rules, and `@bcbp-solutions-fzc-llc/eslint-plugin`'s recommended rules on `src/`: SDK imports through public subpaths only, no identity headers, no raw `window.localStorage` / `sessionStorage`, no unsafe HTML, API route templates. It also enforces the layer rules (`eslint.config.js`, proven by `test/unit/layer-rules.test.ts`): `domain/` imports no React, SDK runtime, other layer or browser global; `application/` no React, presentation, infrastructure, `app/`, SDK runtime (except the `/problem` error classes) or browser global; `infrastructure/` no presentation, application or `app/`; `presentation/` nothing from `infrastructure/`, `app/` or the SDK, except `/auth` types in `presentation/features/`. Presentation never uses `fetch`, `XMLHttpRequest`, storage, IndexedDB, `location`, `history`, `navigator` or `open`, bare or through `window`, `globalThis`, `self` or `document.location`. A use case needs something from outside: the bootstrap injects it. `validate-quality` runs it with `--max-warnings 0`, then `npm run arch-lint`, `npm run metrics-check` and `npm run typecheck`.
 
 ### Architecture lint
 
@@ -211,7 +211,7 @@ The text report prints uncovered lines. Cover the branch you changed. The gate i
 | `layouts` | `src/app/layouts/` | `features`, `i18n`, `application`; React; SDK `/auth` types |
 | `providers` | `src/app/providers/` | `application`; React, SDK `/react`; SDK `/auth` types |
 | `routes` | `src/app/routes/` | `widgets`, `i18n`; React, React Router, SDK `/react` |
-| `bootstrap` | `src/app/bootstrap/bootstrap.tsx` | everything |
+| `bootstrap` | `src/app/bootstrap/bootstrap.tsx` | `domain`, `application`, `infrastructure`, `i18n`, `ui_assets`, `layouts`, `providers`, `routes`; any package. Not presentation or `constants`: it reaches the screens through `layouts`, `providers` and `routes` |
 | `entry` | `src/app/bootstrap/index.ts` | `bootstrap` (dynamic), `i18n` (`en.json`) |
 
 A new folder or module: add it to a component (or a new one, with its deps) in the same PR; keep this table and ARCHITECTURE's in step. `test/unit/arch-lint.test.ts` proves each rule fires on probe files. ESLint keeps the per-layer import rules for editor feedback, and owns what a dependency graph cannot see (browser globals).
@@ -236,7 +236,7 @@ A new folder or module: add it to a component (or a new one, with its deps) in t
 |---|---|
 | Route, sign-in step, or storage key | `README.md` (routes, sign-in, storage table), `docs/lld/web-shell-lld.md` (§5, §6, §9.3), `.claude/request-flows.md` |
 | Remote, `dashboard` props, or SDK version | `src/app/routes/App.tsx`, `config/remotes.local.json`, `README.md` federation table, `VERSIONING.md` when the bump class changes |
-| Runtime config key or build constant | `public/config/runtime.json`, `config/runtime.local.json`, `src/shared/types/globals.d.ts`, `README.md` configuration tables, Dockerfile `ARG` and the workflow build-args when the image must bake it |
+| Runtime config key or build constant | `public/config/runtime.json`, `config/runtime.local.json`, `src/shared/types/globals.d.ts`, `README.md` configuration tables, `ARCHITECTURE.md`, LLD §9.1, `CHANGELOG.md`, Dockerfile `ARG` and the workflow build-args when the image must bake it |
 | nginx path or listen port | `nginx/default.conf`, `test/smoke/deployment.test.ts`, `README.md` nginx table, LLD §10.1, `.claude/architecture.md`, PR deployment notes |
 | SDK version | `package.json` (all three, exact), README, ARCHITECTURE, VERSIONING, LLD header, `.claude/CLAUDE.md`, CHANGELOG (`.claude/operations.md` checklist) |
 | A diagram | `docs/architecture/mermaid/*.mmd` and the identical block in `ARCHITECTURE.md` (`node .claude/hooks/check-diagrams.mjs`) |
@@ -297,7 +297,7 @@ Releases go through GitHub Actions. Details and the Cosign verify commands are i
 
 **On push to `main` or `master`:**
 
-1. `validate-test` (tests, 95% gate, `npm run build`) and `validate-quality` (ESLint, typecheck, workflow hygiene, digest pin, production npm audit) run in parallel with the image build.
+1. `validate-test` (tests, 95% gate, `npm run build`) and `validate-quality` (ESLint, arch-lint, metrics-check, typecheck, workflow hygiene, digest pin, production npm audit) run in parallel with the image build.
 2. Hadolint runs before the image build.
 3. Trivy (CRITICAL and HIGH, unfixed) and the smoke job (startup gate, then `npm run test-smoke` against the container) run after the image exists.
 4. The image `ghcr.io/bcbp-solutions-fzc-llc/web-shell` is pushed with the branch tag and `sha-<short>`, then Cosign-signed.

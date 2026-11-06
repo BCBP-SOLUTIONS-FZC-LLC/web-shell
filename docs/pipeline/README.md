@@ -8,7 +8,7 @@ Five workflow files. Markdown-only pushes and pull requests skip `ci.yml` (`path
 |---|---|---|
 | [`ci.yml`](../../.github/workflows/ci.yml) | Pull request or push to `main` or `master`, or a manual run | Tests, image, scan, smoke. Push to `main` also publishes and signs |
 | [`validate-test.yml`](../../.github/workflows/validate-test.yml) | Called by `ci.yml` and `release.yml` | Vitest, the 95% coverage gate, then `npm run build` |
-| [`validate-quality.yml`](../../.github/workflows/validate-quality.yml) | Called by `ci.yml` and `release.yml` | ESLint with the platform rules, the typecheck, workflow hygiene, digest-pinned `FROM` lines, production `npm audit` |
+| [`validate-quality.yml`](../../.github/workflows/validate-quality.yml) | Called by `ci.yml` and `release.yml` | ESLint with the platform rules, arch-lint, metrics-check, the typecheck, workflow hygiene, digest-pinned `FROM` lines, production `npm audit` |
 | [`changelog-check.yml`](../../.github/workflows/changelog-check.yml) | Pull request touching the shell, the lockfile, the Dockerfile, nginx, the Rsbuild config, the runtime config, or `index.html` | `CHANGELOG.md` is in the diff |
 | [`release.yml`](../../.github/workflows/release.yml) | Tag `vX.Y.Z` or `vX.Y.Z-*`, or a manual run with a tag input | Changelog section, image, SBOM, provenance, GitHub Release |
 
@@ -21,7 +21,7 @@ Node on every job is **26**. Every `npm ci` reads `@bcbp-solutions-fzc-llc/*` fr
 ```mermaid
 flowchart LR
     test["validate-test\nVitest and 95% gate\nnpm run build, size budget"]
-    quality["validate-quality\nESLint, tsc, pin, LF, npm audit"]
+    quality["validate-quality\nESLint, arch-lint, metrics, tsc,\npin, LF, npm audit"]
     build["build-image\nHadolint then Buildx cache"]
     trivy["trivy\nCRITICAL HIGH UNKNOWN"]
     smoke["smoke\nsize, startup gate, no .map\nnpm run test-smoke"]
@@ -55,7 +55,7 @@ Source: [`mermaid/ci-flow.mmd`](mermaid/ci-flow.mmd).
 | Job | Gate |
 |---|---|
 | `validate-test` | `npm ci`, `npm run test:coverage`, [`.github/scripts/coverage-gate.mjs`](../../.github/scripts/coverage-gate.mjs) at 95% for statements, branches, functions, and lines, upload `coverage/`, then `npm run build` (`tsc` and `rsbuild build`) and `npm run budget` ([`.github/scripts/bundle-budget.mjs`](../../.github/scripts/bundle-budget.mjs): entry 12 KB, JS+CSS 300 KB, largest file 85 KB gzip, images 2.7 MB). See [the coverage runbook](../runbook-coverage-gate.md) |
-| `validate-quality` | `npm run lint -- --max-warnings 0` and `npm run typecheck`. No HTML entities in workflows or scripts. LF in `.github/scripts`, `.github/workflows`, `Dockerfile`, and `nginx/`. Every `FROM` is `image:tag@sha256:…`. `.dockerignore` exists. `npm audit --omit=dev --audit-level=high` |
+| `validate-quality` | `npm run lint -- --max-warnings 0`, `npm run arch-lint`, `npm run metrics-check` and `npm run typecheck`. No HTML entities in workflows or scripts. LF in `.github/scripts`, `.github/workflows`, `Dockerfile`, and `nginx/`. Every `FROM` is `image:tag@sha256:…`. `.dockerignore` exists. `npm audit --omit=dev --audit-level=high` |
 | `build-image` | Hadolint on `Dockerfile`, then a `linux/amd64` build tagged `web-shell-ci-test` and stored in the Actions cache. Build args: `BUILD_VERSION` and `SOURCE_DATE_EPOCH`; secret `npm_token`. `PLATFORM_ENVIRONMENT` keeps its default, `prod` |
 | `trivy` | Reloads that cached image. Fails on unfixed **CRITICAL**, **HIGH**, or **UNKNOWN**. SARIF is uploaded and does not fail the job by itself. CycloneDX SBOM is an artifact named `sbom-<sha>`. Allowlist file: [`.trivyignore`](../../.trivyignore). See [the image runbook](../runbook-image-scan.md) |
 | `smoke` | Same cached image, then Node 26 and `npm ci` (`NODE_AUTH_TOKEN`). [`.github/scripts/smoke-tests.sh`](../../.github/scripts/smoke-tests.sh): at most 200 MB, `GET /healthz` contains `ok`, `GET /` is 200 and contains `id="app"`, `GET /config/runtime.json` and `GET /version.json` are 200, no `.map` file is in the image, then `npm run test-smoke` with `SMOKE_MODE=image` against the container ([test/smoke](../../test/smoke/README.md): SPA rule, Cache-Control, integrity, 404s, SDK-validated runtime files) |
@@ -114,7 +114,7 @@ npm run test:ci
 npm run build
 ```
 
-`hooks:install` copies `.githooks/pre-commit` into `.git/hooks`. Each commit then checks staged env files, workflow hygiene, the Dockerfile digest pin, and `tsc --noEmit`. `npm run lint` and `npm run typecheck` are the first half of `validate-quality`; `npm run test:ci` and `npm run build` are `validate-test`. They do not run Hadolint, Trivy, or the image smoke script. Image checks need Docker:
+`hooks:install` copies `.githooks/pre-commit` into `.git/hooks`. Each commit then checks staged env files, workflow hygiene, the Dockerfile digest pin, and `tsc --noEmit`. `npm run lint`, `npm run arch-lint`, `npm run metrics-check` and `npm run typecheck` are the first half of `validate-quality`; `npm run test:ci` and `npm run build` are `validate-test`. They do not run Hadolint, Trivy, or the image smoke script. Image checks need Docker:
 
 ```bash
 docker build --secret id=npm_token,env=NODE_AUTH_TOKEN -t web-shell:local .
