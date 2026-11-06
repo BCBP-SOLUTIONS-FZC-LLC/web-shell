@@ -15,6 +15,8 @@ export type LoginPageProps = {
   onForgotPassword?: (email: string) => Promise<void>
   /** A message from the bootstrap (a catalogue key), e.g. why the last sign-in did not complete. */
   notice?: ShellKey | null
+  /** Focus the email field on mount: the welcome intro's button that had focus is gone. */
+  focusEmail?: boolean
   /** "Remember Email": given by the composition root (the page never touches storage itself). */
   rememberedEmail: RememberedEmailRepository
 }

@@ -39,6 +39,7 @@ import { resolveWorkspaceUseCase } from '../../application/use-cases/resolveWork
 import { loadSessionContextOnce, sessionContextSource, workspaceResolver } from '../../infrastructure/api/iam'
 import { passwordResetUrl } from '../../infrastructure/auth/passwordReset'
 import { localStorageRememberedEmail } from '../../infrastructure/storage/rememberedEmail'
+import { localStorageWelcomeIntro } from '../../infrastructure/storage/welcomeIntro'
 import { shellNavigator } from '../../infrastructure/federation/navigator'
 import { permissions } from '../../domain/rules/permissions'
 import {
@@ -123,7 +124,7 @@ async function start(cfg: RuntimeConfig, report: { otlpBaseUrl: string }): Promi
   await registerShellMessages(cfg.i18n.defaultLocale)
 
   // Composition root: the sign-in use cases, built from infrastructure (PUB-1 port, the reset URL,
-  // the remembered email in localStorage, browser navigation) and given to the screens.
+  // the remembered email and the welcome-intro flag in localStorage, browser navigation) and given to the screens.
   const resolveWorkspace = resolveWorkspaceUseCase(workspaceResolver)
   const signInUseCases: SignInUseCases = {
     resolveWorkspace,
@@ -133,6 +134,7 @@ async function start(cfg: RuntimeConfig, report: { otlpBaseUrl: string }): Promi
       open: (url) => window.location.assign(url),
     }),
     rememberedEmail: localStorageRememberedEmail,
+    welcomeIntro: localStorageWelcomeIntro,
   }
 
   const idp = createOidcProvider(cfg.auth, workspaceResolver)
@@ -142,22 +144,27 @@ async function start(cfg: RuntimeConfig, report: { otlpBaseUrl: string }): Promi
 
   if (session.status === 'anonymous') {
     // init() has already moved the URL off the callback path to the page the user opened.
-    const signIn = async () => {
+    // `welcome`: the first-start sign-in may offer the first-visit intro; a click on "Sign in" never does.
+    const signIn = async (welcome = false) => {
       // A failed silent attempt names its workspace; otherwise /t/<slug> → cached or resolved
       // workspace, else the most recent cached one, else ask for the email.
       const known: Workspace | undefined =
         (session.reason === 'login-required' ? session.workspace : undefined) ??
         (await chooseWorkspace({ pathname: window.location.pathname, resolver: workspaceResolver, cfg: cfg.auth }))
-      const choice = known ? { workspace: known, loginHint: signInUseCases.rememberedEmail.get() } : await askForWorkspace(signInUseCases)
+      const choice = known ? { workspace: known, loginHint: signInUseCases.rememberedEmail.get() } : await askForWorkspace(signInUseCases, undefined, { welcome })
       // returnUrl defaults to the current page in the SDK.
       await idp.login({ workspace: choice.workspace, ...(choice.loginHint ? { loginHint: choice.loginHint } : {}) })
     }
     // After a logout, wait for the user: an automatic login would ride the live SSO session.
-    if (session.reason === 'signed-out') showSignedOut(signIn)
-    else if (session.reason === 'device-clock') showDeviceClock(signIn)
-    else await signIn()
+    if (session.reason === 'signed-out') showSignedOut(() => signIn())
+    else if (session.reason === 'device-clock') showDeviceClock(() => signIn())
+    else await signIn(true)
     return
   }
+
+  // Signed in: this browser has passed the sign-in once, so the first-visit intro never shows later
+  // (a deep link or a cached workspace skips the email screen and its intro).
+  signInUseCases.welcomeIntro.markSeen()
 
   // A trial login through an invitation that landed in another tenant: never cache it, never render.
   if (isWrongWorkspace(session.workspace, session.user)) {

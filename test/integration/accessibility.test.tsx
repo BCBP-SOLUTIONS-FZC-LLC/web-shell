@@ -1,5 +1,5 @@
 // axe-core over every screen the shell owns: the login page (empty, and with a notice and an
-// error), each session dialog, and the "unavailable" page. Colour contrast needs real layout, which
+// error), the first-visit welcome intro, each session dialog, and the "unavailable" page. Colour contrast needs real layout, which
 // happy-dom does not compute, so that rule is left to a browser check.
 import { act, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { IdentityProvider } from '@bcbp-solutions-fzc-llc/frontend-sdk/auth'
 import LoginPage from '../../src/presentation/pages/login/LoginPage'
 import { localStorageRememberedEmail as remembered } from '../../src/infrastructure/storage/rememberedEmail'
+import { localStorageWelcomeIntro } from '../../src/infrastructure/storage/welcomeIntro'
 import { resolveWorkspaceUseCase } from '../../src/application/use-cases/resolveWorkspace'
 import { requestPasswordResetUseCase } from '../../src/application/use-cases/requestPasswordReset'
 import en from '../../src/shared/i18n/en.json'
@@ -19,6 +20,7 @@ const useCases = {
   resolveWorkspace,
   requestPasswordReset: requestPasswordResetUseCase({ resolveWorkspace, resetUrl: () => '', open: () => {} }),
   rememberedEmail: remembered,
+  welcomeIntro: localStorageWelcomeIntro,
 }
 const { resetScreen } = await import('../../src/app/layouts/screen')
 
@@ -60,6 +62,12 @@ describe('accessibility (axe)', () => {
     ['workspace not found', () => screens.showWorkspaceNotFound()],
   ])('the %s dialog', async (_name, show) => {
     act(() => show())
+    expect(await violations()).toEqual([])
+  })
+
+  it('the first-visit welcome intro', async () => {
+    const { default: WelcomeSplash } = await import('../../src/presentation/features/welcome/WelcomeSplash')
+    render(<WelcomeSplash onComplete={() => {}} />)
     expect(await violations()).toEqual([])
   })
 

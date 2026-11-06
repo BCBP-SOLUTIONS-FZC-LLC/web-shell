@@ -9,7 +9,7 @@ graph TD
 
     subgraph presentation["presentation/"]
         pages["pages/login\nLoginPage, useEmailSignIn"]
-        features["features/session-screens\nsign-in, signed out, session ended, …"]
+        features["features/session-screens, welcome\nsign-in (first visit: welcome intro), signed out, session ended, …"]
         widgets["widgets/\nupdate notice, missing permissions, error page"]
         components["components/\nBrandLogo, PageLinks"]
     end
@@ -23,7 +23,7 @@ graph TD
     end
 
     subgraph infrastructure["infrastructure/ — implements domain contracts"]
-        infra["api/iam (PUB-1, P-35), auth/passwordReset,\nstorage/rememberedEmail, federation/navigator,\ni18n/shellMessages"]
+        infra["api/iam (PUB-1, P-35), auth/passwordReset,\nstorage/rememberedEmail, welcomeIntro, federation/navigator,\ni18n/shellMessages"]
     end
 
     subgraph shared["shared/"]

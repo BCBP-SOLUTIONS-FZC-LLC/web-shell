@@ -16,9 +16,15 @@ import { hideScreen, showScreen } from './screen'
 
 export { WORKSPACE_NOT_FOUND, type SignInChoice } from '../../presentation/features/session-screens/SessionScreens'
 
-/** The email-first sign-in screen; resolves with the workspace and the email the user typed. */
-export function askForWorkspace(useCases: SignInUseCases, notice?: ShellKey): Promise<SignInChoice> {
-  return new Promise((resolve) => showScreen(<SignInScreen useCases={useCases} notice={notice} onChosen={resolve} />))
+/**
+ * The email-first sign-in screen; resolves with the workspace and the email the user typed.
+ * `welcome`: offer the first-visit welcome intro before the form (only the first-start sign-in does;
+ * never a session flow such as session ended or switch workspace).
+ */
+export function askForWorkspace(useCases: SignInUseCases, notice?: ShellKey, options: { welcome?: boolean } = {}): Promise<SignInChoice> {
+  return new Promise((resolve) =>
+    showScreen(<SignInScreen useCases={useCases} notice={notice} welcome={options.welcome ?? false} onChosen={resolve} />),
+  )
 }
 
 export function showWorkspaceNotFound(): void {

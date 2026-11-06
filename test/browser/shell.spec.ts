@@ -1,7 +1,8 @@
 // The shell's production build in real engines under the production CSP (test/browser/README.md):
 // what happy-dom cannot check. Trusted Types, script-src 'self', integrity on the remote's entry,
 // Module Federation's share scope, self-hosted fonts, the sign-out form POST under form-action, the
-// start-up failure report, the sign-in hero's one-time opening and reduced motion, and colour contrast.
+// start-up failure report, the first-visit welcome intro, the sign-in hero's one-time opening and
+// reduced motion, and colour contrast.
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { expect, test, type Page } from '@playwright/test'
@@ -33,9 +34,20 @@ async function signIn(page: Page): Promise<void> {
   await expect(page.getByRole('heading', { name: 'Dashboard for Ada Lovelace in acme' })).toBeVisible()
 }
 
+/** A returning visitor: the first-visit welcome intro is already seen, so / shows the sign-in form. */
+async function returningVisitor(page: Page): Promise<void> {
+  await page.addInitScript(() => localStorage.setItem('bcbp.welcomeSeen', '1'))
+}
+
+/** A first visit: removes the flag (init scripts run in order, so this undoes returningVisitor). */
+async function firstVisit(page: Page): Promise<void> {
+  await page.addInitScript(() => localStorage.removeItem('bcbp.welcomeSeen'))
+}
+
 test.beforeEach(async ({ page }) => {
   await page.request.get(`${APP}/__test/reset`)
   await watchViolations(page)
+  await returningVisitor(page)
 })
 
 test.afterEach(async ({ page }) => {
@@ -101,6 +113,60 @@ test('under prefers-reduced-motion the sign-in hero shows its final frame with n
   expect(await animations(page)).toEqual([])
   await expect(page.locator('.cine-bar').first()).toBeHidden()
   await expect(page.getByText(/Access your unified workspace/)).toHaveCSS('opacity', '1')
+})
+
+test('a first visit shows the welcome intro under the production CSP: dust on the canvas, facts counted, Pause, then Continue to the form', async ({ page }) => {
+  await firstVisit(page)
+  await page.goto(`${APP}/`)
+  await expect(page.getByRole('heading', { level: 1, name: 'Construction tenders, from first bid to handover.' })).toBeVisible()
+  await expect(page.getByRole('textbox', { name: /work email address/i })).toHaveCount(0)
+  // The facts count up once the card has landed (2.0 s + 1.2 s).
+  const forecasting = page.locator('dd', { has: page.locator('.sr-only', { hasText: '95%' }) }).locator('[aria-hidden]')
+  await expect(forecasting).toHaveText('95%', { timeout: 6000 })
+  // The dust draws on the canvas (same origin, so its pixels are readable).
+  await expect
+    .poll(() =>
+      page.locator('canvas').evaluate((c: HTMLCanvasElement) => {
+        const px = c.getContext('2d')!.getImageData(0, 0, c.width, c.height).data
+        for (let i = 3; i < px.length; i += 4) if (px[i]! > 0) return true
+        return false
+      }),
+    )
+    .toBe(true)
+  // The call to action's glow runs; Pause holds it (and the dust), nothing else.
+  await expect.poll(() => animations(page)).toContainEqual('cta-glow:running')
+  await page.getByRole('button', { name: 'Pause animation' }).click()
+  await expect.poll(() => animations(page)).toContainEqual('cta-glow:paused')
+  await page.getByRole('button', { name: 'Continue to sign in' }).click()
+  // The form replaces the intro and takes focus.
+  await expect(page.getByRole('textbox', { name: /work email address/i })).toBeFocused()
+  expect(await page.evaluate(() => localStorage.getItem('bcbp.welcomeSeen'))).toBe('1')
+  expect(await violations(page)).toEqual([])
+})
+
+test('Pause early in the welcome intro still lets its content arrive: nothing stays hidden', async ({ page }) => {
+  await firstVisit(page)
+  await page.goto(`${APP}/`)
+  await page.getByRole('button', { name: 'Pause animation' }).click()
+  for (const element of [
+    page.getByRole('heading', { level: 1 }),
+    page.getByRole('region', { name: 'What the platform covers' }),
+    page.getByRole('button', { name: 'Continue to sign in' }),
+  ]) {
+    await expect(element).toHaveCSS('opacity', '1', { timeout: 5000 })
+  }
+})
+
+test('under prefers-reduced-motion the welcome intro shows its final frame: no canvas, no animation, facts in full', async ({ page }) => {
+  await firstVisit(page)
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  await page.goto(`${APP}/`)
+  await expect(page.getByRole('heading', { level: 1, name: 'Construction tenders, from first bid to handover.' })).toHaveCSS('opacity', '1')
+  await expect(page.locator('canvas')).toHaveCount(0)
+  expect(await animations(page)).toEqual([])
+  await expect(page.locator('dd [aria-hidden]').first()).toHaveText('95%')
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('textbox', { name: /work email address/i })).toBeVisible()
 })
 
 test('signs in through Keycloak (PKCE) and loads the dashboard remote with its integrity, keeping tokens out of storage', async ({ page }) => {
@@ -187,6 +253,47 @@ test.describe('colour contrast (axe, WCAG 2 AA)', () => {
       )
     })
     expect(result).toEqual([])
+  })
+
+  test('the first-visit welcome intro has no contrast failures', async ({ page }) => {
+    await firstVisit(page)
+    await page.emulateMedia({ reducedMotion: 'reduce' })
+    await page.route(`${APP}/`, async (route) => {
+      const response = await route.fetch()
+      const headers = { ...response.headers() }
+      delete headers['content-security-policy']
+      await route.fulfill({ response, headers })
+    })
+    await page.goto(`${APP}/`)
+    await expect(page.getByRole('button', { name: 'Continue to sign in' })).toBeVisible()
+    await page.evaluate(() => document.fonts.ready)
+    await page.addScriptTag({ content: axe })
+    const result = await page.evaluate(async () => {
+      const r = await (
+        window as unknown as { axe: { run: (c: unknown, o: unknown) => Promise<{ violations: unknown[] }> } }
+      ).axe.run({ exclude: [['[data-logotype]']] }, { runOnly: { type: 'rule', values: ['color-contrast'] } })
+      return (r.violations as { nodes: { target: string[]; any: { message: string }[] }[] }[]).flatMap((v) =>
+        v.nodes.map((n) => `${n.target.join(' ')}: ${n.any[0]?.message ?? ''}`),
+      )
+    })
+    expect(result).toEqual([])
+    // axe leaves the call to action incomplete (daisyUI's .btn has a background image): its text and
+    // fill are measured here, each colour painted on a canvas and read back as sRGB.
+    const cta = await page.getByRole('button', { name: 'Continue to sign in' }).evaluate((el) => {
+      const s = getComputedStyle(el)
+      const ctx = document.createElement('canvas').getContext('2d', { willReadFrequently: true })!
+      const rgb = (color: string) => {
+        ctx.clearRect(0, 0, 1, 1)
+        ctx.fillStyle = color
+        ctx.fillRect(0, 0, 1, 1)
+        return [...ctx.getImageData(0, 0, 1, 1).data.slice(0, 3)]
+      }
+      const lin = (c: number) => ((c /= 255) <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4)
+      const lum = ([r, g, b]: number[]) => 0.2126 * lin(r!) + 0.7152 * lin(g!) + 0.0722 * lin(b!)
+      const [a, b] = [lum(rgb(s.color)), lum(rgb(s.backgroundColor))]
+      return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05)
+    })
+    expect(cta).toBeGreaterThanOrEqual(4.5)
   })
 
   // axe leaves text over a photograph "incomplete", so the hero is measured from pixels: on each of

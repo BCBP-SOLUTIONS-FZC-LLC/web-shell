@@ -20,6 +20,9 @@ beforeEach(async () => {
   await registerShellMessages('en')
   sessionStorage.clear()
   localStorage.clear()
+  // A returning visitor by default: the first-visit welcome intro is seen, so the sign-in form shows.
+  // The welcome-intro tests (unit, integration, bootstrap, e2e) remove it.
+  localStorage.setItem('bcbp.welcomeSeen', '1')
   window.history.replaceState({}, '', '/')
   vi.stubGlobal(
     'fetch',

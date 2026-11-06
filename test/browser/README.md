@@ -22,7 +22,10 @@ npx playwright install chromium firefox webkit   # once, if the browsers are mis
 
 | Case | Locks |
 |---|---|
-| Login page | No CSP violation; Geist loaded from `/assets/`; carousel images hashed under `/assets/`; no third-party request |
+| Welcome intro | A first visit (no `bcbp.welcomeSeen`): the intro under the production CSP, the dust drawn on the canvas, the facts counted to `95%`, the call to action's glow running and held by Pause, Continue to the form with the email field focused, and the flag stored; no CSP violation |
+| Welcome, early pause | Pause at once: the entrance still finishes (headline, facts card and call to action at full opacity) |
+| Welcome, reduced motion | No canvas, no animation, the facts in full; Escape goes to the form |
+| Login page | Every other case is a returning visitor (an init script sets `bcbp.welcomeSeen`). No CSP violation; Geist loaded from `/assets/`; carousel images hashed under `/assets/`; no third-party request |
 | Hero opening | Every `cine-*` animation of the sign-in hero ends by 2.5 s (its own timing), then nothing runs; the email field takes input while the opening is held mid-frame; no CSP violation (the grain is a bundled `data:` SVG) |
 | Reduced motion | Under `prefers-reduced-motion: reduce` no animation runs, the letterbox bars are hidden, and the headline and subline are at full opacity |
 | Sign-in | PKCE through the fake Keycloak, `/t/acme/dashboard`, the remote's entry loaded with its integrity through Trusted Types, role map (`Invite` for an owner), no token in storage |
@@ -31,6 +34,7 @@ npx playwright install chromium firefox webkit   # once, if the browsers are mis
 | Start-up failure | A missing `/config/runtime.json` shows the unavailable page and `the app could not start` reaches `/otel/v1/logs` |
 | Colour contrast | axe `color-contrast` over the login page's resting frame (after the hero's opening finishes). The page is served without its CSP for this case only (axe is an injected script). The "BCBP SOLUTIONS" logotype (`data-logotype`) is exempt: WCAG 1.4.3 sets no contrast requirement for text that is part of a logo |
 | Hero contrast | axe leaves text over a photograph incomplete, so the hero is measured from pixels: on each of the 9 slides at rest, the headline (3:1), subline and fact chips (4.5:1) against the 98th-percentile brightest pixel behind them. The "BCBP SOLUTIONS" eyebrow is a logotype (`data-logotype`) and exempt |
+| Welcome contrast | axe `color-contrast` over the welcome intro (reduced motion, final frame). axe leaves the daisyUI button incomplete (`.btn` has a background image), so the call to action's text and fill are also measured: at least 4.5:1 |
 
 After every case, any report the browser sent to `/csp-report` fails it.
 

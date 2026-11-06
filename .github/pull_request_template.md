@@ -36,7 +36,7 @@ Provide a clear description of the changes.
 - [ ] New runtime config keys (in `public/config/runtime.json` and `config/runtime.local.json`) or build constants documented
 
 ### Security
-- [ ] No token written to storage (`bcbp.rememberEmail` / `bcbp.loginEmail` are the only raw `localStorage` keys)
+- [ ] No token written to storage (`bcbp.rememberEmail`, `bcbp.loginEmail` and `bcbp.welcomeSeen` are the only raw `localStorage` keys)
 - [ ] Remote URLs are not taken from untrusted input
 
 ---

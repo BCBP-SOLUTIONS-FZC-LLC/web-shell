@@ -16,13 +16,15 @@ Condensed from [ARCHITECTURE.md](../ARCHITECTURE.md) and the [LLD](../docs/lld/w
 | `src/app/layouts/sessionScreens.tsx` | Mounts the session screens: `askForWorkspace`, `showSignedOut`, `showDeviceClock`, `showSessionEnded`, `showWrongWorkspace`, `showWorkspaceNotFound` (re-exports `WORKSPACE_NOT_FOUND`) |
 | `src/presentation/pages/login/` | `LoginPage`, `useEmailSignIn` (submit, forgot password; the remembered-email repository is a prop) |
 | `src/presentation/features/session-screens/SessionScreens.tsx` | The screens as components: `SignInScreen` (calls the use cases it is given; every failure → catalogue words), `SignedOutDialog`, `DeviceClockDialog`, `SessionEndedDialog`, `WrongWorkspaceDialog`, `WorkspaceNotFoundDialog`, `WORKSPACE_NOT_FOUND` |
+| `src/presentation/features/welcome/WelcomeSplash.tsx` | The first-visit intro `SignInScreen` shows before the form until `welcomeIntro.seen()`: blueprint grid, canvas dust (one frame loop, stopped on pause, hidden tab and unmount), the brand name tracking wider, a glass card of product facts counting up, the amber `btn-primary` with a pulsing glow, Pause, Skip intro, Escape. Calls `onComplete`; never touches storage |
 | `src/presentation/components/` | `BrandLogo`, `PageLinks` (help/legal links shown only with a URL, Forgot password button) |
 | `src/presentation/widgets/` | `UpdateAvailable`, `ContextUnavailable` (state and reload passed in as props), `AppError` (the shell's error page: catalogue words, reference, Try again) |
 | `src/application/` | `signIn.ts` (`SignInUseCases`), `use-cases/resolveWorkspace.ts`, `use-cases/requestPasswordReset.ts` (ports injected), `use-cases/loadSessionContext.ts` (`isTransient`, `retrySessionContext` 1 s, 2 s, 4 s, abortable; `createStore`) |
-| `src/domain/` | `repositories/rememberedEmail.ts` (contract), `errors.ts` (`WorkspaceNotFoundError`), `rules/permissions.ts` (`IAM_ROLES`, `permissions`: role → `action:resource`) |
+| `src/domain/` | `repositories/rememberedEmail.ts`, `repositories/welcomeIntro.ts` (contracts), `errors.ts` (`WorkspaceNotFoundError`), `rules/permissions.ts` (`IAM_ROLES`, `permissions`: role → `action:resource`) |
 | `src/infrastructure/api/iam.ts` | `toWorkspace` (PUB-1), `toSessionContext` (P-35), `workspaceResolver`, `sessionContextSource`, `loadSessionContextOnce` over a lazy `createApiClient()` |
 | `src/infrastructure/auth/passwordReset.ts` | `passwordResetUrl(workspace)`: Keycloak `login-actions/reset-credentials` from `getConfig().auth` |
-| `src/infrastructure/storage/rememberedEmail.ts` | `localStorageRememberedEmail` (the one raw-storage file) |
+| `src/infrastructure/storage/rememberedEmail.ts` | `localStorageRememberedEmail` (one of the two raw-storage files) |
+| `src/infrastructure/storage/welcomeIntro.ts` | `localStorageWelcomeIntro` (`bcbp.welcomeSeen`; the other raw-storage file) |
 | `src/infrastructure/federation/navigator.ts` | `shellNavigator(navigate, basename)`: under the basename → router, else a full load |
 | `src/infrastructure/i18n/shellMessages.ts` | `registerShellMessages`: registers the `shell` namespace and loads it before any screen (bootstrap only) |
 | `src/shared/i18n/` | `en.json` (every user-facing word, keyed), `catalogues.ts` (tag → language → English), `index.ts`: `useShellText` (React), `shellText`, `ShellKey` |
@@ -48,7 +50,7 @@ Condensed from [ARCHITECTURE.md](../ARCHITECTURE.md) and the [LLD](../docs/lld/w
 | `application/` | `domain/`; SDK types and `/problem` error classes | React, the browser, `infrastructure/`, `presentation/`, `app/` (ports are injected) |
 | `infrastructure/` | `domain/`, `shared/i18n`, the SDK | `presentation/`, `application/`, `app/` |
 | `presentation/` (any folder) | pages: components, `domain/`, `application/` types, `shared/`; features: pages, components, `domain/`, `application/` types, `shared/i18n`; components: `shared/` only; widgets: `shared/i18n` only | `infrastructure/`, `app/`, the SDK, `application/` values; `fetch`, storage, `location`, `history`, `navigator`, `open` |
-| `presentation/features/` (session screens) | as above, plus SDK `/auth` types | SDK `/auth` values (no login without a click) |
+| `presentation/features/` (session screens, welcome) | as above, plus SDK `/auth` types | SDK `/auth` values (no login without a click) |
 | `shared/` | `i18n`: SDK `/i18n`, `/react` (text); `constants`: `i18n`; `ui`, `types`: nothing | any shell layer |
 | `app/` | `bootstrap.tsx`: every layer except presentation and `shared/constants`, which it reaches through `layouts`, `providers` and `routes` (the only importer of `infrastructure/`, the only module that renders `#app`); `routes`, `providers`, `layouts`: only what they render or provide (arch-lint) | — |
 
@@ -84,5 +86,5 @@ No CSP or HSTS in the image. CloudFront sends the platform's; until it exists (n
 | `test/e2e/shell.test.tsx` | Real bootstrap and SDK. `load(path)` = unmount roots, clear `globalThis[Symbol.for('@bcbp-solutions-fzc-llc/frontend-sdk')]`, `vi.resetModules()`, import the bootstrap again. Needs `server.deps.inline` for the SDK in `vitest.config.ts`. Stubs: the remote's entry `<script>` (defines `window.__platform_mfe_dashboard`), `location.assign/replace` (recorded), `HTMLFormElement#submit` (the sign-out POST, recorded), `createRoot` (tracked) |
 | `test/fixtures` | `FakeKeycloak` (`approve()`, token endpoint, PKCE check, refresh rotation, `now` for clock skew), `FakeNetwork` (`on('GET /path', …)`, `sent(path)`), `FakeBroadcastChannel` |
 | `test/smoke` | `vitest.smoke.config.ts`; `SMOKE_BASE_URL` required; `SMOKE_MODE` `image` (localhost default) or `live` (CSP incl. `form-action`, HSTS, nosniff) |
-| `test/browser/shell.spec.ts` | Production build in Chromium, Firefox, WebKit over HTTPS with the production CSP; fake Keycloak on a second origin; a stub remote on the shared SDK. 9 cases × 3 engines. Not in `npm test` |
+| `test/browser/shell.spec.ts` | Production build in Chromium, Firefox, WebKit over HTTPS with the production CSP; fake Keycloak on a second origin; a stub remote on the shared SDK. 13 cases × 3 engines. Not in `npm test` |
 | `test/browser/dashboard.spec.ts` | Same, with a real mfe-dashboard build (`REMOTE_DIST`). 4 cases × 3 engines; CI `Dashboard contract` (informational) |

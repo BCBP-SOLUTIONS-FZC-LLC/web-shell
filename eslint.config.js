@@ -37,8 +37,9 @@ export default tseslint.config(
   {
     // "Remember Email" is needed before any workspace is known and must survive sign-out; the SDK's
     // storage() is workspace-scoped and cleared on sign-out. Only the typed email is kept, never a
-    // token. This is the one file allowed raw localStorage (the rule has no allow option).
-    files: ['src/infrastructure/storage/rememberedEmail.ts'],
+    // token. The welcome-intro flag ('1', no personal data) is read before sign-in for the same
+    // reason. These are the two files allowed raw localStorage (the rule has no allow option).
+    files: ['src/infrastructure/storage/rememberedEmail.ts', 'src/infrastructure/storage/welcomeIntro.ts'],
     rules: { '@bcbp-solutions-fzc-llc/no-raw-storage': 'off' },
   },
   // Layer rules (Frontend Architecture Constitution; docs/architecture/constitution-assessment.md §5).
@@ -97,7 +98,7 @@ export default tseslint.config(
     },
   },
   {
-    // Features (the session screens): as above, plus SDK /auth types (session state, workspace).
+    // Features (the session screens, the welcome intro): as above, plus SDK /auth types (session state, workspace).
     files: ['src/presentation/features/**/*.{ts,tsx}'],
     rules: {
       'no-restricted-imports': 'off',

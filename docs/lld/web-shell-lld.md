@@ -14,6 +14,7 @@
 
 | Date | Change |
 |---|---|
+| 2026-11-07 | First-visit welcome intro before the sign-in form (`features/welcome`, `WelcomeIntroRepository`, `bcbp.welcomeSeen`, a second `no-raw-storage` exemption) |
 | 2026-11-06 | Released `v0.3.0` (#62): SDK alpha.6, the constitution refactor, the error page; same remote contract as `v0.2.0`. Status, pairs and open items updated |
 | 2026-11-06 | Claude Code tooling hardened (#60): the edit guard compares canonical paths and blocks `.env` / `docker.local.env` at any depth; `sync.sh` and `bump.sh` validate their arguments |
 | 2026-11-06 | Documentation modelled on the IAM services (#54, #55, #57, #58, #59): ARCHITECTURE flows, data model, caching, observability, CSP, concurrency, contracts; README integration guide and validation; CONTRIBUTING recipes per layer; CHANGELOG in typed, dated sections |
@@ -106,6 +107,7 @@ Removed as duplicates of the SDK (2026-11-05): `platform/consent.ts` (the runtim
 | Signed-in routes and the dashboard `RemoteBoundary` | `src/app/routes/App.tsx` |
 | IAM ports: PUB-1 → `Workspace`, P-35 → `SessionContext` | `src/infrastructure/api/iam.ts` |
 | Session screens: email sign-in, signed out, session ended, device clock, wrong workspace, workspace not found | `src/presentation/features/session-screens/` (components), `src/app/layouts/sessionScreens.tsx` (mounting), `src/app/layouts/screen.tsx` (host) |
+| First-visit welcome intro (offered by the first-start sign-in only) | `src/presentation/features/welcome/`, `src/infrastructure/storage/welcomeIntro.ts` |
 | Login page, email form, remember-email, help and legal links | `src/presentation/pages/login/`, `src/presentation/components/PageLinks.tsx`, `src/shared/constants/links.ts` |
 | Password reset hand-off to Keycloak | `src/infrastructure/auth/passwordReset.ts` |
 | Update and missing-permissions notices | `src/presentation/widgets/`, mounted by `src/app/routes/App.tsx` with `useAppUpdate`, `useSessionContext` |
@@ -135,6 +137,7 @@ Removed as duplicates of the SDK (2026-11-05): `platform/consent.ts` (the runtim
 | Slug-or-email identifier form | Email-only form on the login page (`LoginPage`) | Product layout; the email doubles as `login_hint` |
 | Example role map | `IAM_ROLES` closed set with §10.4 grants (§4.3) | IAM's roles |
 | No remember-email | `bcbp.rememberEmail`, `bcbp.loginEmail` in `localStorage` | Needed before a workspace exists, when the SDK's `storage()` ignores writes |
+| No welcome-intro flag | `bcbp.welcomeSeen` in `localStorage` | Read before a workspace exists, for the same reason; holds `1` only |
 | Text written in the components | Every word a key of the `shell` namespace; `registerShellMessages` loads it with `setLocale(defaultLocale)` before the first screen, then `initializeI18n` after sign-in as in the reference | The sign-in screens show before `initializeI18n`; the SDK's `t` gives back the key until a catalogue is loaded |
 | Webpack | Rsbuild 2 with `pluginPlatform({ role: 'shell' })` | Same Module Federation v1 protocol; remotes built with any of the three load |
 
@@ -155,18 +158,20 @@ src/
     layouts/sessionScreens.tsx  askForWorkspace and the show* functions: mount the session screens
   presentation/
     pages/login/                LoginPage, useEmailSignIn
-    features/session-screens/   SignInScreen and the dialogs (components; callbacks in, no mounting)
+    features/session-screens/   SignInScreen (welcome intro first on a first visit) and the dialogs (components; callbacks in, no mounting)
+    features/welcome/           WelcomeSplash: the first-visit intro (renders, calls onComplete, cleans up its loops)
     components/                 BrandLogo, PageLinks
     widgets/                    UpdateAvailable, ContextUnavailable (state as props), AppError (the error page)
   application/                  signIn.ts (SignInUseCases); use-cases/ resolveWorkspace, requestPasswordReset,
                                 loadSessionContext (isTransient, retrySessionContext, createStore)
-  domain/                       repositories/rememberedEmail.ts (contract), errors.ts (WorkspaceNotFoundError),
+  domain/                       repositories/rememberedEmail.ts, repositories/welcomeIntro.ts (contracts), errors.ts (WorkspaceNotFoundError),
                                 rules/permissions.ts (IAM_ROLES, permissions: role → action:resource)
   infrastructure/
     api/iam.ts                  toWorkspace, toSessionContext, workspaceResolver, sessionContextSource,
                                 loadSessionContextOnce
     auth/passwordReset.ts       passwordResetUrl (Keycloak reset-credentials)
     storage/rememberedEmail.ts  localStorageRememberedEmail (implements RememberedEmailRepository)
+    storage/welcomeIntro.ts     localStorageWelcomeIntro (implements WelcomeIntroRepository)
     federation/navigator.ts     shellNavigator: the router as the SDK's navigate() target
     i18n/shellMessages.ts       registerShellMessages (bootstrap only)
   shared/
@@ -322,7 +327,7 @@ Keys are IAM's closed role set: `member`, `tenant_owner`, `tenant_admin`, `tende
 
 1. The workspace a failed silent attempt named (`reason: 'login-required'`).
 2. `chooseWorkspace({ pathname, resolver, cfg })`: the `/t/<slug>` in the URL (cached or resolved through PUB-1), else the most recently cached workspace.
-3. `askForWorkspace(signInUseCases)`: the email screen. PUB-1 resolves the email; "not found", 429 and unreachable all show "We could not find a workspace for that email."
+3. `askForWorkspace(signInUseCases, undefined, { welcome: true })`: the email screen. On a browser's first visit (`bcbp.welcomeSeen` unset) `SignInScreen` shows the welcome intro first; Continue, Skip intro or Escape marks it seen, shows the form and focuses the email field. Only this first-start call offers it; a click on Sign in (signed out, device clock, session ended) or Switch workspace never does, and a successful sign-in marks it seen. PUB-1 resolves the email; "not found", 429 and unreachable all show "We could not find a workspace for that email."
 
 Then `idp.login({ workspace, loginHint? })`. The hint is the typed email, or the remembered email for a known workspace. `returnUrl` defaults to the current page in the SDK, and after a sign-out the SDK adds `prompt=login` itself; the shell passes neither.
 
@@ -427,7 +432,8 @@ Validated strictly by the SDK (unknown keys rejected). Schema: SDK LLD §12.1.
 |---|---|---|
 | `@bcbp-solutions-fzc-llc/frontend-sdk:*` (workspace cache, session id, last activity, last user, signed-out mark) | `localStorage` | SDK. No tokens |
 | `@bcbp-solutions-fzc-llc/frontend-sdk:storage:<namespace>:<appId>:<key>` | `localStorage` | Remotes through `storage(appId)`; cleared on sign-out. Values under the pre-alpha.4 keys are not read |
-| `bcbp.rememberEmail`, `bcbp.loginEmail` | `localStorage` | `infrastructure/storage/rememberedEmail.ts` (the domain's `RememberedEmailRepository`), only when "Remember Email" is checked; every access in `try`. The one file exempt from `no-raw-storage` (`eslint.config.js`) |
+| `bcbp.rememberEmail`, `bcbp.loginEmail` | `localStorage` | `infrastructure/storage/rememberedEmail.ts` (the domain's `RememberedEmailRepository`), only when "Remember Email" is checked; every access in `try`. One of the two files exempt from `no-raw-storage` (with `welcomeIntro.ts`; `eslint.config.js`) |
+| `bcbp.welcomeSeen` | `localStorage` | `infrastructure/storage/welcomeIntro.ts` (the domain's `WelcomeIntroRepository`): `1` after Continue, Skip intro or Escape on the first-visit welcome; every access in `try`. With `rememberedEmail.ts`, the two files exempt from `no-raw-storage` (`eslint.config.js`) |
 
 ---
 
@@ -488,11 +494,11 @@ Vitest 5, happy-dom at `http://localhost:5001/`, Testing Library. `vitest.config
 
 | Layer | Path | Real SDK | What it locks |
 |---|---|---|---|
-| Unit | `test/unit/` | partly (`createTestPlatform`, `mockApi`, `roleMapAuthorizer`) | The layer rules firing (`layer-rules.test.ts`); the `shell` catalogue, its fallback for a default locale without one, and no hard-coded user-facing text in presentation (`shell-text.test.ts`, on the TypeScript syntax tree); PUB-1/P-35 mappings against the SDK's contract cases, the entry point, remember-email, the role map, the screen host, `BrandLogo`, the dev middleware (node env, real HTTP) |
-| Integration | `test/integration/` | no (`vi.mock` recording fakes) | The bootstrap's exact order and every branch, the login page and carousel (only current and next photo fetched), session screens (alerts, dialog focus), `App` routes and the missing-context notice, axe-core over every shell screen (`accessibility.test.tsx`, colour contrast excluded) |
+| Unit | `test/unit/` | partly (`createTestPlatform`, `mockApi`, `roleMapAuthorizer`) | The layer rules firing (`layer-rules.test.ts`); the `shell` catalogue, its fallback for a default locale without one, and no hard-coded user-facing text in presentation (`shell-text.test.ts`, on the TypeScript syntax tree); PUB-1/P-35 mappings against the SDK's contract cases, the entry point, remember-email and the welcome-intro flag with blocked storage, the role map, the screen host, `BrandLogo`, the dev middleware (node env, real HTTP) |
+| Integration | `test/integration/` | no (`vi.mock` recording fakes) | The bootstrap's exact order and every branch, the login page and carousel (only current and next photo fetched), the welcome intro (first visit only, Skip, Escape, count-up, Pause, no loop or listener left after unmount), session screens (alerts, dialog focus), `App` routes and the missing-context notice, axe-core over every shell screen (`accessibility.test.tsx`, colour contrast excluded) |
 | End to end | `test/e2e/shell.test.tsx` | yes | Email → PUB-1 → PKCE → callback → `dashboard` under `/t/acme/dashboard`; tokens never stored; deep link; role map reaching the remote; deny-all; failing remote and Try again; global sign-out (form POST to Keycloak) with no silent sign-in after; device clock; unknown email; a 503 outage retried in the background; the environment from `runtime.json`; Forgot password → the realm's reset page |
 | Smoke | `test/smoke/deployment.test.ts` | yes (config and manifest validation) | Against `SMOKE_BASE_URL`: the SPA rule, Cache-Control, entry integrity, no maps, 404s, `/healthz`; `image` mode adds nginx's baseline headers, gzip, no version, dotfile 404s; `live` mode adds CloudFront's CSP (including `form-action` allowing the IdP), HSTS and nosniff |
-| Browser | `test/browser/shell.spec.ts` (Playwright) | the production build | Chromium, Firefox, WebKit over HTTPS with the production CSP and Trusted Types (`server.ts`), a fake Keycloak on a second origin, a remote stub on the shared SDK: fonts and hashed images with no third-party request, PKCE sign-in and the remote with integrity, `navigate()` without a reload, the sign-out form POST under `form-action`, the start-up failure at `/otel`, the sign-in hero's one-time opening (every `cine-*` animation over by 2.5 s, the form usable during it), `prefers-reduced-motion` (no animation, no letterbox bars), axe colour contrast on the hero's resting frame, the hero's text measured from pixels over each of its 9 photographs (the logotype is exempt, WCAG 1.4.3). Any CSP report fails the test |
+| Browser | `test/browser/shell.spec.ts` (Playwright) | the production build | Chromium, Firefox, WebKit over HTTPS with the production CSP and Trusted Types (`server.ts`), a fake Keycloak on a second origin, a remote stub on the shared SDK: fonts and hashed images with no third-party request, the first-visit welcome intro (canvas dust, facts counted, Pause early and late, Continue to a focused email field, reduced motion, contrast including the call to action), PKCE sign-in and the remote with integrity, `navigate()` without a reload, the sign-out form POST under `form-action`, the start-up failure at `/otel`, the sign-in hero's one-time opening (every `cine-*` animation over by 2.5 s, the form usable during it), `prefers-reduced-motion` (no animation, no letterbox bars), axe colour contrast on the hero's resting frame, the hero's text measured from pixels over each of its 9 photographs (the logotype is exempt, WCAG 1.4.3). Any CSP report fails the test |
 | Dashboard contract | `test/browser/dashboard.spec.ts` (`REMOTE_DIST`) | the production build | A real mfe-dashboard build served as `dashboard` with its own `remote-manifest-entry.json` integrity: it loads with its CSS and no CSP violation, every image it shows loads, the role map reaches it, its `NavLink` stays in the page, its Logout POSTs to Keycloak through the shell. A wrong integrity fails it |
 
 E2E seams (`test/fixtures/`): `FakeKeycloak` (authorize via `approve()`, token endpoint with PKCE check and refresh rotation), `FakeNetwork` (route table on the page origin; `/otel` → 204), `FakeBroadcastChannel`. Among the shell and SDK code only the remote's entry `<script>` is stubbed (browser seams are recorded: `location.assign`/`replace`, form `submit`, `createRoot`): it defines `window.__platform_mfe_dashboard` exposing a dashboard built on SDK hooks. A page load clears `globalThis[Symbol.for('@bcbp-solutions-fzc-llc/frontend-sdk')]`, resets modules, and imports the bootstrap again; storage is kept.

@@ -8,7 +8,8 @@ sequenceDiagram
     participant SDK as frontend-sdk /auth
     participant KC as Keycloak
 
-    Boot->>Screens: askForWorkspace(signInUseCases)
+    Boot->>Screens: askForWorkspace(signInUseCases, undefined, { welcome: true })
+    Note over Screens: first visit only: WelcomeSplash until Continue, Skip intro or Escape (bcbp.welcomeSeen)
     User->>Login: submit work email
     Login->>Login: rememberedEmail.save (injected repository)
     Login->>Screens: onContinue(email)
