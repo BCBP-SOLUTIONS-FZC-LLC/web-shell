@@ -10,6 +10,28 @@ Pull requests that change the shell, its dependencies, or the image add an entry
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.3.0] - 2026-11-06
+
+**Not breaking: same remote contract as `0.2.0`.** The remote is still `dashboard` (container `__platform_mfe_dashboard`, no props, the same `PlatformProvider` shell value). It loads mfe-dashboard **`v0.3.0`** (contract suite 12/12 in Chromium, Firefox and WebKit under the production CSP) and later dashboard builds on SDK alpha.6. The platform SDK moves to **`1.0.0-alpha.6`**; the shell goes first, so no dashboard release is needed with it.
+
+**What users see.**
+- A render error in the shell's own screens shows a recoverable error page (with a reference id and Try again) instead of a blank page.
+- Every sign-in failure shows the shell's own words, never a raw or server message.
+
+The English text is otherwise unchanged.
+
+**Deploying it.** It replaces `0.2.0` in an environment with no other change. Recommended at the same time: add `"environment": "<env>"` to that environment's `/config/runtime.json`. The SDK takes the identity from it, and `SMOKE_MODE=live ENVIRONMENT=<env>` checks it (LLD §15 #12). Rollback: `0.2.0`, with the same dashboard.
+
+**Inside.**
+- The Frontend Architecture Constitution refactor: use cases, layer lint and arch-lint, the `shell` text catalogue, the constitution's folders.
+- An error boundary.
+- Claude Code tooling.
+- Documentation modelled on the platform's IAM services.
+
+Details below.
+
 ### Changed (2026-11-06 — LLD, README, ARCHITECTURE and `.claude/` aligned with `main` after #45–#60)
 
 - **The documents say where `main` is.** Status lines (README, `.claude/CLAUDE.md`, the LLD header, ARCHITECTURE) now say `main` is ahead of `v0.2.0` with the unreleased constitution refactor, error page, tooling and documentation, and that `v0.3.0` is not cut. The LLD revision history gains #45, #51, #52/#56, #53, #54–#59 and #60, with PR numbers on the constitution rows. LLD §15 gains #14 (`v0.3.0` not cut), #15 (ADR exceptions awaiting Architecture Review), #16 (copies of unpublished platform code) and #17 (adopt `platform-design-system`). A `doc-sync-reviewer` pass over every in-scope document found 19 further statements that no longer matched the code; all are corrected. Among them:
@@ -210,7 +232,6 @@ Pull requests that change the shell, its dependencies, or the image add an entry
 
 ### Known gaps
 
-- **Release `0.3.0` is not cut.** `main` changes what users see since `0.2.0` (the error page, catalogue words for every sign-in failure). Production gets `0.2.0` until a tag is pushed.
 - **Each deployed `runtime.json` must name its `environment`** (LLD §15 #12). Until every one does, the shell keeps the build-time fallback (`__ENVIRONMENT__`), the constitution's open violation V5.
 - **The IAM endpoints exist only as local stubs.** PUB-1 and P-35 must be behind `/api` in every environment (LLD §15 #6).
 - **No CloudFront until next month** (LLD §15 #9). Each environment routes `/api`, `/otel`, `/csp-report`, `/remotes/dashboard/` at its ingress and mounts the CSP (with the IdP in `form-action`) and HSTS ([docs/hosting-without-cloudfront.md](docs/hosting-without-cloudfront.md)).
