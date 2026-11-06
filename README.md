@@ -181,7 +181,7 @@ web-shell/
 | `domain/` | SDK types | React, the browser, any other layer |
 | `application/` | `domain/`; SDK types and the `/problem` error classes | React, the browser, `infrastructure/`, `presentation/`, `app/` (ports are injected) |
 | `infrastructure/` | `domain/`, `shared/i18n`, the SDK | `presentation/`, `application/`, `app/` |
-| `presentation/` | `pages/`, `features/`: `domain/`, `application/` types, `shared/i18n` (pages also `shared/constants`, `shared/ui`; features also SDK `/auth` types); `components/`: `shared/i18n`, `shared/constants`, `shared/ui`; `widgets/`: `shared/i18n` | `infrastructure/`, `app/`, the SDK, `fetch`, storage, `location`, `history`, `navigator` |
+| `presentation/` | `pages/`: `components/`, `domain/`, `application/` types, `shared/i18n`, `shared/constants`, `shared/ui`; `features/`: `pages/`, `components/`, `domain/`, `application/` types, `shared/i18n`, SDK `/auth` types; `components/`: `shared/i18n`, `shared/constants`, `shared/ui`; `widgets/`: `shared/i18n` | `infrastructure/`, `app/`, SDK values, `fetch`, storage, `location`, `history`, `navigator` |
 | `shared/` | SDK `/i18n` and `/react` (`shared/i18n`); `shared/constants` → `shared/i18n` | Any shell layer |
 | `app/` | `bootstrap.tsx` wires every layer except presentation and `shared/constants`; routes, providers and layouts only what they render or provide | — |
 
@@ -393,7 +393,7 @@ npm ci && npm run build
 REMOTE_DIST=../mfe-dashboard/dist npm run test-contract
 ```
 
-12 cases (4 × 3 engines): the remote loads with its own integrity and CSS and no CSP violation, every image it shows loads, the role map reaches it, its `NavLink` stays in the page, and its Logout POSTs to Keycloak through the shell. A wrong integrity fails it.
+12 cases (4 × 3 engines): the remote loads with its own integrity and CSS and no CSP violation, every image it shows loads, the role map reaches it, its `NavLink` stays in the page, and its Logout POSTs to Keycloak through the shell. A `remoteEntry.js` that does not match its manifest `integrity` is refused by the browser, so the first case fails.
 
 ### Troubleshooting
 
@@ -651,6 +651,10 @@ Plus, until CloudFront: `nginx/security.d/csp.conf.example` (with that environme
 | `GET /api/v1/public/tenants/resolve?identifier=` (PUB-1) | The email sign-in screen, and workspace switching. No token |
 | `GET /api/v1/me/session-context` (P-35) | Once after sign-in (with the SDK's own retries); after a network failure while online, a timeout, 429, 502, 503 or 504 (the SDK ApiClient's own rule), again after 1 s, 2 s, 4 s, one request each. Until it answers the app renders with deny-all permissions |
 
+#### Dashboard remote (`dashboard`)
+
+The shell loads `dashboard`'s entry from `/remotes/manifest.json` in the browser and renders its `./App` with no props; the remote reads the user and sign-out from the SDK. A missing or failing remote stays inside its boundary; the shell keeps running.
+
 ### 2. Inbound callers (what depends on the shell)
 
 | Caller | Contract |
@@ -658,17 +662,13 @@ Plus, until CloudFront: `nginx/security.d/csp.conf.example` (with that environme
 | Browsers | The document, `/config/runtime.json`, `/remotes/manifest.json`, `/version.json`, `/assets/*`, `GET /healthz` (§ nginx paths) |
 | The `dashboard` remote, and any future remote | The share scope (React, React DOM, the OTel API, every SDK subpath at the shell's version), the `PlatformProvider` shell value through SDK hooks, the router through `navigate()` |
 
-#### Dashboard remote (`dashboard`)
-
-The shell loads `dashboard`'s entry from `/remotes/manifest.json` in the browser and renders its `./App` with no props; the remote reads the user and sign-out from the SDK. A missing or failing remote stays inside its boundary; the shell keeps running.
-
 ### 3. Async dependencies
 
 | Mechanism | Between | What flows |
 |---|---|---|
 | `BroadcastChannel` `platform-auth` | Tabs of this origin (SDK) | Sign-out and workspace switches |
 | `/version.json` polling | The shell and its own deployment | A new shell build (every 300 s) |
-| OTLP export | The browser → `/otel` | Logs, traces, metrics (below) |
+| OTLP export | The browser → `/otel` | Under v1 consent, error logs and essential warnings only (below) |
 
 #### Telemetry
 
@@ -678,7 +678,7 @@ Traces, logs and metrics are exported over OTLP/HTTP to `telemetry.otlpBaseUrl` 
 
 | System | Role |
 |---|---|
-| CloudFront (or, until next month, the ingress) | Routes `/api`, `/otel`, `/csp-report`, `/remotes/*`; sends the CSP and HSTS |
+| CloudFront (or, until next month, the ingress) | Routes `/api`, `/otel`, `/csp-report`, `/remotes/dashboard/`; sends the CSP and HSTS |
 | An OTLP collector behind `/otel`, Loki | Telemetry intake; the `WebShellStartupFailures` alert |
 | GitHub Packages | `@bcbp-solutions-fzc-llc/*` at build time (`NODE_AUTH_TOKEN`; the Dependabot secret `PACKAGES_READ_TOKEN`) |
 | GHCR | The signed image |
