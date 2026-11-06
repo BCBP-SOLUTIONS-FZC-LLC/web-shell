@@ -569,6 +569,7 @@ Diagrams in this file match the `.mmd` sources under [`docs/architecture/mermaid
 |---|---|
 | [docs/lld/web-shell-lld.md](docs/lld/web-shell-lld.md) | The contract: responsibilities, mappings, start-up order, flows, hosting, tests, open items |
 | [docs/README.md](docs/README.md) | Diagrams, the pipeline, and the runbooks |
+| [docs/architecture/constitution-assessment.md](docs/architecture/constitution-assessment.md) | Compliance with the Frontend Architecture Constitution, the target structure and the migration roadmap; decisions in [docs/adr/](docs/adr/README.md) |
 | [docs/observability.md](docs/observability.md) | Metric tiers, identity labels, the shell's metric inventory, and how to add a metric |
 | [.claude/CLAUDE.md](.claude/CLAUDE.md) | Critical rules and reference for Claude Code; `.claude/hooks/check-diagrams.mjs` checks this file's diagrams against their sources |
 | [README.md](./README.md) | How to run the shell, the routes, the image, and CI |
