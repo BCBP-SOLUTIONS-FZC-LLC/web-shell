@@ -14,6 +14,8 @@
 
 | Date | Change |
 |---|---|
+| 2026-11-06 | Constitution step 5: every user-facing word in the `shell` namespace of the SDK's `/i18n` (`shared/i18n`, `en.json`), loaded before any screen (`platform/shellMessages.ts`); sign-in errors never show an error's own message |
+| 2026-11-06 | Constitution step 4: the layer rules are ESLint errors (`test/unit/layer-rules.test.ts`) |
 | 2026-11-06 | Constitution step 3: use cases (`application/`) and repository contracts (`domain/`); presentation no longer reaches storage, PUB-1 or browser navigation |
 | 2026-11-06 | SDK `1.0.0-alpha.6`: `runtime.json` names the environment; config loaded before the identity; deploy check in smoke `live` |
 | 2026-11-05 | Observability standard: inventory (`docs/observability.md`), `metrics-check` in CI |
@@ -98,6 +100,7 @@ Removed as duplicates of the SDK (2026-11-05): `platform/consent.ts` (the runtim
 | Login layouts, email form, remember-email, help and legal links (`links.ts`, `PageLinks.tsx`) | `src/pages/*` |
 | Password reset hand-off to Keycloak | `src/platform/passwordReset.ts` |
 | Update and missing-permissions notices | `src/App.tsx` (`useAppUpdate`, `useSessionContext`) |
+| The shell's text: the `shell` namespace of the SDK's `/i18n`, English catalogue, registration before any screen | `src/shared/i18n/` (`en.json`, `catalogues.ts`, `useShellText`, `shellText`), `src/platform/shellMessages.ts` |
 | Consent (v1: essential only) | The SDK's default consent provider; the shell sets none |
 | Role → UI permission map | `src/platform/permissions.ts` |
 | Build (`shell` host), `/version.json` | `rsbuild.config.ts` |
@@ -122,6 +125,7 @@ Removed as duplicates of the SDK (2026-11-05): `platform/consent.ts` (the runtim
 | Slug-or-email identifier form | Email-only form on the login page (`LoginPage`) | Product layout; the email doubles as `login_hint` |
 | Example role map | `IAM_ROLES` closed set with §10.4 grants (§4.3) | IAM's roles |
 | No remember-email | `bcbp.rememberEmail`, `bcbp.loginEmail` in `localStorage` | Needed before a workspace exists, when the SDK's `storage()` ignores writes |
+| Text written in the components | Every word a key of the `shell` namespace; `registerShellMessages` loads it with `setLocale(defaultLocale)` before the first screen, then `initializeI18n` after sign-in as in the reference | The sign-in screens show before `initializeI18n`; the SDK's `t` gives back the key until a catalogue is loaded |
 | Webpack | Rsbuild 2 with `pluginPlatform({ role: 'shell' })` | Same Module Federation v1 protocol; remotes built with any of the three load |
 
 ---
@@ -144,6 +148,7 @@ src/
     rememberedEmail.ts      localStorageRememberedEmail (implements domain RememberedEmailRepository)
   application/              signIn.ts (SignInUseCases); use-cases/ resolveWorkspace, requestPasswordReset
   domain/                   repositories/rememberedEmail.ts (contract), errors.ts (WorkspaceNotFoundError)
+  shared/i18n/              index.ts (useShellText, shellText, ShellKey), catalogues.ts, en.json (every user-facing word)
   pages/                    LoginPage, useEmailSignIn, links, PageLinks
   components/BrandLogo.tsx
   assets/images/            carousel photos and the logo, bundled into /assets/ with a hash
@@ -161,14 +166,16 @@ test/                       unit, integration, e2e, fixtures, smoke, browser (§
 |---|---|
 | `platform/iam.ts`, `permissions.ts` | SDK subpaths only |
 | `platform/screen.tsx` | `react-dom/client` |
-| `platform/SessionScreens.tsx` | `pages/*`, `screen`, the sign-in use cases it is given (`application/signIn`), `domain/errors`, SDK `/auth` types. No other `platform/` module, no SDK runtime |
+| `platform/SessionScreens.tsx` | `pages/*`, `screen`, the sign-in use cases it is given (`application/signIn`), `domain/errors`, `shared/i18n` (text lookup), SDK `/auth` types. No other `platform/` module, no other SDK runtime |
 | `application/` | `domain/`, SDK types; no React, no browser APIs (ports injected by the bootstrap) |
 | `domain/` | SDK types only |
 | `platform/rememberedEmail.ts` | `domain/` |
-| `pages/*`, `components/*` | Each other, `domain/` and `application/` types. Never `platform/`, the SDK, storage, the network or navigation |
-| `App.tsx` | `react-router-dom`, SDK `/react` |
+| `pages/*`, `components/*` | Each other, `domain/` and `application/` types, `shared/i18n`. Never `platform/`, the SDK, storage, the network or navigation |
+| `shared/i18n` | SDK `/i18n` (`t`), `/react` (`useT`); no shell layer. Exposes text lookup only: presentation reaches the SDK's i18n runtime through it and nothing else |
+| `platform/shellMessages.ts` | `shared/i18n`, SDK `/i18n` (`registerNamespace`, `setLocale`). Changes the page's locale, so only the bootstrap calls it |
+| `App.tsx` | `react-router-dom`, SDK `/react`, `shared/i18n` |
 | `bootstrap.tsx` | Everything above; every SDK subpath it initialises. The composition root: builds the sign-in use cases from infrastructure and passes them to the screens |
-| `index.ts` | `bootstrap.tsx`, dynamically |
+| `index.ts` | `bootstrap.tsx`, dynamically; `shared/i18n/en.json` statically (the unavailable page, which cannot use the SDK) |
 
 The SDK is imported through public subpaths only. `@bcbp-solutions-fzc-llc/eslint-plugin` `configs.recommended` on `src/` fails a root or deep import, identity headers, raw `window.*Storage`, unsafe HTML and non-template API paths; `npm run lint` runs with `--max-warnings 0` in `validate-quality`.
 
@@ -268,7 +275,7 @@ Keys are IAM's closed role set: `member`, `tenant_owner`, `tenant_admin`, `tende
 | 3 | `initializeCore({ serviceName: 'web-shell', domain: 'portal', environment: cfg.environment ?? __ENVIRONMENT__, buildVersion: __BUILD_VERSION__ })` → `setRuntimeConfig(cfg)` | Registry-validated identity. One build for every environment (SDK alpha.6): the deployed file names the environment; the build-time one is the fallback until every file has the key. The SDK refuses a config whose `environment` differs from the identity's. Any throw from here on is fatal (§7): after `initializeCore` it is first logged as `error 'the app could not start'` (to `telemetry.otlpBaseUrl` once the config is read, else the default `/otel`) |
 | 4 | (consent) | The SDK's default: essential only (v1). A consent manager would call `setConsentProvider` here |
 | 5 | `initializeTracing`, `initializeLogging`, `initializeMetrics` (`cfg.telemetry`), `installGlobalErrorHandlers()`, `startWebVitals()` | |
-| 6 | `setFlagProvider(runtimeConfigFlagProvider())` | Platform flags only, until P-35 |
+| 6 | `setFlagProvider(runtimeConfigFlagProvider())`; `registerShellMessages(cfg.i18n.defaultLocale)` (`platform/shellMessages.ts`) | Platform flags only, until P-35. The `shell` namespace is registered and loaded for the default locale (`registerNamespace` + `setLocale`) before any screen, so the sign-in screens never show keys; step 14 then picks the user's locale |
 | 7 | `idp = createOidcProvider(cfg.auth, workspaceResolver)`, `setTokenSource(initializeAuth(idp))`, `session = await idp.init()` | May redirect once with `prompt=none` and never settle |
 | 8 | Anonymous → §6.1 and return | The app is not rendered |
 | 9 | `isWrongWorkspace(session.workspace, session.user)` → `showWrongWorkspace(idp)` and return | Not cached, never rendered |
@@ -459,11 +466,11 @@ Everything else (API spans, remote load logs and metrics, web vitals, global err
 
 ## 12. Testing
 
-Vitest 5, happy-dom at `http://localhost:5001/`, Testing Library. `vitest.config.ts` defines the two build constants and **inlines the SDK** (`server.deps.inline`) so `vi.resetModules()` gives each simulated page load a fresh SDK. `test/setup.ts` stubs `fetch` and `location.assign/replace` for DOM tests and skips its DOM setup in `@vitest-environment node` files. Coverage of `src/**/*.{ts,tsx}` is gated at 95% on all four metrics (`.github/scripts/coverage-gate.mjs`); today it is 100%.
+Vitest 5, happy-dom at `http://localhost:5001/`, Testing Library. `vitest.config.ts` defines the two build constants and **inlines the SDK** (`server.deps.inline`) so `vi.resetModules()` gives each simulated page load a fresh SDK. `test/setup.ts` stubs `fetch` and `location.assign/replace` and loads the `shell` catalogue (as the bootstrap does) for DOM tests and skips its DOM setup in `@vitest-environment node` files. Coverage of `src/**/*.{ts,tsx}` is gated at 95% on all four metrics (`.github/scripts/coverage-gate.mjs`); today it is 100%.
 
 | Layer | Path | Real SDK | What it locks |
 |---|---|---|---|
-| Unit | `test/unit/` | partly (`createTestPlatform`, `mockApi`, `roleMapAuthorizer`) | PUB-1/P-35 mappings against the SDK's contract cases, the entry point, remember-email, the role map, the screen host, `BrandLogo`, the login variant, the dev middleware (node env, real HTTP) |
+| Unit | `test/unit/` | partly (`createTestPlatform`, `mockApi`, `roleMapAuthorizer`) | The layer rules firing (`layer-rules.test.ts`); the `shell` catalogue, its fallback for a default locale without one, and no hard-coded user-facing text in presentation (`shell-text.test.ts`, on the TypeScript syntax tree); PUB-1/P-35 mappings against the SDK's contract cases, the entry point, remember-email, the role map, the screen host, `BrandLogo`, the login variant, the dev middleware (node env, real HTTP) |
 | Integration | `test/integration/` | no (`vi.mock` recording fakes) | The bootstrap's exact order and every branch, login layouts and carousel (only current and next photo fetched), session screens (alerts, dialog focus), `App` routes and the missing-context notice, axe-core over every shell screen (`accessibility.test.tsx`, colour contrast excluded) |
 | End to end | `test/e2e/shell.test.tsx` | yes | Email → PUB-1 → PKCE → callback → `dashboard` under `/t/acme/dashboard`; tokens never stored; deep link; role map reaching the remote; deny-all; failing remote and Try again; global sign-out (form POST to Keycloak) with no silent sign-in after; device clock; unknown email |
 | Smoke | `test/smoke/deployment.test.ts` | yes (config and manifest validation) | Against `SMOKE_BASE_URL`: the SPA rule, Cache-Control, entry integrity, no maps, 404s, `/healthz`; `image` mode adds nginx's baseline headers, gzip, no version, dotfile 404s; `live` mode adds CloudFront's CSP (including `form-action` allowing the IdP), HSTS and nosniff |

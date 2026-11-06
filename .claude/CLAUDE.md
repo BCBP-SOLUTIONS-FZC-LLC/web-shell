@@ -10,7 +10,7 @@ Node 26, TypeScript `~6.0.3` (typescript-eslint has no TS 7 support), React 19.3
 
 **Status:** Released: **`v0.2.0`** (remote `dashboard`, pairs with mfe-dashboard `v0.3.0`) is current and `latest`; **`v0.1.0`** (remote `app2`, pairs with mfe-dashboard `v0.2.0`) is kept as its rollback. Both were published by `release.yml` (signed, SBOM, SLSA provenance, tags added after signing). Not deployed yet. A release changes the shell–remote contract only together with mfe-dashboard (check with `npm run test-contract`). CloudFront arrives next month; until then environments follow `docs/hosting-without-cloudfront.md`. Open items: [LLD §15](../docs/lld/web-shell-lld.md#15-open-items). v1 decisions: essential-only consent; fonts self-hosted; Forgot password → Keycloak reset.
 
-**The shell owns:** `src/bootstrap.tsx` (SDK order, session branches, render), `src/App.tsx` (routes under `/t/<slug>/`, `RemoteBoundary` for `dashboard` `./App`), `src/platform/` (PUB-1 and P-35 ports, role map, session screens and their host; consent is the SDK's essential-only default), `src/pages/` (login layouts, remember-email), `rsbuild.config.ts`, `config/dev-platform.mjs` (dev stand-ins), `nginx/default.conf`, `Dockerfile`.
+**The shell owns:** `src/bootstrap.tsx` (SDK order, session branches, render), `src/App.tsx` (routes under `/t/<slug>/`, `RemoteBoundary` for `dashboard` `./App`), `src/platform/` (PUB-1 and P-35 ports, role map, session screens and their host; consent is the SDK's essential-only default), `src/pages/` (login layouts), `src/application/` + `src/domain/` (sign-in use cases, contracts), `src/shared/i18n/` (the `shell` text catalogue; no hard-coded words), `rsbuild.config.ts`, `config/dev-platform.mjs` (dev stand-ins), `nginx/default.conf`, `Dockerfile`.
 
 **Does NOT own:** PKCE, tokens, refresh, idle timeout, cross-tab sign-out, workspace cache, telemetry, remote loading, chunk integrity, the shared map (all SDK / preset, in `platform-reactcommon`); Keycloak; IAM APIs and roles; dashboard screens (`mfe-dashboard`); each environment's runtime config, manifest and CSP (deploy pipeline, CloudFront).
 
@@ -36,7 +36,7 @@ Run one test: `npx vitest run test/e2e/shell.test.tsx -t "sign-out"`. Full list:
 
 ## Architecture
 
-`index.ts` (async boundary) → `bootstrap.tsx` (the only module that wires `platform/` and renders `#app`) → `App.tsx` (SDK `/react` only). `platform/iam.ts`, `permissions.ts` import SDK subpaths only; `pages/*` never import `platform/` or the SDK. Layout: **[`architecture.md`](architecture.md)**; flows: **[`request-flows.md`](request-flows.md)**; the narrative with diagrams is [`ARCHITECTURE.md`](../ARCHITECTURE.md); the contract is the [LLD](../docs/lld/web-shell-lld.md).
+`index.ts` (async boundary) → `bootstrap.tsx` (the only module that wires `platform/` and renders `#app`) → `App.tsx` (SDK `/react` and `shared/i18n` only). `platform/iam.ts`, `permissions.ts` import SDK subpaths only; `pages/*` never import `platform/` or the SDK (their words come from `shared/i18n`; `eslint.config.js` enforces the layers). Layout: **[`architecture.md`](architecture.md)**; flows: **[`request-flows.md`](request-flows.md)**; the narrative with diagrams is [`ARCHITECTURE.md`](../ARCHITECTURE.md); the contract is the [LLD](../docs/lld/web-shell-lld.md).
 
 ## Critical Rules (do not break)
 

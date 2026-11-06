@@ -135,6 +135,26 @@ describe('the session screens (platform/SessionScreens.tsx): presentation next t
   })
 })
 
+describe('shared (src/shared/): no shell layer; the SDK for text only', () => {
+  it('refuses shell layers, other SDK subpaths and the browser', async () => {
+    const found = await violations(
+      'src/shared/i18n/probe.ts',
+      `import { workspaceResolver } from '../../platform/iam'
+       import { createApiClient } from '@bcbp-solutions-fzc-llc/frontend-sdk/http'
+       export const x = [workspaceResolver, createApiClient, localStorage]`,
+    )
+    expect(found).toEqual([
+      expect.stringContaining('depends on no shell layer'),
+      expect.stringContaining('only for text'),
+      expect.stringContaining('does not reach'),
+    ])
+  })
+
+  it('allows /i18n and /react', async () => {
+    expect(await violations('src/shared/i18n/probe.ts', `import { t } from '@bcbp-solutions-fzc-llc/frontend-sdk/i18n'\nimport { useT } from '@bcbp-solutions-fzc-llc/frontend-sdk/react'\nexport const x = [t, useT]`)).toEqual([])
+  })
+})
+
 describe('infrastructure and the composition root are not restricted by these rules', () => {
   it('platform/ may use storage and the SDK runtime; bootstrap.tsx wires everything', async () => {
     expect(await violations('src/platform/probe.ts', `import { createApiClient } from '@bcbp-solutions-fzc-llc/frontend-sdk/http'\nexport const c = createApiClient`)).toEqual([])

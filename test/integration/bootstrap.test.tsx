@@ -91,13 +91,20 @@ vi.mock('@bcbp-solutions-fzc-llc/frontend-sdk/authz', () => ({
   setAuthorizer: record('setAuthorizer'),
   setAuthzSubject: record('setAuthzSubject'),
 }))
-vi.mock('@bcbp-solutions-fzc-llc/frontend-sdk/i18n', () => ({
-  initializeI18n: async (o: { detect?: () => string | undefined }) => {
-    calls.push('initializeI18n')
-    i18nOptions.push(o)
-    duringI18n?.()
-  },
-}))
+vi.mock('@bcbp-solutions-fzc-llc/frontend-sdk/i18n', async (original) => {
+  // The real catalogue functions, for the shell's text; recorded to check they run before any screen.
+  const real = await original<typeof import('@bcbp-solutions-fzc-llc/frontend-sdk/i18n')>()
+  return {
+    ...real,
+    registerNamespace: (...a: Parameters<typeof real.registerNamespace>) => (calls.push('registerNamespace'), real.registerNamespace(...a)),
+    setLocale: (...a: Parameters<typeof real.setLocale>) => (calls.push('setLocale'), real.setLocale(...a)),
+    initializeI18n: async (o: { detect?: () => string | undefined }) => {
+      calls.push('initializeI18n')
+      i18nOptions.push(o)
+      duringI18n?.()
+    },
+  }
+})
 vi.mock('@bcbp-solutions-fzc-llc/frontend-sdk/nav', () => ({
   registerNavigator: (n: (appId: string, path: string) => void) => {
     calls.push('registerNavigator')
@@ -111,7 +118,8 @@ vi.mock('@bcbp-solutions-fzc-llc/frontend-sdk/mfe', () => ({
 vi.mock('@bcbp-solutions-fzc-llc/frontend-sdk/security', () => ({
   installTrustedTypesPolicy: record('installTrustedTypesPolicy'),
 }))
-vi.mock('@bcbp-solutions-fzc-llc/frontend-sdk/react', () => ({
+vi.mock('@bcbp-solutions-fzc-llc/frontend-sdk/react', async (original) => ({
+  ...(await original<object>()), // the real useT, for the shell's text
   installGlobalErrorHandlers: record('installGlobalErrorHandlers'),
   useLocale: () => ({ locale: 'en' }),
   PlatformProvider: (p: { shell: Record<string, unknown>; children: unknown }) => {
@@ -182,6 +190,9 @@ describe('bootstrap, signed in', () => {
       'installGlobalErrorHandlers',
       'startWebVitals',
       'setFlagProvider',
+      // The shell's text, loaded before any screen can show (the sign-in screens come before initializeI18n).
+      'registerNamespace',
+      'setLocale',
       'createOidcProvider',
       'initializeAuth',
       'setTokenSource',

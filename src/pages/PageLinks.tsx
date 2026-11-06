@@ -1,12 +1,14 @@
+import { useShellText } from '../shared/i18n'
 import { HELP_LINK, LEGAL_LINKS, published } from './links'
 
 /** "Trouble logging in?", when its URL is set. */
 export function HelpLink({ className }: { className: string }) {
+  const text = useShellText()
   const [help] = published([HELP_LINK])
   if (!help) return null
   return (
     <a href={help.href} className={className} target="_blank" rel="noopener noreferrer">
-      {help.label}
+      {text(help.label)}
     </a>
   )
 }
@@ -21,6 +23,7 @@ export function LegalFooter({
   linkClassName: string
   separator?: string
 }) {
+  const text = useShellText()
   const links = published(LEGAL_LINKS)
   if (links.length === 0) return null
   return (
@@ -33,7 +36,7 @@ export function LegalFooter({
             </span>
           ) : null}
           <a href={l.href} className={linkClassName} target="_blank" rel="noopener noreferrer">
-            {l.label}
+            {text(l.label)}
           </a>
         </span>
       ))}
@@ -51,6 +54,7 @@ export function ForgotPasswordButton({
   disabled: boolean
   className: string
 }) {
+  const text = useShellText()
   if (!onClick) return null
   return (
     <button
@@ -59,7 +63,7 @@ export function ForgotPasswordButton({
       disabled={disabled}
       className={`cursor-pointer border-0 bg-transparent p-0 disabled:cursor-not-allowed disabled:opacity-70 ${className}`}
     >
-      Forgot your password?
+      {text('login.forgotPassword')}
     </button>
   )
 }

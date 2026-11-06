@@ -16,6 +16,8 @@ graph LR
     links(["pages/links.ts\npages/PageLinks.tsx"])
     reset(["platform/passwordReset.ts"])
     logo(["BrandLogo.tsx"])
+    text(["shared/i18n\nshell namespace, en.json"])
+    msgs(["platform/shellMessages.ts"])
     sdk(["frontend-sdk subpaths"])
 
     index --> boot
@@ -44,3 +46,13 @@ graph LR
     login --> links
     hook --> domain
     iam --> sdk
+    boot --> msgs
+    msgs --> text
+    msgs --> sdk
+    app --> text
+    screens --> text
+    login --> text
+    hook --> text
+    links --> text
+    index -. en.json .-> text
+    text --> sdk

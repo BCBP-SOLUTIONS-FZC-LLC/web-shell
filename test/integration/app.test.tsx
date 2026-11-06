@@ -5,7 +5,8 @@ const routeTemplate = vi.fn()
 const boundaryProps = vi.fn()
 let context: unknown = { roles: ['member'] }
 const appUpdate = { available: false, reload: vi.fn() }
-vi.mock('@bcbp-solutions-fzc-llc/frontend-sdk/react', () => ({
+vi.mock('@bcbp-solutions-fzc-llc/frontend-sdk/react', async (original) => ({
+  ...(await original<object>()), // the real useT, for the shell's text
   useRouteTemplate: (t: string) => routeTemplate(t),
   useSessionContext: () => context,
   useAppUpdate: () => appUpdate,

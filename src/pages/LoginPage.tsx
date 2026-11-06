@@ -12,66 +12,33 @@ import image7 from '../assets/images/image7.jpg'
 import image8 from '../assets/images/image8.jpg'
 import image9 from '../assets/images/image9.jpg'
 import { ForgotPasswordButton, HelpLink, LegalFooter } from './PageLinks'
+import { useShellText, type ShellKey } from '../shared/i18n'
 
 const FEATURES = [
-  { dotClass: 'bg-[#ff2d9a]', label: '95% Accuracy Forecasting' },
-  { dotClass: 'bg-orange-500', label: 'Real-time Site Monitoring' },
-  { dotClass: 'bg-green-500', label: 'Safety & Compliance' },
-] as const
+  { dotClass: 'bg-[#ff2d9a]', label: 'login.feature.forecasting' },
+  { dotClass: 'bg-orange-500', label: 'login.feature.monitoring' },
+  { dotClass: 'bg-green-500', label: 'login.feature.safety' },
+] as const satisfies readonly { dotClass: string; label: ShellKey }[]
 
+/** Titles may hold a line break (\n); each line renders on its own. */
 const SLIDES = [
-  {
-    image: image1,
-    title: ['Next-Gen System, Built for You.', 'Supercharged and Limitless.'],
-    body: 'Access your unified workspace with automated governance, low-latency telemetry, and institutional-grade access controls.',
-  },
-  {
-    image: image2,
-    title: ['Airside programs, held to the plan.'],
-    body: 'Coordinate gates, works, and contractors from one workspace while the apron stays in motion.',
-  },
-  {
-    image: image3,
-    title: ['Port calls, coordinated end to end.'],
-    body: 'Track berth work, cargo, and contractors together so the quay stays on schedule.',
-  },
-  {
-    image: image4,
-    title: ['Road corridors, delivered on grade.'],
-    body: 'Keep earthworks, paving, and lane closures aligned so every kilometer stays on the critical path.',
-  },
-  {
-    image: image5,
-    title: ['Bridge spans, raised with precision.'],
-    body: 'Orchestrate foundations, decks, and lifting windows so each span lands safely and on time.',
-  },
-  {
-    image: image6,
-    title: ['High-voltage lines, laid with care.'],
-    body: 'Plan stringing, clearances, and outages in one view so transmission work stays energized and safe.',
-  },
-  {
-    image: image7,
-    title: ['Refinery builds, sequenced to startup.'],
-    body: 'Align modules, turnarounds, and commissioning so process units reach mechanical completion together.',
-  },
-  {
-    image: image8,
-    title: ['Chemical plants, built to operate.'],
-    body: 'Coordinate piping, utilities, and HSE gates so every unit is ready when production begins.',
-  },
-  {
-    image: image9,
-    title: ['Village programs, built for people.'],
-    body: 'Track housing, water, and civic works together so communities see progress that lasts.',
-  },
-] as const
+  { image: image1, title: 'login.slide.1.title', body: 'login.slide.1.body' },
+  { image: image2, title: 'login.slide.2.title', body: 'login.slide.2.body' },
+  { image: image3, title: 'login.slide.3.title', body: 'login.slide.3.body' },
+  { image: image4, title: 'login.slide.4.title', body: 'login.slide.4.body' },
+  { image: image5, title: 'login.slide.5.title', body: 'login.slide.5.body' },
+  { image: image6, title: 'login.slide.6.title', body: 'login.slide.6.body' },
+  { image: image7, title: 'login.slide.7.title', body: 'login.slide.7.body' },
+  { image: image8, title: 'login.slide.8.title', body: 'login.slide.8.body' },
+  { image: image9, title: 'login.slide.9.title', body: 'login.slide.9.body' },
+] as const satisfies readonly { image: string; title: ShellKey; body: ShellKey }[]
 
 const SLIDE_MS = 6000
 
 export default function LoginPage({ onContinue, onForgotPassword, rememberedEmail, notice = null }: LoginPageProps) {
   const { email, setEmail, remember, setRemember, submitting, error, handleSubmit, handleForgotPassword } =
     useEmailSignIn(onContinue, rememberedEmail, onForgotPassword)
+  const text = useShellText()
   const linkClass = 'font-medium text-[#6d5efc] no-underline hover:underline'
   const [slide, setSlide] = useState(0)
   const [settledSlide, setSettledSlide] = useState(0)
@@ -124,8 +91,8 @@ export default function LoginPage({ onContinue, onForgotPassword, rememberedEmai
     <div className="flex min-h-dvh flex-col bg-[#061018] font-sans lg:flex-row">
       <section
         className="relative z-0 min-h-[68vh] flex-1 overflow-hidden lg:min-h-dvh"
-        aria-roledescription="carousel"
-        aria-label="Product highlights"
+        aria-roledescription={text('login.carousel.role')}
+        aria-label={text('login.carousel')}
         onMouseEnter={() => setSlidePaused(true)}
         onMouseLeave={() => setSlidePaused(false)}
       >
@@ -171,7 +138,7 @@ export default function LoginPage({ onContinue, onForgotPassword, rememberedEmai
             style={{ ['--hero-shift' as string]: slideDirection === 1 ? '1.5rem' : '-1.5rem' }}
           >
             <h1 className="mt-4 max-w-[22em] text-[clamp(1.85rem,2.7vw,3rem)] font-bold leading-[1.12] tracking-tight text-white">
-              {activeSlide.title.map((line, index) => (
+              {text(activeSlide.title).split('\n').map((line, index) => (
                 <span key={line}>
                   {index > 0 ? <br /> : null}
                   {line}
@@ -179,7 +146,7 @@ export default function LoginPage({ onContinue, onForgotPassword, rememberedEmai
               ))}
             </h1>
             <p className="mt-5 max-w-[36rem] text-[clamp(0.95rem,1.4vw,1.15rem)] leading-relaxed text-white/90">
-              {activeSlide.body}
+              {text(activeSlide.body)}
             </p>
           </div>
           <ul className="mt-8 flex list-none flex-wrap gap-2.5">
@@ -189,7 +156,7 @@ export default function LoginPage({ onContinue, onForgotPassword, rememberedEmai
                 className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-[#1a1030]/80 px-3.5 py-2 text-[clamp(0.7rem,1vw,0.85rem)] font-medium text-white"
               >
                 <span className={`h-2 w-2 shrink-0 rounded-full ${dotClass}`} />
-                {label}
+                {text(label)}
               </li>
             ))}
           </ul>
@@ -197,7 +164,7 @@ export default function LoginPage({ onContinue, onForgotPassword, rememberedEmai
             <button
               type="button"
               className="inline-flex h-9 w-9 cursor-pointer items-center justify-center rounded-full border border-white/30 bg-black/30 text-lg text-white"
-              aria-label="Previous slide"
+              aria-label={text('login.carousel.previous')}
               onClick={() => showSlide(slide - 1)}
             >
               ‹
@@ -207,7 +174,7 @@ export default function LoginPage({ onContinue, onForgotPassword, rememberedEmai
                 <button
                   key={item.image}
                   type="button"
-                  aria-label={`Show slide ${index + 1}`}
+                  aria-label={text('login.carousel.show', { number: index + 1 })}
                   aria-current={index === slide ? 'true' : undefined}
                   onClick={() => showSlide(index)}
                   className={`h-2.5 cursor-pointer rounded-full transition-all ${
@@ -219,7 +186,7 @@ export default function LoginPage({ onContinue, onForgotPassword, rememberedEmai
             <button
               type="button"
               className="inline-flex h-9 w-9 cursor-pointer items-center justify-center rounded-full border border-white/30 bg-black/30 text-lg text-white"
-              aria-label="Next slide"
+              aria-label={text('login.carousel.next')}
               onClick={() => showSlide(slide + 1)}
             >
               ›
@@ -246,12 +213,12 @@ export default function LoginPage({ onContinue, onForgotPassword, rememberedEmai
             </div>
           </div>
 
-          <h2 className="m-0 text-lg font-semibold text-[#1a1a2e]">Login to your account</h2>
+          <h2 className="m-0 text-lg font-semibold text-[#1a1a2e]">{text('login.heading')}</h2>
 
           <form className="mt-8" onSubmit={handleSubmit}>
             {notice ? (
               <p role="alert" className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
-                {notice}
+                {text(notice)}
               </p>
             ) : null}
             {error ? (
@@ -261,7 +228,7 @@ export default function LoginPage({ onContinue, onForgotPassword, rememberedEmai
             ) : null}
             <label className="mb-5 block">
               <span className="mb-2 block text-[0.65rem] font-semibold uppercase tracking-[0.16em] text-gray-500">
-                Work email address
+                {text('login.email')}
               </span>
               <input
                 type="email"
@@ -280,14 +247,14 @@ export default function LoginPage({ onContinue, onForgotPassword, rememberedEmai
                 onChange={(e) => setRemember(e.target.checked)}
                 className="h-3.5 w-3.5 cursor-pointer accent-[#ff2d9a]"
               />
-              <span>Remember Email</span>
+              <span>{text('login.remember')}</span>
             </label>
             <button
               type="submit"
               disabled={submitting}
               className="w-full cursor-pointer rounded-lg border-0 bg-[linear-gradient(90deg,#ff4fa3_0%,#8b5cf6_100%)] px-4 py-3 text-sm font-semibold text-white shadow-[0_8px_20px_rgba(139,92,246,0.35)] transition-[filter,transform] hover:brightness-105 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-70"
             >
-              {submitting ? 'Redirecting…' : 'Continue with Email'}
+              {submitting ? text('login.redirecting') : text('login.continue')}
             </button>
           </form>
 

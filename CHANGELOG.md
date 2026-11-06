@@ -17,6 +17,18 @@ Pull requests that change the shell, its dependencies, or the image add an entry
 
 ### Changed
 
+- **Frontend Architecture Constitution, step 5: every user-facing word through the SDK's `/i18n` (`2026-11-06`).** Violation V4 of the assessment (ADR 0005, both in #45). The shell's user-facing text, 61 keys, moves to one English catalogue, `src/shared/i18n/en.json`, under the `shell` namespace. That covers the sign-in page and carousel, the session screens, the help and legal link labels, the app banners and the unavailable page.
+  - **`src/shared/i18n`:** `useShellText()` (the SDK's `useT('shell')`), `shellText()` (its `t`) and `ShellKey` (an unknown key is a type error). It offers text lookup only, and presentation reaches the SDK's i18n runtime through it and nothing else. A new lint block lets `shared/` import no shell layer and only `/i18n` and `/react` from the SDK.
+  - **`src/platform/shellMessages.ts`:** `registerShellMessages()` registers the namespace and loads it with `setLocale(defaultLocale)`. The bootstrap calls it right after the flags, before any screen. The sign-in screens show before `initializeI18n` (after sign-in), and the SDK's `t` gives back the key until a catalogue is loaded. `initializeI18n` still picks the user's locale.
+  - **Catalogue choice (`catalogueFor`):** exact tag, else language, else English. A default locale such as `en-GB`, or one not translated yet, shows words, not keys. Keys missing in a catalogue fall back to the default locale's (the SDK).
+  - **Sign-in errors are words from the catalogue:** a failure other than "workspace not found" shows `login.error.signIn` or `login.error.passwordReset`, never the error's own message, which is untranslated and may be a server's. The page's `notice` is a key.
+  - **`index.ts`:** the unavailable page reads `en.json` directly. It shows when the SDK may not have loaded, and nothing shared may be imported before the async boundary.
+  - **Unchanged:** brand words (`BCBP SOLUTIONS`, the logo's alt) stay as they are.
+  - **Guards:**
+    - `test/unit/shell-text.test.ts` reads presentation's TypeScript syntax tree and fails JSX text, `{'…'}` children, literal `aria-*`, `alt`, `title`, `placeholder` and `label` attributes, and `textContent` assignments. Over the previous code it finds 29 such literals.
+    - The bootstrap integration test checks the catalogue loads before the IdP starts. The e2e suite, which starts every page from a fresh SDK, fails without it.
+  - **Results:** English text unchanged. 181 tests at 100%; browser suite 18/18 (Chromium, Firefox, WebKit, production CSP); contract 12/12 against mfe-dashboard. The catalogue (1.7 KB gzip) sits in the entry chunk, where the first screen needs it: entry 9.7 KB of 12 KB.
+
 - **Frontend Architecture Constitution, step 4: the layer rules are lint errors (`2026-11-06`).** `eslint.config.js` now enforces the dependency rules step 3 introduced, so violations V2 and V3 of the assessment cannot come back (roadmap step 4, §5):
   - **Domain** (`src/domain/`, `.ts` and `.tsx`): no React, no SDK runtime (type imports allowed), no other shell layer, no browser global (`window`, `document`, `globalThis`, `self`, `localStorage`, `fetch`, `location`, …).
   - **Application** (`src/application/`): no React, no presentation or infrastructure, no SDK runtime (type imports allowed; the runtime is injected), no browser global.

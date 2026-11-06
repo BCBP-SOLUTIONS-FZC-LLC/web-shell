@@ -14,6 +14,8 @@ Condensed from [ARCHITECTURE.md](../ARCHITECTURE.md) and the [LLD](../docs/lld/w
 | `src/platform/SessionScreens.tsx` | `askForWorkspace`, `showSignedOut`, `showDeviceClock`, `showSessionEnded`, `showWrongWorkspace`, `showWorkspaceNotFound`, `WORKSPACE_NOT_FOUND` |
 | `src/application/` | `signIn.ts` (`SignInUseCases`), `use-cases/resolveWorkspace.ts`, `use-cases/requestPasswordReset.ts` (ports injected) |
 | `src/domain/` | `repositories/rememberedEmail.ts` (contract), `errors.ts` (`WorkspaceNotFoundError`) |
+| `src/shared/i18n/` | `en.json` (every user-facing word, keyed), `catalogues.ts` (catalogue by tag → language → English), `index.ts`: `useShellText` (React), `shellText`, `ShellKey` |
+| `src/platform/shellMessages.ts` | `registerShellMessages`: registers the `shell` namespace and loads it before any screen (bootstrap only) |
 | `src/platform/rememberedEmail.ts` | `localStorageRememberedEmail` (the one raw-storage file) |
 | `src/platform/screen.tsx` | `#shell-screen` fixed overlay host: `showScreen`, `hideScreen`, `resetScreen` |
 | `src/platform/sessionContext.ts` | `isTransient`, `retrySessionContext` (1 s, 2 s, 4 s; abortable), `createStore` |
@@ -40,11 +42,13 @@ Condensed from [ARCHITECTURE.md](../ARCHITECTURE.md) and the [LLD](../docs/lld/w
 | `platform/iam.ts`, `permissions.ts`, `passwordReset.ts`, `sessionContext.ts`, `navigator.ts` | SDK subpaths only (`navigator.ts` none) |
 | `platform/ShellRoot.tsx` | React, SDK `/react` and `/auth` types |
 | `platform/screen.tsx` | `react-dom/client` |
-| `platform/SessionScreens.tsx` | `pages/*`, `screen`, `application/signIn` (injected use cases), `domain/errors`, SDK `/auth` types; no other `platform/` module, no SDK runtime |
+| `platform/SessionScreens.tsx` | `pages/*`, `screen`, `application/signIn` (injected use cases), `domain/errors`, `shared/i18n`, SDK `/auth` types; no other `platform/` module, no other SDK runtime |
 | `application/` | `domain/`, SDK types; no React, no browser APIs |
 | `domain/` | SDK types only |
-| `pages/*`, `components/*` | Each other, `domain/` and `application/` types; never `platform/`, the SDK, storage, the network or navigation |
-| `App.tsx` | `react-router-dom`, SDK `/react` |
+| `pages/*`, `components/*` | Each other, `domain/` and `application/` types, `shared/i18n`; never `platform/`, the SDK, storage, the network or navigation |
+| `shared/i18n` | SDK `/i18n`, `/react`; no shell layer (lint) |
+| `platform/shellMessages.ts` | `shared/i18n`, SDK `/i18n` |
+| `App.tsx` | `react-router-dom`, SDK `/react`, `shared/i18n` |
 | `bootstrap.tsx` | Everything; the only module that renders `#app` |
 
 Layer rows (`domain/`, `application/`, presentation incl. `SessionScreens.tsx`) are ESLint rules in `eslint.config.js`; `test/unit/layer-rules.test.ts` proves each fires. Fix a violation by injecting a port from the bootstrap, never by widening the rule.

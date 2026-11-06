@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import type { RememberedEmailRepository } from '../domain/repositories/rememberedEmail'
+import { useShellText, type ShellKey } from '../shared/i18n'
 
 export type LoginPageProps = {
   /**
@@ -12,14 +13,14 @@ export type LoginPageProps = {
    * shows. Without it, "Forgot your password?" is not shown.
    */
   onForgotPassword?: (email: string) => Promise<void>
-  /** A message from the bootstrap, e.g. why the last sign-in did not complete. */
-  notice?: string | null
+  /** A message from the bootstrap (a catalogue key), e.g. why the last sign-in did not complete. */
+  notice?: ShellKey | null
   /** "Remember Email": given by the composition root (the page never touches storage itself). */
   rememberedEmail: RememberedEmailRepository
 }
 
 /** Shown when "Forgot your password?" is chosen before an email is typed. */
-export const EMAIL_FIRST = 'Enter your work email first, then choose “Forgot your password?”.'
+export const EMAIL_FIRST: ShellKey = 'login.emailFirst'
 
 /** The email form state shared by both login layouts. */
 export function useEmailSignIn(
@@ -27,6 +28,7 @@ export function useEmailSignIn(
   rememberedEmail: RememberedEmailRepository,
   onForgotPassword?: LoginPageProps['onForgotPassword'],
 ) {
+  const text = useShellText()
   const [email, setEmail] = useState(() => rememberedEmail.get())
   const [remember, setRemember] = useState(() => rememberedEmail.get() !== '')
   const [submitting, setSubmitting] = useState(false)
@@ -41,7 +43,7 @@ export function useEmailSignIn(
       await onContinue(email.trim())
     } catch (err) {
       setSubmitting(false)
-      setError(err instanceof Error ? err.message : 'Unable to start sign-in.')
+      setError(err instanceof Error ? err.message : text('login.error.signIn'))
     }
   }
 
@@ -49,7 +51,7 @@ export function useEmailSignIn(
     setError(null)
     const typed = email.trim()
     if (typed === '') {
-      setError(EMAIL_FIRST)
+      setError(text(EMAIL_FIRST))
       return
     }
     setSubmitting(true)
@@ -57,7 +59,7 @@ export function useEmailSignIn(
       await send(typed)
     } catch (err) {
       setSubmitting(false)
-      setError(err instanceof Error ? err.message : 'Unable to start the password reset.')
+      setError(err instanceof Error ? err.message : text('login.error.passwordReset'))
     }
   }
 

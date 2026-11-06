@@ -56,6 +56,7 @@ src/
     passwordReset.ts     ← Keycloak reset-credentials URL for a workspace
   application/           ← Use cases (no React, no browser APIs): resolveWorkspace, requestPasswordReset; signIn.ts
   domain/                ← Contracts and errors: RememberedEmailRepository, WorkspaceNotFoundError
+  shared/i18n/           ← The shell's text: en.json (keys → English), catalogues.ts, useShellText, shellText
   pages/                 ← Login layout and useEmailSignIn (the remembered-email repository is passed in)
   components/            ← Shell-owned UI (BrandLogo)
   globals.d.ts           ← __ENVIRONMENT__, __BUILD_VERSION__
@@ -115,6 +116,14 @@ docs/lld/web-shell-lld.md ← Low-level design (the contract)
 2. A build-time constant goes in `rsbuild.config.ts` `source.define`, `src/globals.d.ts`, and `vitest.config.ts` `define`. If the image needs it, add a Dockerfile `ARG` and pass it from the workflows' `build-args`.
 3. Add a row to the configuration tables in `README.md`.
 4. Runtime config is served to every browser. Do not put secrets in it.
+
+### Adding or changing user-facing text
+
+1. Add a key to `src/shared/i18n/en.json` (`area.thing`, e.g. `login.heading`; placeholders `{name}`, ICU-lite).
+2. Render it with `useShellText()` in React, or `shellText()` outside it (an error message). `ShellKey` makes an unknown key a type error.
+3. Never write the words in the component: `test/unit/shell-text.test.ts` reads presentation's syntax tree and fails JSX text, `{'…'}` children, literal `aria-*`, `alt`, `title`, `placeholder` and `label` attributes, and `textContent` / `innerText` assignments. Brand words (`BCBP SOLUTIONS`, the logo's alt) are its only exceptions. It cannot see words in plain string data (an array, a constant, a fallback), so type those as `ShellKey`.
+4. An error shown to the user is a key too: the session screens map every failure to `login.workspaceNotFound`, `login.error.signIn` or `login.error.passwordReset`, never an error's own message.
+5. A new locale: add `<locale>.json` next to `en.json`, add it to `CATALOGUES` in `src/shared/i18n/catalogues.ts` and to the environments' `runtime.json` `i18n.supportedLocales`. A key missing in it falls back to the default locale's catalogue (the SDK); a locale with no catalogue of its own gets its language's, else English (`catalogueFor`).
 
 ### Adding a metric
 

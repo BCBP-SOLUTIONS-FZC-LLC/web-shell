@@ -10,6 +10,7 @@ import LoginPage from '../../src/pages/LoginPage'
 import { localStorageRememberedEmail as remembered } from '../../src/platform/rememberedEmail'
 import { resolveWorkspaceUseCase } from '../../src/application/use-cases/resolveWorkspace'
 import { requestPasswordResetUseCase } from '../../src/application/use-cases/requestPasswordReset'
+import en from '../../src/shared/i18n/en.json'
 
 const screens = await import('../../src/platform/SessionScreens')
 // Sign-in use cases over a resolver that finds nothing, as the screens get them from the bootstrap.
@@ -36,9 +37,9 @@ describe('accessibility (axe)', () => {
     render(
       <Page
         rememberedEmail={remembered}
-        notice="Your session has ended."
+        notice="session.ended.default"
         onContinue={async () => {
-          throw new Error(screens.WORKSPACE_NOT_FOUND)
+          throw new Error(en[screens.WORKSPACE_NOT_FOUND])
         }}
       />,
     )
@@ -46,7 +47,7 @@ describe('accessibility (axe)', () => {
     const user = userEvent.setup()
     await user.type(screen.getByRole('textbox', { name: /work email address/i }), 'ada@acme.test')
     await user.click(screen.getByRole('button', { name: /continue with email/i }))
-    await screen.findByText(screens.WORKSPACE_NOT_FOUND)
+    await screen.findByText(en[screens.WORKSPACE_NOT_FOUND])
     expect(await violations()).toEqual([])
   })
 
