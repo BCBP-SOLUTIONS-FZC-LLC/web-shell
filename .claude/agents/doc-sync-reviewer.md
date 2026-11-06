@@ -10,7 +10,7 @@ CLAUDE.md requires "every claim checkable against the code", and README, ARCHITE
 
 ## Documents in scope
 
-`README.md`, `ARCHITECTURE.md`, `CONTRIBUTING.md`, `CHANGELOG.md` (the `[Unreleased]` entries), `VERSIONING.md`, `docs/lld/web-shell-lld.md`, `docs/*.md` (observability, runbooks, hosting), `docs/architecture/mermaid/*.mmd`, `.claude/CLAUDE.md`, `.claude/architecture.md`, `.claude/request-flows.md`, `.claude/operations.md`, `.claude/agents/*.md`, `test/*/README.md`.
+`README.md`, `ARCHITECTURE.md`, `CONTRIBUTING.md`, `CHANGELOG.md` (the `[Unreleased]` entries), `VERSIONING.md`, `docs/lld/web-shell-lld.md`, `docs/*.md` (observability, runbooks, hosting), `docs/architecture/mermaid/*.mmd`, `.claude/CLAUDE.md`, `.claude/architecture.md`, `.claude/request-flows.md`, `.claude/operations.md`, `.claude/skills/*/SKILL.md`, `.claude/agents/*.md`, `test/*/README.md`.
 
 ## What to check
 

@@ -11,8 +11,9 @@ argument-hint: <PR number or branch of the next PR in the stack>
 
 1. **Identify** the PR (`gh pr view $ARGUMENTS --json number,headRefName,baseRefName,state`), its current base branch (the one just merged), and confirm with `gh pr view <base PR>` that the base PR is merged. If it is not merged, stop and say so.
 2. **Sync:** `bash .claude/skills/stack-sync/scripts/sync.sh <head branch> <old base branch>`.
+   - It first refuses an argument starting with `-`, a branch or base that is not a commit (locally or `origin/<base>`), and a working tree that is not clean.
    - It refuses when `origin/main`'s tree differs from the old base's: something else landed on `main`. Then merge `origin/main` into the branch by hand and resolve each conflict on its merits; never take a side blindly.
-   - It does not run a 3-way content merge: it records `main` as merged (`-s ours`) and applies only what `main` gained since the branch was cut. The branch's own changes are never re-merged, so moved code and folder renames cannot produce duplicates or rename conflicts (a plain merge did both, on #48 and #50).
+   - It does not run a 3-way content merge: it records `main` as merged (`-s ours`) and applies only what `main` gained since the branch was cut (nothing, when the base was merged unchanged). The branch's own changes are never re-merged, so moved code and folder renames cannot produce duplicates or rename conflicts (a plain merge did both, on #48 and #50).
    - It then proves the result: the branch's diff against `main` must equal the branch's own change. If that fails, or `main`'s delta does not apply, the branch is reset to where it was and the files are named: merge by hand.
    - On success the branch contains `main` and its diff against `main` is exactly its own change.
 3. **Verify** quickly: `npm run lint`, `npm run arch-lint`, `npm run typecheck`, `npx vitest run` (the content did not change, so these confirm the environment, not the merge).

@@ -6,7 +6,7 @@ The browser shell for the BCBP micro-frontend platform. It runs the platform SDK
 **Runtime:** Node.js 26 · Rsbuild 2 (Rspack) · React 19.3 · `@bcbp-solutions-fzc-llc/frontend-sdk` `1.0.0-alpha.6` · private npm package `web-shell` (`"private": true`) · production image is nginx on port **8080**
 **Contract:** Module Federation host `shell`, built with `@bcbp-solutions-fzc-llc/webpack-preset`. It provides React, React DOM, the OTel API and every SDK subpath to remotes, and exposes nothing. Versioning of the image and that contract is in [VERSIONING.md](./VERSIONING.md).
 **Design:** [docs/lld/web-shell-lld.md](./docs/lld/web-shell-lld.md) is the contract (where it and the code disagree, fix one in the same PR). The platform SDK's design doc (`platform-reactcommon` `docs/design/frontend-sdk-design.md`, §C1 ports, §C2 shell bootstrap) defines what a shell must own. The structure follows the Frontend Architecture Constitution ([assessment](./docs/architecture/constitution-assessment.md), [ADRs](./docs/adr/README.md)).
-**Status:** Released: **`v0.2.0`** (remote `dashboard`, pairs with mfe-dashboard `v0.3.0`) is current and `latest`; **`v0.1.0`** (remote `app2`, pairs with mfe-dashboard `v0.2.0`) is kept as its rollback. Both were published by `release.yml` (signed, SBOM, SLSA provenance, tags added after signing). Not deployed yet. Deploy them in pairs: web-shell `0.2.0` + mfe-dashboard `0.3.0` (or `0.1.0` + `0.2.0`). Until CloudFront exists (next month) environments follow [docs/hosting-without-cloudfront.md](./docs/hosting-without-cloudfront.md). What is still open: [LLD §15](./docs/lld/web-shell-lld.md#15-open-items).
+**Status:** Released: **`v0.2.0`** (remote `dashboard`, pairs with mfe-dashboard `v0.3.0`) is current and `latest`; **`v0.1.0`** (remote `app2`, pairs with mfe-dashboard `v0.2.0`) is kept as its rollback. Both were published by `release.yml` (signed, SBOM, SLSA provenance, tags added after signing). Not deployed yet. Deploy them in pairs: web-shell `0.2.0` + mfe-dashboard `0.3.0` (or `0.1.0` + `0.2.0`). Until CloudFront exists (next month) environments follow [docs/hosting-without-cloudfront.md](./docs/hosting-without-cloudfront.md). What is still open: [LLD §15](./docs/lld/web-shell-lld.md#15-open-items). `main` is ahead of `v0.2.0` and unreleased (CHANGELOG `[Unreleased]`, PRs #45–#60): the Frontend Architecture Constitution refactor (assessment and ADRs, use cases, layer lint and arch-lint, the `shell` text catalogue, the constitution's folders), the error page around the shell's own screens, Claude Code tooling, and documentation modelled on the IAM services. The next release, `v0.3.0`, is not cut.
 
 ---
 
@@ -88,7 +88,7 @@ A remote must be built with `@bcbp-solutions-fzc-llc/webpack-preset` (`role: 're
 | Path | Behavior |
 |---|---|
 | `GET /healthz` | `200` and the text `ok`. No access log |
-| `GET /` | Shell document. `index.html` is `Cache-Control: no-cache`. Only extension-less paths fall through to `index.html` (the platform's rule, `platform-reactcommon` `examples/cloudfront/spa-rewrite.js`); a missing file under `/api/`, `/otel/`, `/config/`, `/remotes/`, `/assets/`, or any missing file with an extension, is 404 |
+| `GET /` | Shell document. `index.html` is `Cache-Control: no-cache`. Only extension-less paths fall through to `index.html` (the platform's rule, `platform-reactcommon` `examples/cloudfront/spa-rewrite.js`); a missing file under `/api/`, `/otel/`, `/csp-report/`, `/config/`, `/remotes/`, `/assets/`, or any missing file with an extension, is 404 |
 | `GET /config/runtime.json`, `/remotes/manifest.json`, `/version.json` | `no-cache`, `404` when the file is absent |
 | `GET /assets/*` | Hashed files, `Cache-Control: public, max-age=31536000, immutable` |
 | Dotfile paths (`/.git/…`, `/.env`) | `404` |
@@ -181,7 +181,7 @@ web-shell/
 | `domain/` | SDK types | React, the browser, any other layer |
 | `application/` | `domain/`; SDK types and the `/problem` error classes | React, the browser, `infrastructure/`, `presentation/`, `app/` (ports are injected) |
 | `infrastructure/` | `domain/`, `shared/i18n`, the SDK | `presentation/`, `application/`, `app/` |
-| `presentation/` | `pages/`: `components/`, `domain/`, `application/` types, `shared/i18n`, `shared/constants`, `shared/ui`; `features/`: `pages/`, `components/`, `domain/`, `application/` types, `shared/i18n`, SDK `/auth` types; `components/`: `shared/i18n`, `shared/constants`, `shared/ui`; `widgets/`: `shared/i18n` | `infrastructure/`, `app/`, SDK values, `fetch`, storage, `location`, `history`, `navigator` |
+| `presentation/` | `pages/`: `components/`, `domain/`, `application/` types, `shared/i18n`, `shared/constants`, `shared/ui`; `features/`: `pages/`, `components/`, `domain/`, `application/` types, `shared/i18n`, SDK `/auth` types; `components/`: `shared/i18n`, `shared/constants`, `shared/ui`; `widgets/`: `shared/i18n` | `infrastructure/`, `app/`, the SDK (features: `/auth` types only), `application/` values, `fetch`, storage, `location`, `history`, `navigator`, `open` |
 | `shared/` | SDK `/i18n` and `/react` (`shared/i18n`); `shared/constants` → `shared/i18n` | Any shell layer |
 | `app/` | `bootstrap.tsx` wires every layer except presentation and `shared/constants`; routes, providers and layouts only what they render or provide | — |
 
@@ -322,7 +322,7 @@ With Keycloak and the dev server running (`mfe-dashboard` too for the sign-out r
 |---|---|
 | `npm run hooks:install` | Pre-commit gate: staged env files, workflow hygiene, Dockerfile digest pin, `tsc --noEmit` |
 | `npm run arch-lint` | Component boundaries (`.dependency-cruiser.cjs`) |
-| Claude Code (`.claude/`) | `settings.json` hooks: `guard.sh` blocks edits to sibling repos, `node_modules/`, `dist/`, `coverage/`, env files; `post-edit.sh` runs ESLint, arch-lint, the SDK pin check and the diagram check. Subagents `invariant-reviewer`, `doc-sync-reviewer`; skills `/sdk-upgrade`, `/stack-sync`; MCP `context7` (`.mcp.json`) |
+| Claude Code (`.claude/`) | `settings.json` hooks: `guard.sh` blocks edits to sibling repos, `node_modules/`, `dist/`, `coverage/`, and `.env` / `docker.local.env` (any depth), comparing canonical paths; `post-edit.sh` runs ESLint, arch-lint, the SDK pin check and the diagram check. Subagents `invariant-reviewer`, `doc-sync-reviewer`; skills `/sdk-upgrade`, `/stack-sync`; MCP `context7` (`.mcp.json`) |
 | `node .claude/hooks/check-diagrams.mjs` | Every diagram in ARCHITECTURE.md equals its `.mmd` source |
 
 ### Common commands

@@ -4,7 +4,7 @@ This document describes the internal structure, dependency direction, browser fl
 
 `web-shell` is a **private Rsbuild application** (`github.com/BCBP-SOLUTIONS-FZC-LLC/web-shell`, Node.js 26, React 19.3) built on the platform SDK (`@bcbp-solutions-fzc-llc/frontend-sdk` `1.0.0-alpha.6`). The npm package name is `web-shell` and `"private": true`. Nothing installs it. What ships is a static bundle: the SDK bootstrap, the sign-in and session screens, and a Module Federation host (`shell`) that renders the dashboard remote. The production process is nginx on port **8080**, uid **101**. There is no API server, database, or message bus in this repository.
 
-Current release: `v0.2.0` (remote `dashboard`); `v0.1.0` (remote `app2`) is its rollback. `package.json` `version` matches the latest tag. Image tags, the SemVer contract, and how to cut a release are in [VERSIONING.md](./VERSIONING.md).
+Current release: `v0.2.0` (remote `dashboard`); `v0.1.0` (remote `app2`) is its rollback. This document describes `main`, which is ahead of `v0.2.0` (CHANGELOG `[Unreleased]`); the next release is `v0.3.0`. `package.json` `version` matches the latest tag. Image tags, the SemVer contract, and how to cut a release are in [VERSIONING.md](./VERSIONING.md).
 
 | This shell owns | Lives elsewhere |
 |---|---|
@@ -20,7 +20,7 @@ Only `__ENVIRONMENT__` and `__BUILD_VERSION__` are compiled into the bundle. Eve
 
 ## Layer model
 
-`src/` follows the Frontend Architecture Constitution's structure. Presentation → application → domain; infrastructure implements the domain's contracts; `app/` is the composition root and the only place that knows every layer. Nothing in `src/` imports the bootstrap except the entry. Solid arrows are imports in the real direction, and `npm run arch-lint` checks every one of them; dashed arrows are type-only imports or, for the remote, a load at run time.
+`src/` follows the Frontend Architecture Constitution's structure. Presentation → application → domain; infrastructure implements the domain's contracts; `app/` is the composition root and the only place that knows every layer. Nothing in `src/` imports the bootstrap except the entry. Solid arrows are imports in the real direction, and `npm run arch-lint` checks every one of them; dashed arrows are type-only imports, the entry's dynamic import of the bootstrap (the async boundary), or, for the remote, a load at run time.
 
 > Source: [`docs/architecture/mermaid/layer-model.mmd`](docs/architecture/mermaid/layer-model.mmd)
 
@@ -37,7 +37,7 @@ graph TD
     subgraph presentation["presentation/"]
         pages["pages/login\nLoginPage, useEmailSignIn"]
         features["features/session-screens\nsign-in, signed out, session ended, …"]
-        widgets["widgets/\nupdate notice, missing permissions"]
+        widgets["widgets/\nupdate notice, missing permissions, error page"]
         components["components/\nBrandLogo, PageLinks"]
     end
 
@@ -65,7 +65,7 @@ graph TD
         dashboard["dashboard ./App\nSDK hooks, no props"]
     end
 
-    index --> boot
+    index -. dynamic import .-> boot
     boot --> routes
     boot --> providers
     boot --> layouts
@@ -80,7 +80,7 @@ graph TD
     features -. types .-> usecases
     layouts -. types .-> usecases
     usecases --> dom
-    infra --> dom
+    infra -. types .-> dom
     infra --> sdkmods
     presentation --> sh
     sh --> sdkmods
@@ -94,7 +94,7 @@ The SDK is imported through public subpaths only. `@bcbp-solutions-fzc-llc/eslin
 
 ## Module dependency graph
 
-Arrows are TypeScript imports under `src/`. Dashed, labelled arrows carry only what the label names (types, `en.json`, the `/problem` error classes).
+Arrows are TypeScript imports under `src/`. Dashed, labelled arrows carry only what the label names (types, `en.json`, the `/problem` error classes) or are dynamic imports.
 
 > Source: [`docs/architecture/mermaid/package-dependencies.mmd`](docs/architecture/mermaid/package-dependencies.mmd)
 
@@ -121,7 +121,7 @@ graph LR
     links(["shared/constants/links.ts"])
     sdk(["frontend-sdk subpaths"])
 
-    index --> boot
+    index -. dynamic import .-> boot
     index -. en.json .-> text
     boot --> app
     boot --> root
@@ -759,7 +759,7 @@ A browser shell has no locks, but it has races: an async start-up that a sign-ou
 
 Build args: `BUILD_VERSION`, `SOURCE_DATE_EPOCH`, `PLATFORM_ENVIRONMENT` (default `prod`; only a fallback now: each environment's `runtime.json` names its own `environment`). The image ships `public/config/runtime.json` (SDK defaults: `https://auth.bcbpsolutions.com`, client `tender-web`) and an empty manifest `{}`. An environment serves its own files over those paths, from CloudFront or a mount. The image sends no CSP or HSTS: CloudFront does, and until it exists (next month) each environment mounts `nginx/security.d/csp.conf` and `hsts.conf` and routes `/api`, `/otel`, `/csp-report` and `/remotes/dashboard/` on the same origin at its ingress ([docs/hosting-without-cloudfront.md](docs/hosting-without-cloudfront.md)).
 
-CI on `main` pushes `ghcr.io/bcbp-solutions-fzc-llc/web-shell` with the branch tag and `sha-<short>`, then Cosign-signs the digest. A Git tag `vX.Y.Z` publishes image tags `X.Y.Z`, `X.Y`, `X`, and `latest` when the tag has no pre-release suffix. The Git tag keeps the `v`. The static tarball on the GitHub Release is `web-shell_<tag>_dist.tar.gz`, without source maps (the release keeps them as the workflow artifact `sourcemaps-<tag>`). `BUILD_VERSION` is the version without the `v`. Releases so far: `v0.1.0`, `v0.2.0`. It does not include the nginx `/healthz` location.
+CI on `main` pushes `ghcr.io/bcbp-solutions-fzc-llc/web-shell` with the branch tag and `sha-<short>`, then Cosign-signs the digest. A Git tag `vX.Y.Z` publishes image tags `X.Y.Z`, `X.Y`, `X`, and `latest` when the tag has no pre-release suffix. The Git tag keeps the `v`. The static tarball on the GitHub Release is `web-shell_<tag>_dist.tar.gz`, without source maps (the release keeps them as the workflow artifact `sourcemaps-<tag>`). `BUILD_VERSION` is the version without the `v`. The tarball does not include the nginx `/healthz` location. Releases so far: `v0.1.0`, `v0.2.0`; `main` is ahead of `v0.2.0`, and `v0.3.0` is not cut.
 
 There is no Helm chart and no deploy job.
 

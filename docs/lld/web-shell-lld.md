@@ -7,18 +7,24 @@
 | **Repository** | `github.com/BCBP-SOLUTIONS-FZC-LLC/web-shell` (private) |
 | **Artifact** | Static bundle served by nginx (`ghcr.io/bcbp-solutions-fzc-llc/web-shell`), never installed as a package (`web-shell`, `"private": true`; `version` = the latest tag) |
 | **Platform SDK** | `@bcbp-solutions-fzc-llc/frontend-sdk`, `webpack-preset`, `eslint-plugin` `1.0.0-alpha.6`, pinned exactly, all three on one version |
-| **Status** | Released: **`v0.2.0`** (remote `dashboard`, pairs with mfe-dashboard `v0.3.0`) is current and `latest`; **`v0.1.0`** (remote `app2`, pairs with mfe-dashboard `v0.2.0`) is kept as its rollback. Both were published by `release.yml` (signed, SBOM, SLSA provenance, tags added after signing). Not deployed yet ([CHANGELOG.md](../../CHANGELOG.md)). Pairs: web-shell `0.2.0` + mfe-dashboard `0.3.0`; `0.1.0` + `0.2.0`. Hosting until CloudFront (next month): [hosting-without-cloudfront.md](../hosting-without-cloudfront.md). Open: §15 |
+| **Status** | Released: **`v0.2.0`** (remote `dashboard`, pairs with mfe-dashboard `v0.3.0`) is current and `latest`; **`v0.1.0`** (remote `app2`, pairs with mfe-dashboard `v0.2.0`) is kept as its rollback. Both were published by `release.yml` (signed, SBOM, SLSA provenance, tags added after signing). Not deployed yet ([CHANGELOG.md](../../CHANGELOG.md)). Pairs: web-shell `0.2.0` + mfe-dashboard `0.3.0`; `0.1.0` + `0.2.0`. Hosting until CloudFront (next month): [hosting-without-cloudfront.md](../hosting-without-cloudfront.md). Open: §15. `main` is ahead of `v0.2.0` and unreleased (CHANGELOG `[Unreleased]`, PRs #45–#60): the Frontend Architecture Constitution refactor (assessment and ADRs, use cases, layer lint and arch-lint, the `shell` text catalogue, the constitution's folders), the error page around the shell's own screens, Claude Code tooling, and documentation modelled on the IAM services. The next release, `v0.3.0`, is not cut. |
 | **Owners** | `@BCBP-SOLUTIONS-FZC-LLC/web-shell` (CODEOWNERS) |
 
 ### Revision history
 
 | Date | Change |
 |---|---|
-| 2026-11-06 | Constitution step 2: `src/` in the constitution's folders (`app/`, `presentation/`, `application/`, `domain/`, `infrastructure/`, `shared/`); session screens split into components and their mounting; App notices as widgets |
-| 2026-11-06 | Architecture lint: `.dependency-cruiser.cjs` component map, `npm run arch-lint` in `Validate / Quality` |
-| 2026-11-06 | Constitution step 5: every user-facing word in the `shell` namespace of the SDK's `/i18n` (`shared/i18n`, `en.json`), loaded before any screen (`infrastructure/i18n/shellMessages.ts`); sign-in errors never show an error's own message |
-| 2026-11-06 | Constitution step 4: the layer rules are ESLint errors (`test/unit/layer-rules.test.ts`) |
-| 2026-11-06 | Constitution step 3: use cases (`application/`) and repository contracts (`domain/`); presentation no longer reaches storage, PUB-1 or browser navigation |
+| 2026-11-06 | Claude Code tooling hardened (#60): the edit guard compares canonical paths and blocks `.env` / `docker.local.env` at any depth; `sync.sh` and `bump.sh` validate their arguments |
+| 2026-11-06 | Documentation modelled on the IAM services (#54, #55, #57, #58, #59): ARCHITECTURE flows, data model, caching, observability, CSP, concurrency, contracts; README integration guide and validation; CONTRIBUTING recipes per layer; CHANGELOG in typed, dated sections |
+| 2026-11-06 | Documents aligned with the code before the next release (#53); `isTransient` checked against the SDK `ApiClient`'s real retries |
+| 2026-11-06 | Claude Code tooling (#52, #56): hooks wired (`settings.json`), `doc-sync-reviewer`, `/sdk-upgrade`, `/stack-sync`, `context7` |
+| 2026-11-06 | Error boundary around the shell's own screens (#51): the SDK's `MFEErrorBoundary` (`web-shell`) shows `AppError` instead of a blank page |
+| 2026-11-06 | Constitution step 2 (#50): `src/` in the constitution's folders (`app/`, `presentation/`, `application/`, `domain/`, `infrastructure/`, `shared/`); session screens split into components and their mounting; App notices as widgets |
+| 2026-11-06 | Architecture lint (#49): `.dependency-cruiser.cjs` component map, `npm run arch-lint` in `Validate / Quality` |
+| 2026-11-06 | Constitution step 5 (#48): every user-facing word in the `shell` namespace of the SDK's `/i18n` (`shared/i18n`, `en.json`), loaded before any screen (`infrastructure/i18n/shellMessages.ts`); sign-in errors never show an error's own message |
+| 2026-11-06 | Constitution step 4 (#47): the layer rules are ESLint errors (`test/unit/layer-rules.test.ts`) |
+| 2026-11-06 | Constitution step 3 (#46): use cases (`application/`) and repository contracts (`domain/`); presentation no longer reaches storage, PUB-1 or browser navigation |
+| 2026-11-06 | Frontend Architecture Constitution assessment, target, roadmap and ADRs 0001–0008 (#45: `docs/architecture/constitution-assessment.md`, `docs/adr/`) |
 | 2026-11-06 | SDK `1.0.0-alpha.6`: `runtime.json` names the environment; config loaded before the identity; deploy check in smoke `live` |
 | 2026-11-05 | Observability standard: inventory (`docs/observability.md`), `metrics-check` in CI |
 | 2026-11-05 | Released `v0.1.0` and `v0.2.0`; status and open items updated |
@@ -201,7 +207,7 @@ SDK subpaths `src/` uses: `/core`, `/config`, `/tracing`, `/logging`, `/metrics`
 | `source.define` | `__ENVIRONMENT__` (`PLATFORM_ENVIRONMENT`, default `prod` / `local` in dev; only the fallback for a `runtime.json` without `environment`), `__BUILD_VERSION__` | The only compiled-in values |
 | `output.distPath` | css, font, image, svg, media, wasm, assets → `assets` | Every hashed file under `/assets/` (immutable). JS paths are the preset's |
 | `inlineScripts`, `inlineStyles` | `false` | CSP `script-src 'self'`, `style-src 'self'` |
-| `tools.cssLoader.url` | `false` | Root-relative `url()` points at `public/` |
+| `tools.cssLoader.url.filter` | root-relative `url()`s left as written | They point at `public/`; relative ones (the self-hosted fonts) are bundled into `/assets/` with a hash (`font-src 'self'`) |
 | `dev` | `hmr: false`, `liveReload: true`, port 5001, `strictPort` | No HMR client in a federated page |
 
 The preset provides: container `shell`, a `var` library, strict singletons for `react`, `react-dom` (and their JSX/client entries), `@opentelemetry/api` and every SDK subpath (`ProvideSdkRspackPlugin`), `GlobalThisOnlyPlugin` (no `Function('return this')`), `ChunkIntegrityPlugin` (sha384 on the entry in `index.html` and every lazy chunk), `crossOriginLoading: 'anonymous'`, hidden source maps.
@@ -483,12 +489,12 @@ Vitest 5, happy-dom at `http://localhost:5001/`, Testing Library. `vitest.config
 |---|---|---|---|
 | Unit | `test/unit/` | partly (`createTestPlatform`, `mockApi`, `roleMapAuthorizer`) | The layer rules firing (`layer-rules.test.ts`); the `shell` catalogue, its fallback for a default locale without one, and no hard-coded user-facing text in presentation (`shell-text.test.ts`, on the TypeScript syntax tree); PUB-1/P-35 mappings against the SDK's contract cases, the entry point, remember-email, the role map, the screen host, `BrandLogo`, the dev middleware (node env, real HTTP) |
 | Integration | `test/integration/` | no (`vi.mock` recording fakes) | The bootstrap's exact order and every branch, the login page and carousel (only current and next photo fetched), session screens (alerts, dialog focus), `App` routes and the missing-context notice, axe-core over every shell screen (`accessibility.test.tsx`, colour contrast excluded) |
-| End to end | `test/e2e/shell.test.tsx` | yes | Email → PUB-1 → PKCE → callback → `dashboard` under `/t/acme/dashboard`; tokens never stored; deep link; role map reaching the remote; deny-all; failing remote and Try again; global sign-out (form POST to Keycloak) with no silent sign-in after; device clock; unknown email |
+| End to end | `test/e2e/shell.test.tsx` | yes | Email → PUB-1 → PKCE → callback → `dashboard` under `/t/acme/dashboard`; tokens never stored; deep link; role map reaching the remote; deny-all; failing remote and Try again; global sign-out (form POST to Keycloak) with no silent sign-in after; device clock; unknown email; a 503 outage retried in the background; the environment from `runtime.json`; Forgot password → the realm's reset page |
 | Smoke | `test/smoke/deployment.test.ts` | yes (config and manifest validation) | Against `SMOKE_BASE_URL`: the SPA rule, Cache-Control, entry integrity, no maps, 404s, `/healthz`; `image` mode adds nginx's baseline headers, gzip, no version, dotfile 404s; `live` mode adds CloudFront's CSP (including `form-action` allowing the IdP), HSTS and nosniff |
 | Browser | `test/browser/shell.spec.ts` (Playwright) | the production build | Chromium, Firefox, WebKit over HTTPS with the production CSP and Trusted Types (`server.ts`), a fake Keycloak on a second origin, a remote stub on the shared SDK: fonts and hashed images with no third-party request, PKCE sign-in and the remote with integrity, `navigate()` without a reload, the sign-out form POST under `form-action`, the start-up failure at `/otel`, axe colour contrast (the logotype is exempt, WCAG 1.4.3). Any CSP report fails the test |
 | Dashboard contract | `test/browser/dashboard.spec.ts` (`REMOTE_DIST`) | the production build | A real mfe-dashboard build served as `dashboard` with its own `remote-manifest-entry.json` integrity: it loads with its CSS and no CSP violation, every image it shows loads, the role map reaches it, its `NavLink` stays in the page, its Logout POSTs to Keycloak through the shell. A wrong integrity fails it |
 
-E2E seams (`test/fixtures/`): `FakeKeycloak` (authorize via `approve()`, token endpoint with PKCE check and refresh rotation), `FakeNetwork` (route table on the page origin; `/otel` → 204), `FakeBroadcastChannel`. Only the remote's entry `<script>` is stubbed: it defines `window.__platform_mfe_dashboard` exposing a dashboard built on SDK hooks. A page load clears `globalThis[Symbol.for('@bcbp-solutions-fzc-llc/frontend-sdk')]`, resets modules, and imports the bootstrap again; storage is kept.
+E2E seams (`test/fixtures/`): `FakeKeycloak` (authorize via `approve()`, token endpoint with PKCE check and refresh rotation), `FakeNetwork` (route table on the page origin; `/otel` → 204), `FakeBroadcastChannel`. Among the shell and SDK code only the remote's entry `<script>` is stubbed (browser seams are recorded: `location.assign`/`replace`, form `submit`, `createRoot`): it defines `window.__platform_mfe_dashboard` exposing a dashboard built on SDK hooks. A page load clears `globalThis[Symbol.for('@bcbp-solutions-fzc-llc/frontend-sdk')]`, resets modules, and imports the bootstrap again; storage is kept.
 
 ---
 
@@ -500,7 +506,7 @@ E2E seams (`test/fixtures/`): `FakeKeycloak` (authorize via `approve()`, token e
 | `ci.yml` → `validate-quality.yml` | ESLint `--max-warnings 0`, `npm run arch-lint`, `npm run metrics-check`, `npm run typecheck`, workflow hygiene, LF, digest pins, `.dockerignore`, `npm audit --omit=dev --audit-level=high` |
 | `ci.yml` `build-image` | Hadolint, Buildx cache build `web-shell-ci-test` |
 | `ci.yml` `trivy` | Unfixed CRITICAL/HIGH/UNKNOWN fail; SBOM artifact |
-| `ci.yml` `smoke` | `smoke-tests.sh`: ≤ 200 MB, startup gate, then `npm run test-smoke` (`SMOKE_MODE=image`) against the container |
+| `ci.yml` `smoke` | `smoke-tests.sh`: ≤ 200 MB, startup gate, then `npm run test-smoke` (`SMOKE_MODE=image`) against the container, then the per-environment CSP and HSTS (none by default; added by mounted `security.d/csp.conf` and `hsts.conf`) |
 | `ci.yml` `dashboard-contract` | Builds mfe-dashboard (`vars.DASHBOARD_REF`, default `main`), then `REMOTE_DIST=… npm run test-contract`. Informational: does not gate `push` |
 | `ci.yml` `browser` | Playwright browsers, `npm run build`, `npm run test-browser` (Chromium, Firefox, WebKit). Gates `push` |
 | `ci.yml` `push` | `main`/`master`: GHCR branch and `sha-<short>` tags, Cosign keyless sign |
@@ -527,6 +533,8 @@ Details: [VERSIONING.md](../../VERSIONING.md).
 
 ## 15. Open items
 
+Numbers are stable; closed items are removed (2 and 4).
+
 | # | Item | Owner |
 |---|---|---|
 | 1 | Official Privacy, Terms, Trust & Security and Help URLs: set them in `src/shared/constants/links.ts` (hidden until then; none exists on bcbpsolutions.com) | product / legal |
@@ -540,3 +548,7 @@ Details: [VERSIONING.md](../../VERSIONING.md).
 | 11 | The `WebShellStartupFailures` alert ([runbook](../runbook-startup-failure.md)) is an example; it must be deployed to the Loki ruler | operators |
 | 12 | One build for every environment (SDK alpha.6): each deployed `runtime.json` must name its `environment` (checked by `SMOKE_MODE=live ENVIRONMENT=<target> npm run test-smoke`); then the shell drops `__ENVIRONMENT__` / `PLATFORM_ENVIRONMENT`, and a file without the key stops at the unavailable page | operators, then this repo |
 | 13 | Dependabot's npm job needs the Dependabot secret `PACKAGES_READ_TOKEN` (read:packages; an organisation secret shared with mfe-dashboard) to read GitHub Packages; until it exists every npm update run fails with 401 | org admin |
+| 14 | Release `v0.3.0` is not cut: `main` changes what users see since `v0.2.0` (the error page, catalogue words for every sign-in failure); production stays on `0.2.0` until a tag is pushed (VERSIONING.md, `docs/runbook-release.md`) | maintainers |
+| 15 | The constitution exceptions in ADRs 0002, 0005–0008 (no TanStack Query or Zustand, the SDK's i18n, shell-local UI, the nginx image, tests in `test/`) await Architecture Review | architecture review |
+| 16 | Copies of unpublished platform code wait for SDK exports (§1.2): `isTransient` (a test fails if it diverges from the `ApiClient`), `retrySessionContext`, `createStore`, `ShellRoot`, the realm URL in `passwordReset.ts` | platform-reactcommon |
+| 17 | Adopt `platform-design-system` when the platform publishes it (ADR 0006; constitution roadmap step 7) | platform |

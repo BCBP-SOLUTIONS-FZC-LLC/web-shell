@@ -10,6 +10,15 @@ Pull requests that change the shell, its dependencies, or the image add an entry
 
 ## [Unreleased]
 
+### Changed (2026-11-06 — LLD, README, ARCHITECTURE and `.claude/` aligned with `main` after #45–#60)
+
+- **The documents say where `main` is.** Status lines (README, `.claude/CLAUDE.md`, the LLD header, ARCHITECTURE) now say `main` is ahead of `v0.2.0` with the unreleased constitution refactor, error page, tooling and documentation, and that `v0.3.0` is not cut. The LLD revision history gains #45, #51, #52/#56, #53, #54–#59 and #60, with PR numbers on the constitution rows. LLD §15 gains #14 (`v0.3.0` not cut), #15 (ADR exceptions awaiting Architecture Review), #16 (copies of unpublished platform code) and #17 (adopt `platform-design-system`). A `doc-sync-reviewer` pass over every in-scope document found 19 further statements that no longer matched the code; all are corrected. Among them:
+  - **LLD §3.2:** it gave `tools.cssLoader.url` as `false`; it is a filter that bundles the self-hosted fonts.
+  - **Diagrams:** the entry's dynamic import of the bootstrap and infrastructure's type-only import of the domain were drawn as solid imports.
+  - **Tooling after #60:** the guard, `sync.sh` and `bump.sh` are described as they now behave.
+  - **Coverage lists:** the smoke job's CSP and HSTS stage and three e2e cases were missing.
+  - **Smaller fixes:** `/csp-report/` among nginx's 404 paths, and the `AppError` widget.
+
 ### Fixed (2026-11-06 — Claude Code tooling input handling)
 
 - **The edit guard compares canonical paths (`.claude/hooks/guard.sh`).** A security review of the tooling from #52 and #56 found no vulnerability (every input comes from the developer or the model, who could already run the same `git`/`npm` commands), but the guard did not do what it claims: it matched the raw path, so `src/../node_modules/x.js`, `./.env`, a differently-cased project root (the macOS volume ignores case) and `../MFE-Dashboard/…` were allowed. It now resolves `..`, `.` and symlinks, compares lower-case, and blocks `.env` and `docker.local.env` at any depth; `*.example` files stay editable. Tested: 9 bypasses blocked, 5 normal paths allowed.
