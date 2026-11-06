@@ -1,11 +1,12 @@
 // The shell's session screens (SDK design doc §C1 /auth, §C2 step 7), as components: what each one
 // shows and which callback a click calls. None of them signs in on its own: every login starts from
 // the user's click. app/layouts/sessionScreens.tsx mounts them over the page.
-import { useEffect, useRef, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import type { SessionState, Workspace } from '@bcbp-solutions-fzc-llc/frontend-sdk/auth'
 import type { SignInUseCases } from '../../../application/signIn'
 import { WorkspaceNotFoundError } from '../../../domain/errors'
 import LoginPage from '../../pages/login/LoginPage'
+import WelcomeSplash from '../welcome/WelcomeSplash'
 import { shellText, useShellText, type ShellKey } from '../../../shared/i18n'
 
 /** Generic on purpose: never says whether the email or the workspace was the problem. */
@@ -76,10 +77,37 @@ async function withPageMessage<T>(work: Promise<T>, otherwise: ShellKey): Promis
 /**
  * The email-first sign-in screen. Calls the sign-in use cases (application layer) it is given: it
  * reaches no API, storage or browser navigation itself. `onChosen` gets the workspace and the email.
+ * With `welcome` (the first-start sign-in only), a browser that has not seen the welcome intro gets
+ * it first; Continue, Skip intro or Escape marks it seen (useCases.welcomeIntro), shows the form and
+ * moves focus to the email field. A screen with a notice goes straight to the form.
  */
-export function SignInScreen({ useCases, notice, onChosen }: { useCases: SignInUseCases; notice?: ShellKey | undefined; onChosen: (choice: SignInChoice) => void }) {
+export function SignInScreen({
+  useCases,
+  notice,
+  welcome = false,
+  onChosen,
+}: {
+  useCases: SignInUseCases
+  notice?: ShellKey | undefined
+  welcome?: boolean
+  onChosen: (choice: SignInChoice) => void
+}) {
+  const [intro, setIntro] = useState(() => welcome && !notice && !useCases.welcomeIntro.seen())
+  const [afterIntro, setAfterIntro] = useState(false)
+  if (intro) {
+    return (
+      <WelcomeSplash
+        onComplete={() => {
+          useCases.welcomeIntro.markSeen()
+          setIntro(false)
+          setAfterIntro(true)
+        }}
+      />
+    )
+  }
   return (
     <LoginPage
+      focusEmail={afterIntro}
       notice={notice ?? null}
       rememberedEmail={useCases.rememberedEmail}
       onContinue={async (email) => {

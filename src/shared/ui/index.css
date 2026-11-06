@@ -165,6 +165,92 @@
   animation-delay: 1.4s;
 }
 
+/*
+ * The first-visit welcome (WelcomeSplash.tsx): a still blueprint grid, the brand name tracking wider,
+ * the glass card dropping in, the call to action's glow. It reuses cine-rise for the headline.
+ */
+.blueprint-grid {
+  background-image:
+    linear-gradient(rgb(255 184 0 / 0.07) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(255 184 0 / 0.07) 1px, transparent 1px),
+    linear-gradient(rgb(148 163 184 / 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(148 163 184 / 0.045) 1px, transparent 1px);
+  background-size:
+    120px 120px,
+    120px 120px,
+    24px 24px,
+    24px 24px;
+  mask-image: radial-gradient(ellipse at 50% 40%, #000 25%, transparent 75%);
+}
+
+@keyframes splash-track {
+  from {
+    opacity: 0;
+    letter-spacing: 0.02em;
+    filter: blur(4px);
+  }
+  to {
+    opacity: 1;
+    letter-spacing: 0.32em;
+    filter: blur(0);
+  }
+}
+
+@keyframes splash-drop {
+  from {
+    opacity: 0;
+    transform: translate3d(0, -48px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes cta-glow {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 0 rgb(255 184 0 / 0.45),
+      0 0 22px 2px rgb(255 184 0 / 0.22);
+  }
+  50% {
+    box-shadow:
+      0 0 0 10px rgb(255 184 0 / 0),
+      0 0 38px 8px rgb(255 184 0 / 0.4);
+  }
+}
+
+.splash-track {
+  letter-spacing: 0.32em;
+  animation: splash-track 1.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.splash-drop {
+  animation: splash-drop 0.8s cubic-bezier(0.22, 1, 0.36, 1) 1.2s both;
+}
+
+/* The rise brings the button in; the glow then pulses until paused. */
+.cta-glow {
+  animation:
+    cine-rise 0.8s cubic-bezier(0.22, 1, 0.36, 1) 1.8s both,
+    cta-glow 2.4s ease-in-out 2.6s infinite;
+}
+
+/* Pause holds the endless motion only (the glow; the canvas stops in script). The entrance still
+   finishes, so nothing stays hidden or invisible-but-focusable. */
+.splash-paused .cta-glow {
+  animation-play-state: running, paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .splash-track,
+  .splash-drop,
+  .cta-glow {
+    animation: none;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .hero-image-in,
   .hero-copy-in,

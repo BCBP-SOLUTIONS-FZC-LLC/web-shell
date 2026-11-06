@@ -142,10 +142,10 @@ web-shell/
 │   │   ├── providers/           # ShellRoot: PlatformProvider with the live session context
 │   │   ├── routes/              # App.tsx: signed-in routes, dashboard RemoteBoundary
 │   │   └── layouts/             # Full-screen host and the session-screen mounting
-│   ├── presentation/            # pages/login, features/session-screens, components, widgets
+│   ├── presentation/            # pages/login, features/session-screens and welcome, components, widgets
 │   ├── application/             # Use cases: resolve workspace, password reset, session context retry
 │   ├── domain/                  # Contracts, errors, the role map
-│   ├── infrastructure/          # api (PUB-1, P-35), auth (password reset), storage (remember email), federation (navigator), i18n
+│   ├── infrastructure/          # api (PUB-1, P-35), auth (password reset), storage (remember email, welcome-intro flag), federation (navigator), i18n
 │   └── shared/                  # i18n (the shell's text), constants (links), ui (images, theme, CSS), types
 ├── .dependency-cruiser.cjs      # Architecture lint: components and their allowed dependencies
 ├── rsbuild.config.ts           # Platform plugin, React, Tailwind, dev server
@@ -158,7 +158,7 @@ web-shell/
 ├── scripts/                     # Local Keycloak compose, health check, user seed
 ├── test/
 │   ├── unit/                    # IAM mappings, entry point, small helpers, dev middleware
-│   ├── integration/             # The login page, session screens, App, bootstrap (SDK faked)
+│   ├── integration/             # The login page, welcome intro, session screens, App, bootstrap (SDK faked)
 │   ├── e2e/                     # The real shell and SDK, end to end
 │   ├── fixtures/                # FakeKeycloak, FakeNetwork, FakeBroadcastChannel
 │   ├── smoke/                   # GET-only checks against the served image or a deployment
@@ -192,7 +192,8 @@ The full component map is in CONTRIBUTING (§ Architecture lint); `test/unit/lay
 | Key or channel | Store | Purpose |
 |---|---|---|
 | `@bcbp-solutions-fzc-llc/frontend-sdk:*` | `localStorage` | SDK metadata: workspace cache (up to 20), session id, last activity, last user. No tokens |
-| `bcbp.rememberEmail`, `bcbp.loginEmail` | `localStorage` | "Remember Email" on the login form only (`infrastructure/storage/rememberedEmail.ts`, the one raw-storage file) |
+| `bcbp.rememberEmail`, `bcbp.loginEmail` | `localStorage` | "Remember Email" on the login form only (`infrastructure/storage/rememberedEmail.ts`, one of the two raw-storage files) |
+| `bcbp.welcomeSeen` | `localStorage` | `1` once the first-visit welcome intro was continued, skipped or closed with Escape (`infrastructure/storage/welcomeIntro.ts`, the other raw-storage file). No personal data |
 | `BroadcastChannel` `platform-auth` | Browser | SDK: sign-out and workspace switches reach every tab |
 | Session context, tokens | Memory | Per page; tokens are never written to storage |
 
@@ -412,11 +413,11 @@ REMOTE_DIST=../mfe-dashboard/dist npm run test-contract
 
 | Layer | Path | What it exercises |
 |---|---|---|
-| Unit | `test/unit/` | PUB-1 and P-35 mappings and ports, the entry point, remember-email, the screen host, `BrandLogo`, the session-context retry (and its agreement with the SDK ApiClient), the navigator adapter, the dev server's platform middleware, the layer rules and arch-lint firing, the text catalogue and the hard-coded-text guard, the no-SDK-duplicates guard, metrics-check, the use cases, the links, the password reset URL |
-| Integration | `test/integration/` | The login page and the carousel, the session screens, `App` routes, and the bootstrap's order and branches; axe-core over every shell screen (`accessibility.test.tsx`) |
+| Unit | `test/unit/` | PUB-1 and P-35 mappings and ports, the entry point, remember-email, the welcome-intro flag (blocked storage), the screen host, `BrandLogo`, the session-context retry (and its agreement with the SDK ApiClient), the navigator adapter, the dev server's platform middleware, the layer rules and arch-lint firing, the text catalogue and the hard-coded-text guard, the no-SDK-duplicates guard, metrics-check, the use cases, the links, the password reset URL |
+| Integration | `test/integration/` | The login page and the carousel, the welcome intro (first visit, Skip, Escape, count-up, Pause, cleanup on unmount), the session screens, `App` routes, and the bootstrap's order and branches; axe-core over every shell screen (`accessibility.test.tsx`) |
 | End to end | `test/e2e/` | The real bootstrap, screens, `App` and SDK against a fake Keycloak (PKCE) and network: email → PUB-1 → sign-in → the `dashboard` remote under `/t/<slug>/`, deep links, role-map permissions in the remote, deny-all, a failing remote, global sign-out, the device clock |
 | Smoke | `test/smoke/` | `npm run test-smoke` against the served image (CI) or a deployment: the SPA rule, Cache-Control, script integrity, 404s, and the runtime files validated by the SDK. See [test/smoke/README.md](./test/smoke/README.md) |
-| Browser | `test/browser/` | `npm run test-browser` after a build: the production bundle in Chromium, Firefox and WebKit under the production CSP and Trusted Types, with a fake Keycloak on a second origin: fonts, PKCE sign-in, the remote with integrity, `navigate()`, the sign-out form POST, the start-up failure report, the sign-in hero's one-time opening (every `cine-*` animation over by 2.5 s, the form usable during it), `prefers-reduced-motion` (no animation, no letterbox bars), colour contrast on the hero's resting frame and, from pixels, over each of its 9 photographs |
+| Browser | `test/browser/` | `npm run test-browser` after a build: the production bundle in Chromium, Firefox and WebKit under the production CSP and Trusted Types, with a fake Keycloak on a second origin: fonts, the first-visit welcome intro (canvas dust, facts counted, Pause early and late, Continue to a focused email field, reduced motion, contrast including the call to action), PKCE sign-in, the remote with integrity, `navigate()`, the sign-out form POST, the start-up failure report, the sign-in hero's one-time opening (every `cine-*` animation over by 2.5 s, the form usable during it), `prefers-reduced-motion` (no animation, no letterbox bars), colour contrast on the hero's resting frame and, from pixels, over each of its 9 photographs |
 | Dashboard contract | `test/browser/dashboard.spec.ts`, CI `dashboard-contract` | The real mfe-dashboard build (`REMOTE_DIST`) in this shell, three engines, production CSP: integrity, share scope and CSS, the role map reaching it, its navigation, its Logout through the shell's form POST. Informational in CI |
 
 Vitest uses happy-dom and Testing Library. `vitest.config.ts` defines `__ENVIRONMENT__` and `__BUILD_VERSION__` as `test`. The bootstrap test replaces every SDK subpath with a recording fake. The e2e suite runs the real SDK (Vitest inlines it, so each simulated page load gets a fresh one) against `test/fixtures/` fakes, modelled on platform-reactcommon's. No suite calls Keycloak, the IAM APIs or port 5002.

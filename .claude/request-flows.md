@@ -18,7 +18,7 @@ After render: `registerNavigator` (router under the basename; other paths load i
 |---|---|
 | `signed-out` | "You are signed out", waits for a click |
 | `device-clock` | "Check your device's clock", waits for a click |
-| `none`, `login-required` | Workspace: failed attempt's → `chooseWorkspace` (URL slug, cache) → email screen (PUB-1, no token). Then `idp.login({ workspace, loginHint? })` |
+| `none`, `login-required` | Workspace: failed attempt's → `chooseWorkspace` (URL slug, cache) → email screen (PUB-1, no token); on a browser's first visit this first-start screen shows the welcome intro before the form, until Continue, Skip intro or Escape (`bcbp.welcomeSeen`), then focuses the email field. Sign in from a dialog and Switch workspace never offer it; a successful sign-in marks it seen. Then `idp.login({ workspace, loginHint? })` |
 
 The SDK builds the authorize URL (`{idpOrigin}/realms/{realm}/protocol/openid-connect/auth`, S256, `state`, `nonce`, `login_hint`), adds `prompt=login` after a sign-out, and defaults `returnUrl` to the current page. The shell passes neither.
 

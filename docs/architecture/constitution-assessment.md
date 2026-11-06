@@ -25,7 +25,7 @@ web-shell is the **shell**, not a domain microfrontend. Per the constitution's M
 | Observability | ✅ ADR 0003 | OpenTelemetry tracing, logging, metrics, correlation ids, error boundaries (`RemoteBoundary` for the remote; `MFEErrorBoundary` around the shell's own routes since #51) from the SDK; the SDK's `PlatformProvider` is the `TelemetryProvider` |
 | Accessibility (WCAG 2.1 AA) | ✅ | axe-core (happy-dom) on every screen; axe colour contrast in Chromium, Firefox, WebKit |
 | Security | ✅ | Production CSP with Trusted Types enforced by the browser suite; no secrets; tokens in memory only |
-| Internationalisation | ✅ (was ❌) | Every user-facing word is a key of the SDK `/i18n` `shell` namespace since #48 (63 keys today), guarded by a syntax-tree test. Was: about 30 hard-coded user-facing strings; the SDK's `/i18n` (the platform localisation framework) is initialised but not used for the shell's text (V4) |
+| Internationalisation | ✅ (was ❌) | Every user-facing word is a key of the SDK `/i18n` `shell` namespace since #48 (74 keys today), guarded by a syntax-tree test. Was: about 30 hard-coded user-facing strings; the SDK's `/i18n` (the platform localisation framework) is initialised but not used for the shell's text (V4) |
 | Testing | ✅ | Vitest unit/integration (100% coverage), React Testing Library, Playwright in three engines, contract tests (SDK contract cases from IAM's swagger; the real dashboard build) |
 | Deployment: S3 + CloudFront, build once | ⚠️ ADR 0007 | Interim nginx image until CloudFront (next month); the release tarball is the S3 artefact; one build per environment is now possible (V5) |
 

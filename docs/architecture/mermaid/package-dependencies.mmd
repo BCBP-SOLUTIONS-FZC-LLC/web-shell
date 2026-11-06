@@ -6,14 +6,15 @@ graph LR
     host(["app/layouts/sessionScreens.tsx"])
     screen(["app/layouts/screen.tsx"])
     screens(["presentation/features/session-screens"])
+    welcome(["presentation/features/welcome\nWelcomeSplash"])
     login(["presentation/pages/login\nLoginPage, useEmailSignIn"])
     widgets(["presentation/widgets"])
     comps(["presentation/components\nBrandLogo, PageLinks"])
     usecases(["application/use-cases\nresolveWorkspace, requestPasswordReset,\nloadSessionContext"])
-    domain(["domain/\nRememberedEmailRepository, WorkspaceNotFoundError,\nrules/permissions"])
+    domain(["domain/\nRememberedEmailRepository, WelcomeIntroRepository,\nWorkspaceNotFoundError, rules/permissions"])
     iam(["infrastructure/api/iam.ts"])
     reset(["infrastructure/auth/passwordReset.ts"])
-    remember(["infrastructure/storage/rememberedEmail.ts\n(localStorage)"])
+    remember(["infrastructure/storage/rememberedEmail.ts,\nwelcomeIntro.ts (localStorage)"])
     nav(["infrastructure/federation/navigator.ts"])
     msgs(["infrastructure/i18n/shellMessages.ts"])
     text(["shared/i18n\nshell namespace, en.json"])
@@ -39,6 +40,9 @@ graph LR
     host --> screens
     host --> screen
     screens --> login
+    screens --> welcome
+    welcome --> comps
+    welcome --> text
     screens -. types, signIn.ts .-> usecases
     screens --> domain
     screens --> text

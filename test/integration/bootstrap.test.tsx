@@ -339,8 +339,15 @@ describe('bootstrap, signed in', () => {
     expect(screen.getByRole('alertdialog', { name: 'Workspace not found' })).toBeInTheDocument()
   })
 
-  it('shows the session-ended dialog and signs in again through the email screen', async () => {
+  it('marks the welcome intro seen once signed in, so a deep-link user never meets it later', async () => {
+    localStorage.removeItem('bcbp.welcomeSeen')
     await act(() => bootstrap())
+    expect(localStorage.getItem('bcbp.welcomeSeen')).toBe('1')
+  })
+
+  it('shows the session-ended dialog and signs in again through the email screen (never the intro)', async () => {
+    await act(() => bootstrap())
+    localStorage.removeItem('bcbp.welcomeSeen')
     act(() => subscriber!({ status: 'expired', serverEnded: false, idle: true }))
     expect(screen.getByText(/period of inactivity/)).toBeInTheDocument()
     // No login without a click after an expiry.
@@ -373,8 +380,15 @@ describe('bootstrap, signed in', () => {
 
   it('never renders the app for a login in the wrong workspace', async () => {
     isWrongWorkspace.mockReturnValue(true)
+    localStorage.removeItem('bcbp.welcomeSeen')
     await act(() => bootstrap())
     expect(screen.getByRole('alertdialog', { name: /different workspace/ })).toBeInTheDocument()
+    // A completed Keycloak sign-in: the per-browser intro flag (not a workspace) is set.
+    expect(localStorage.getItem('bcbp.welcomeSeen')).toBe('1')
+    // Switch workspace never offers the intro.
+    await userEvent.setup().click(screen.getByRole('button', { name: /switch/i }))
+    expect(await screen.findByRole('textbox', { name: /work email address/i })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Skip intro' })).toBeNull()
     expect(screen.queryByRole('main')).not.toBeInTheDocument()
     expect(calls).not.toContain('loadManifest')
   })
@@ -447,6 +461,31 @@ describe('bootstrap, signed out', () => {
     await waitFor(() =>
       expect(idp.login).toHaveBeenCalledWith({ workspace: acme, loginHint: 'ada@acme.com' }),
     )
+  })
+
+  it('offers the first-visit welcome intro before the email screen on a first start only', async () => {
+    localStorage.removeItem('bcbp.welcomeSeen')
+    initResult = { status: 'anonymous', reason: 'none' }
+    resolve.mockResolvedValue(acme)
+    void bootstrap()
+    await userEvent.setup().click(await screen.findByRole('button', { name: 'Skip intro' }))
+    expect(idp.login).not.toHaveBeenCalled()
+    await typeEmail('ada@acme.com')
+    await waitFor(() => expect(idp.login).toHaveBeenCalledWith({ workspace: acme, loginHint: 'ada@acme.com' }))
+  })
+
+  it.each([
+    ['signed-out', 'Sign in'],
+    ['device-clock', 'Try again'],
+  ] as const)('never offers the intro after %s: the button leads to the email screen', async (reason, button) => {
+    localStorage.removeItem('bcbp.welcomeSeen')
+    initResult = { status: 'anonymous', reason }
+    resolve.mockResolvedValue(acme)
+    await act(() => bootstrap())
+    await userEvent.setup().click(screen.getByRole('button', { name: button }))
+    await typeEmail('ada@acme.com')
+    await waitFor(() => expect(idp.login).toHaveBeenCalledOnce())
+    expect(screen.queryByRole('button', { name: 'Skip intro' })).toBeNull()
   })
 
   it('goes straight to Keycloak for a known workspace, with the remembered email', async () => {

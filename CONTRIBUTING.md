@@ -56,14 +56,16 @@ src/
   presentation/
     pages/login/         ← LoginPage, useEmailSignIn (the remembered-email repository is passed in)
     features/session-screens/ ← Email sign-in, signed out, session ended, device clock, wrong workspace (components)
+    features/welcome/      ← The first-visit welcome intro (WelcomeSplash)
     components/          ← BrandLogo, PageLinks
     widgets/             ← Update notice, missing-permissions notice (state passed in)
   application/           ← Use cases (no React, no browser APIs): resolveWorkspace, requestPasswordReset, loadSessionContext; signIn.ts
-  domain/                ← Contracts, errors, rules: RememberedEmailRepository, WorkspaceNotFoundError, permissions (role map)
+  domain/                ← Contracts, errors, rules: RememberedEmailRepository, WelcomeIntroRepository, WorkspaceNotFoundError, permissions (role map)
   infrastructure/
     api/iam.ts           ← PUB-1 resolver and P-35 session context (the SDK's /auth ports)
     auth/passwordReset.ts ← Keycloak reset-credentials URL for a workspace
-    storage/rememberedEmail.ts ← "Remember Email" in localStorage (the one raw-storage file)
+    storage/rememberedEmail.ts ← "Remember Email" in localStorage (one of the two raw-storage files)
+    storage/welcomeIntro.ts ← First-visit intro flag in localStorage (the other raw-storage file)
     federation/navigator.ts ← The router as the SDK's navigate() target
     i18n/shellMessages.ts ← Registers the shell's text before any screen
   shared/
@@ -132,7 +134,7 @@ docs/lld/web-shell-lld.md ← Low-level design (the contract)
 
 1. Put it in `src/infrastructure/<api|auth|storage|federation|i18n>/`. It may import `domain/`, `shared/i18n` and the SDK, never presentation, application or `app/`.
 2. API calls go through the SDK's `ApiClient` (`createApiClient()`, created lazily: the runtime config must be loaded first) with a route template, never `fetch`. Map the response at the edge (`toWorkspace`, `toSessionContext`): snake_case to camelCase, no nulls.
-3. Raw `localStorage` is allowed only in `src/infrastructure/storage/rememberedEmail.ts` (the one `no-raw-storage` exemption). Anything else per workspace uses the SDK's `storage(appId)`.
+3. Raw `localStorage` is allowed only in `src/infrastructure/storage/rememberedEmail.ts` and `welcomeIntro.ts` (the two `no-raw-storage` exemptions). Anything else per workspace uses the SDK's `storage(appId)`.
 4. Wire it only in `src/app/bootstrap/bootstrap.tsx` (the only module that imports `infrastructure/`). Test it in `test/unit/` with the real `ApiClient` (`createTestPlatform`, `mockApi`, `mockProblem`), against the SDK's contract cases when the API has them.
 
 ### Adding a session screen or dialog
@@ -198,11 +200,11 @@ Follow [docs/observability.md § Adding a metric](docs/observability.md#adding-a
 
 | Layer | Location | Docker | Notes |
 |---|---|---|---|
-| Unit | `test/unit/` | No | IAM mappings and ports, entry point, remember-email, screen host, `BrandLogo`, session-context retry, navigator, dev platform middleware, layer rules, arch-lint, text catalogue, no-SDK-duplicates, metrics-check, use cases |
-| Integration | `test/integration/` | No | The login page and carousel, session screens, `App`, bootstrap order and branches. SDK subpaths are `vi.mock` fakes where needed; axe-core over every shell screen (`accessibility.test.tsx`) |
+| Unit | `test/unit/` | No | IAM mappings and ports, entry point, remember-email, the welcome-intro flag, screen host, `BrandLogo`, session-context retry, navigator, dev platform middleware, layer rules, arch-lint, text catalogue, no-SDK-duplicates, metrics-check, use cases |
+| Integration | `test/integration/` | No | The login page and carousel, the welcome intro, session screens, `App`, bootstrap order and branches. SDK subpaths are `vi.mock` fakes where needed; axe-core over every shell screen (`accessibility.test.tsx`) |
 | End to end | `test/e2e/` | No | The real shell and SDK against `test/fixtures/` fakes (Keycloak, network, BroadcastChannel); only the remote's entry script is stubbed |
 | Smoke | `test/smoke/`, CI `smoke` job | Image or deployment | `.github/scripts/smoke-tests.sh`: image ≤ 200 MB and the startup gate, then `npm run test-smoke` against the container (SPA rule, Cache-Control, integrity, 404s, SDK-validated runtime files). [test/smoke/README.md](./test/smoke/README.md) |
-| Browser | `test/browser/`, CI `browser` job | `dist/` | Playwright over HTTPS with the production CSP: fonts, sign-in, the remote with integrity, `navigate()`, sign-out POST, start-up report, the hero's opening and reduced motion, contrast |
+| Browser | `test/browser/`, CI `browser` job | `dist/` | Playwright over HTTPS with the production CSP: fonts, the welcome intro, sign-in, the remote with integrity, `navigate()`, sign-out POST, start-up report, the hero's opening and reduced motion, contrast |
 | Dashboard contract | `test/browser/dashboard.spec.ts`, CI `dashboard-contract` | A built mfe-dashboard `dist/` (`REMOTE_DIST`) | The real remote in this shell: integrity, CSS, role map, navigation, Logout |
 
 Run one file:
@@ -287,7 +289,7 @@ A new folder or module: add it to a component (or a new one, with its deps) in t
 
 - Do not re-implement what the platform SDK exports. `test/unit/no-sdk-duplicates.test.ts` fails on a module-level name that is an SDK export and on hand-built problem responses in tests (use `mockProblem`). The shell's remaining copies of unpublished platform code are listed in LLD §1.2.
 - Leave `.env` and `docker.local.env` untracked. Both are gitignored. Never commit `NODE_AUTH_TOKEN`; the image takes it as the BuildKit secret `npm_token` only.
-- Never write a token to storage. Use the SDK's `storage(appId)` for anything per workspace. `bcbp.loginEmail` (the typed email) is the one raw `localStorage` value, because it is needed before a workspace is known.
+- Never write a token to storage. Use the SDK's `storage(appId)` for anything per workspace. `bcbp.loginEmail` (the typed email) and `bcbp.welcomeSeen` (`1`) are the raw `localStorage` values, because they are needed before a workspace is known.
 - Take remote entries from the manifest only. Do not take a remote URL from the query string or any other untrusted input. The remote executes in this origin.
 - Call platform APIs through the SDK's `ApiClient` with route templates (`/v1/me/session-context`), never a hand-built URL, and never send identity headers.
 - Keep Keycloak Admin API calls in `scripts/` for the local realm seed.
@@ -342,7 +344,7 @@ Base new branches on the latest `main`.
 - [ ] Documentation checklist in CONTRIBUTING reviewed; diagrams equal their sources (`node .claude/hooks/check-diagrams.mjs`)
 - [ ] Remotes still load against the shell's SDK version (all three `@bcbp-solutions-fzc-llc/*` packages on one exact version)
 - [ ] New runtime config keys (in `public/config/runtime.json` and `config/runtime.local.json`) or build constants documented
-- [ ] No token written to storage (`bcbp.rememberEmail` / `bcbp.loginEmail` are the only raw `localStorage` keys)
+- [ ] No token written to storage (`bcbp.rememberEmail`, `bcbp.loginEmail` and `bcbp.welcomeSeen` are the only raw `localStorage` keys)
 - [ ] Remote URLs are not taken from untrusted input
 
 `CODEOWNERS` requests review from `@BCBP-SOLUTIONS-FZC-LLC/web-shell`. Workflow files, `Dockerfile`, and `nginx/` are called out there as well.

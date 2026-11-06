@@ -234,6 +234,23 @@ describe('the shell, end to end', () => {
     expect(storedValues()).not.toMatch(/at-[0-9a-f]|eyJ|refresh/)
   })
 
+  it('a first visit shows the welcome intro, never redirects from it, and after Continue the email screen; a later visit goes straight to it', async () => {
+    localStorage.removeItem('bcbp.welcomeSeen')
+    await load('/')
+    await screen.findByRole('heading', { name: 'Construction tenders, from first bid to handover.' }, { timeout: 5_000 })
+    expect(screen.queryByRole('textbox', { name: /work email address/i })).toBeNull()
+    expect(assigned).toEqual([])
+
+    await userEvent.click(screen.getByRole('button', { name: 'Continue to sign in' }))
+    expect(await emailBox()).toBeInTheDocument()
+    expect(localStorage.getItem('bcbp.welcomeSeen')).toBe('1')
+    expect(assigned).toEqual([])
+
+    await load('/')
+    expect(await emailBox()).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Skip intro' })).toBeNull()
+  })
+
   it('a deep link to /t/<slug>/ skips the email screen and returns to the page after sign-in', async () => {
     await load('/t/acme/dashboard')
     await until(() => assigned.length > 0, 'the redirect to Keycloak')

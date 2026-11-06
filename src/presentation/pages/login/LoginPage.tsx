@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useEmailSignIn, type LoginPageProps } from './useEmailSignIn'
 import { BrandLogo } from '../../components/BrandLogo'
 import logo from '../../../shared/ui/assets/images/logo.png'
@@ -36,7 +36,7 @@ const SLIDES = [
 /** The hero's one-time opening (index.css, cine-*): on until the user picks another slide. */
 const rise = (opening: boolean, delay: 'cine-d1' | 'cine-d2' | 'cine-d3') => (opening ? ` cine-rise ${delay}` : '')
 
-export default function LoginPage({ onContinue, onForgotPassword, rememberedEmail, notice = null }: LoginPageProps) {
+export default function LoginPage({ onContinue, onForgotPassword, rememberedEmail, notice = null, focusEmail = false }: LoginPageProps) {
   const { email, setEmail, remember, setRemember, submitting, error, handleSubmit, handleForgotPassword } =
     useEmailSignIn(onContinue, rememberedEmail, onForgotPassword)
   const text = useShellText()
@@ -47,6 +47,10 @@ export default function LoginPage({ onContinue, onForgotPassword, rememberedEmai
   // The slides change only on a click: after the opening the hero stays still.
   const [opening, setOpening] = useState(true)
   const [slideDirection, setSlideDirection] = useState<1 | -1>(1)
+  const emailInput = useRef<HTMLInputElement>(null)
+  useEffect(() => {
+    if (focusEmail) emailInput.current?.focus()
+  }, [focusEmail])
 
   function markSlideLoaded(index: number) {
     setLoadedSlides((current) => {
@@ -247,6 +251,7 @@ export default function LoginPage({ onContinue, onForgotPassword, rememberedEmai
                 {text('login.email')}
               </span>
               <input
+                ref={emailInput}
                 type="email"
                 name="email"
                 autoComplete="email"

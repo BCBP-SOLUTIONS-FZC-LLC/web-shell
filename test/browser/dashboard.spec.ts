@@ -21,6 +21,8 @@ test.beforeEach(async ({ page }) => {
     w.__violations = []
     document.addEventListener('securitypolicyviolation', (e) => w.__violations.push(`${e.violatedDirective} ${e.blockedURI}`))
   })
+  // A returning visitor: the first-visit welcome intro is seen (shell.spec.ts covers the intro).
+  await page.addInitScript(() => localStorage.setItem('bcbp.welcomeSeen', '1'))
 })
 
 test.afterEach(async ({ page }) => {

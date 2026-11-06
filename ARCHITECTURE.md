@@ -36,7 +36,7 @@ graph TD
 
     subgraph presentation["presentation/"]
         pages["pages/login\nLoginPage, useEmailSignIn"]
-        features["features/session-screens\nsign-in, signed out, session ended, …"]
+        features["features/session-screens, welcome\nsign-in (first visit: welcome intro), signed out, session ended, …"]
         widgets["widgets/\nupdate notice, missing permissions, error page"]
         components["components/\nBrandLogo, PageLinks"]
     end
@@ -50,7 +50,7 @@ graph TD
     end
 
     subgraph infrastructure["infrastructure/ — implements domain contracts"]
-        infra["api/iam (PUB-1, P-35), auth/passwordReset,\nstorage/rememberedEmail, federation/navigator,\ni18n/shellMessages"]
+        infra["api/iam (PUB-1, P-35), auth/passwordReset,\nstorage/rememberedEmail, welcomeIntro, federation/navigator,\ni18n/shellMessages"]
     end
 
     subgraph shared["shared/"]
@@ -107,14 +107,15 @@ graph LR
     host(["app/layouts/sessionScreens.tsx"])
     screen(["app/layouts/screen.tsx"])
     screens(["presentation/features/session-screens"])
+    welcome(["presentation/features/welcome\nWelcomeSplash"])
     login(["presentation/pages/login\nLoginPage, useEmailSignIn"])
     widgets(["presentation/widgets"])
     comps(["presentation/components\nBrandLogo, PageLinks"])
     usecases(["application/use-cases\nresolveWorkspace, requestPasswordReset,\nloadSessionContext"])
-    domain(["domain/\nRememberedEmailRepository, WorkspaceNotFoundError,\nrules/permissions"])
+    domain(["domain/\nRememberedEmailRepository, WelcomeIntroRepository,\nWorkspaceNotFoundError, rules/permissions"])
     iam(["infrastructure/api/iam.ts"])
     reset(["infrastructure/auth/passwordReset.ts"])
-    remember(["infrastructure/storage/rememberedEmail.ts\n(localStorage)"])
+    remember(["infrastructure/storage/rememberedEmail.ts,\nwelcomeIntro.ts (localStorage)"])
     nav(["infrastructure/federation/navigator.ts"])
     msgs(["infrastructure/i18n/shellMessages.ts"])
     text(["shared/i18n\nshell namespace, en.json"])
@@ -140,6 +141,9 @@ graph LR
     host --> screens
     host --> screen
     screens --> login
+    screens --> welcome
+    welcome --> comps
+    welcome --> text
     screens -. types, signIn.ts .-> usecases
     screens --> domain
     screens --> text
@@ -169,11 +173,12 @@ graph LR
 |---|---|
 | `domain/` (contracts, errors, `rules/permissions.ts`) | Nothing but SDK types |
 | `application/` (use cases) | `domain/`, SDK types and the `/problem` error classes. No React, no browser APIs (ports injected) |
-| `infrastructure/` | `domain/`, `shared/i18n`, SDK subpaths. `storage/rememberedEmail.ts` implements `RememberedEmailRepository` over `localStorage`; `i18n/shellMessages.ts` (`registerNamespace` + `setLocale`) changes the page's locale, so only the bootstrap calls it |
+| `infrastructure/` | `domain/`, `shared/i18n`, SDK subpaths. `storage/rememberedEmail.ts` and `storage/welcomeIntro.ts` implement `RememberedEmailRepository` and `WelcomeIntroRepository` over `localStorage`; `i18n/shellMessages.ts` (`registerNamespace` + `setLocale`) changes the page's locale, so only the bootstrap calls it |
 | `presentation/pages` | `components`, `domain/`, `application/` types, `shared/` (their words from `shared/i18n`). Never `infrastructure/`, `app/`, the SDK, `application/` values, storage, the network or navigation: the repository, use cases and state come in as props |
 | `presentation/components` | `shared/` (`ui`, `i18n`, `constants`) |
 | `presentation/widgets` | `shared/i18n` (state and actions are props) |
-| `presentation/features/session-screens` | `pages`, `components`, `domain/`, `application/` types, `shared/i18n`, SDK `/auth` types. The screens call the use cases they are given; every failure becomes catalogue words |
+| `presentation/features/session-screens` | `pages`, `components`, `domain/`, `application/` types, `shared/i18n`, SDK `/auth` types. The screens call the use cases they are given; every failure becomes catalogue words. `SignInScreen` shows the welcome intro first until `welcomeIntro.seen()` |
+| `presentation/features/welcome` | Same component as `features/session-screens` (`features` in `.dependency-cruiser.cjs`): `pages`, `components`, `domain/`, `application/` types, `shared/i18n`, SDK `/auth` types; `WelcomeSplash` uses `components` and `shared/i18n` today. `WelcomeSplash`: the first-visit intro (blueprint grid, canvas dust, the brand name tracking wider, a glass card of product facts counting up, the amber call to action). Renders and calls `onComplete`; stops its frame loop and listeners on unmount |
 | `shared/i18n` | SDK `/i18n` (`t`) and `/react` (`useT`), no shell layer: `en.json`, `catalogues.ts`, `useShellText`, `shellText`, `ShellKey`. Text lookup only: presentation reaches the SDK's i18n runtime through it and nothing else |
 | `shared/constants` | `shared/i18n` (link labels are keys) |
 | `shared/ui`, `shared/types` | Nothing (assets, styles, ambient types) |
@@ -281,7 +286,8 @@ sequenceDiagram
     participant SDK as frontend-sdk /auth
     participant KC as Keycloak
 
-    Boot->>Screens: askForWorkspace(signInUseCases)
+    Boot->>Screens: askForWorkspace(signInUseCases, undefined, { welcome: true })
+    Note over Screens: first visit only: WelcomeSplash until Continue, Skip intro or Escape (bcbp.welcomeSeen)
     User->>Login: submit work email
     Login->>Login: rememberedEmail.save (injected repository)
     Login->>Screens: onContinue(email)
@@ -309,7 +315,7 @@ Which workspace a signed-out visit uses, in order:
 
 1. The workspace a failed silent attempt named (`reason: 'login-required'`).
 2. `chooseWorkspace`: the `/t/<slug>` in the URL (cached or resolved), otherwise the most recently cached workspace.
-3. The email screen (`askForWorkspace`). It resolves the email through PUB-1 and returns the workspace with the email as `loginHint`.
+3. The email screen (`askForWorkspace`). It resolves the email through PUB-1 and returns the workspace with the email as `loginHint`. On a browser's first visit (`bcbp.welcomeSeen` unset), this first-start call shows the welcome intro first; Continue, Skip intro or Escape marks it seen, shows the form and focuses the email field. Sign in after a logout, a device-clock refusal or an expiry, and Switch workspace, never offer the intro; a successful sign-in marks it seen.
 
 A known workspace goes straight to Keycloak, with the remembered email as `login_hint` when there is one. After `reason: 'signed-out'` or `'device-clock'` the bootstrap shows a dialog and waits for a click: an automatic login after a logout would ride the live SSO session and undo it.
 
@@ -520,6 +526,7 @@ Tokens are never written to storage. A reload restores the session from Keycloak
 | `@bcbp-solutions-fzc-llc/frontend-sdk:workspaces` | `localStorage` | SDK, `rememberWorkspace` | Cached workspaces (realm, slug), so a return visit skips the email screen |
 | `@bcbp-solutions-fzc-llc/frontend-sdk:session-id`, `:auth:last-activity`, `:auth:last-user` | `localStorage` | SDK | Telemetry session id, idle timeout across tabs, user change detection |
 | `bcbp.rememberEmail`, `bcbp.loginEmail` | `localStorage` | `infrastructure/storage/rememberedEmail.ts` (behind the domain's `RememberedEmailRepository`) | "Remember Email" only. Needed before a workspace is known, so it does not use the SDK's per-workspace `storage()`. Every access is wrapped in `try`; blocked storage just forgets |
+| `bcbp.welcomeSeen` | `localStorage` | `infrastructure/storage/welcomeIntro.ts` (behind the domain's `WelcomeIntroRepository`) | `1` once the first-visit welcome intro was continued, skipped or closed. Read before any workspace is known, so not the SDK's `storage()`. No personal data |
 
 Remotes that need storage use `storage(appId)` from `/storage`, which is namespaced per workspace and refuses token-like keys.
 
@@ -566,15 +573,21 @@ classDiagram
         resolveWorkspace(email): Workspace
         requestPasswordReset(email)
         rememberedEmail: RememberedEmailRepository
+        welcomeIntro: WelcomeIntroRepository
     }
     class RememberedEmailRepository {
         get(): string
         save(email, remember)
     }
+    class WelcomeIntroRepository {
+        seen(): boolean
+        markSeen()
+    }
     ShellValue --> Workspace
     ShellValue --> SessionContext
     SessionContext --> RoleMap : roles
     SignInUseCases --> RememberedEmailRepository
+    SignInUseCases --> WelcomeIntroRepository
     SignInUseCases --> Workspace
 ```
 
@@ -587,7 +600,7 @@ classDiagram
 | Shell value | `user`, `workspace`, `context`, `locale`, `switchWorkspace`, `signOut` | This shell, in `PlatformProvider`; remotes read it through SDK hooks (no props) |
 | Runtime config | `/config/runtime.json`, validated strictly by the SDK (README § Configuration, LLD §9.1) | Each environment |
 | Remote manifest | `/remotes/manifest.json`: `dashboard` → entry URL and `integrity` | Each environment |
-| Storage keys | § Browser storage | SDK and `infrastructure/storage/rememberedEmail.ts` |
+| Storage keys | § Browser storage | SDK, `infrastructure/storage/rememberedEmail.ts` and `infrastructure/storage/welcomeIntro.ts` |
 
 ---
 
@@ -607,6 +620,7 @@ flowchart TD
     subgraph browser["In the browser"]
         b1["SDK workspace cache: localStorage @bcbp-solutions-fzc-llc/frontend-sdk:workspaces\nrealm + slug, up to 20; skips the email screen on return\nwritten by chooseWorkspace (URL slug) and rememberWorkspace (after sign-in)"]
         b2["Remembered email: localStorage bcbp.rememberEmail / bcbp.loginEmail\nonly when the box is checked"]
+        b7["Welcome intro seen: localStorage bcbp.welcomeSeen = 1\nafter Continue, Skip or Escape on the first visit"]
         b3["Session context (P-35): in memory only (createStore), per page load\nreplaced live when the background retry succeeds"]
         b4["Tokens: SDK memory only, never storage; reload restores from Keycloak SSO (prompt=none)"]
         b5["Text catalogue en.json: in the entry chunk, registered before the first screen"]
@@ -725,7 +739,7 @@ A browser shell has no locks, but it has races: an async start-up that a sign-ou
 | Invariant | Where it holds |
 |---|---|
 | The shell is a public OAuth client. There is no client secret in the repo or the bundle | Runtime config has a `clientId` only |
-| Tokens never touch storage | SDK `/auth`. `no-raw-storage` lint rule on `src/` (off only for `src/infrastructure/storage/rememberedEmail.ts`) |
+| Tokens never touch storage | SDK `/auth`. `no-raw-storage` lint rule on `src/` (off only for `src/infrastructure/storage/rememberedEmail.ts` and `welcomeIntro.ts`) |
 | No login starts without a click after a logout | `showSignedOut`, `showDeviceClock`, `showSessionEnded` |
 | The app never renders for a wrong-workspace login | `isWrongWorkspace` check before render |
 | The bootstrap runs once, behind the async boundary | `src/app/bootstrap/index.ts` |
@@ -804,10 +818,10 @@ Vitest 5, happy-dom at `http://localhost:5001/`, Testing Library. `vitest.config
 
 | Layer | Path | What it locks |
 |---|---|---|
-| Unit | `test/unit/` | PUB-1 and P-35 mappings and the port calls, the entry point's fatal path, remember-email with blocked storage, the screen host, `BrandLogo`, the session-context retry and store, the navigator adapter |
-| Integration | `test/integration/` | The login page and the carousel, every session screen, `App` routes and props, and the bootstrap: the exact initialisation order, each anonymous reason, wrong workspace, missing context and its background retry, sign-out during boot, i18n `detect`, navigator registration, start-up failure reporting, manifest failure, expiry and sign-out events; axe-core over every shell screen (`accessibility.test.tsx`) |
+| Unit | `test/unit/` | PUB-1 and P-35 mappings and the port calls, the entry point's fatal path, remember-email and the welcome-intro flag with blocked storage, the screen host, `BrandLogo`, the session-context retry and store, the navigator adapter |
+| Integration | `test/integration/` | The login page and the carousel, the welcome intro (first visit, Skip, Escape, count-up, Pause, cleanup on unmount), every session screen, `App` routes and props, and the bootstrap: the exact initialisation order, each anonymous reason, wrong workspace, missing context and its background retry, sign-out during boot, i18n `detect`, navigator registration, start-up failure reporting, manifest failure, expiry and sign-out events; axe-core over every shell screen (`accessibility.test.tsx`) |
 | End to end | `test/e2e/` | The real bootstrap and SDK (inlined by Vitest, fresh per simulated page load) against a fake Keycloak and network: PKCE sign-in, `/t/<slug>/`, the remote's SDK hooks and permissions, deny-all, an IAM outage that recovers in the background, a failing remote, global sign-out (form POST), the device clock |
-| Browser | `test/browser/`, CI `browser` | The production build in Chromium, Firefox and WebKit under the production CSP and Trusted Types, over HTTPS, with a fake Keycloak on a second origin: self-hosted fonts and hashed images, PKCE sign-in, the remote's entry with integrity and the share scope, `navigate()` without a reload, the sign-out form POST under `form-action`, the start-up failure reaching `/otel`, the sign-in hero's one-time opening (every `cine-*` animation over by 2.5 s, the form usable during it), `prefers-reduced-motion` (no animation, no letterbox bars), colour contrast (axe) on the hero's resting frame and, from pixels, over each of its 9 photographs |
+| Browser | `test/browser/`, CI `browser` | The production build in Chromium, Firefox and WebKit under the production CSP and Trusted Types, over HTTPS, with a fake Keycloak on a second origin: self-hosted fonts and hashed images, the first-visit welcome intro (canvas dust, facts counted, Pause early and late, Continue to a focused email field, reduced motion, contrast including the call to action), PKCE sign-in, the remote's entry with integrity and the share scope, `navigate()` without a reload, the sign-out form POST under `form-action`, the start-up failure reaching `/otel`, the sign-in hero's one-time opening (every `cine-*` animation over by 2.5 s, the form usable during it), `prefers-reduced-motion` (no animation, no letterbox bars), colour contrast (axe) on the hero's resting frame and, from pixels, over each of its 9 photographs |
 | Dashboard contract | `test/browser/dashboard.spec.ts`, CI `dashboard-contract` | The real mfe-dashboard build in this shell under the production CSP (informational) |
 | Smoke | `test/smoke/`, `.github/scripts/smoke-tests.sh` | Image at most 200 MB and the startup gate, then the suite against the container: SPA rule, Cache-Control per location, script integrity, 404s, runtime config and manifest validated by the SDK. With `SMOKE_MODE=live`, a deployment's security headers too |
 

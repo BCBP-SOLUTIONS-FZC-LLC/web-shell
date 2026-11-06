@@ -11,6 +11,7 @@ const { resetScreen } = await import('../../src/app/layouts/screen')
 const { resolveWorkspaceUseCase } = await import('../../src/application/use-cases/resolveWorkspace')
 const { requestPasswordResetUseCase } = await import('../../src/application/use-cases/requestPasswordReset')
 const { localStorageRememberedEmail } = await import('../../src/infrastructure/storage/rememberedEmail')
+const { localStorageWelcomeIntro } = await import('../../src/infrastructure/storage/welcomeIntro')
 
 // The real sign-in use cases, as the bootstrap builds them, over a fake PUB-1 and a recorded navigation.
 const resolveWorkspace = resolveWorkspaceUseCase({ resolve: (i) => resolve(i) })
@@ -22,6 +23,7 @@ const useCases = {
     open: (url: string) => opened(url),
   }),
   rememberedEmail: localStorageRememberedEmail,
+  welcomeIntro: localStorageWelcomeIntro,
 }
 
 const acme: Workspace = { realm: 'tenant-acme', trial: false, slug: 'acme' }

@@ -10,6 +10,32 @@ Pull requests that change the shell, its dependencies, or the image add an entry
 
 ## [Unreleased]
 
+### Added (2026-11-07 — a first-visit welcome intro before the sign-in form)
+
+- **A browser's first visit opens on a cinematic welcome intro; after that, the sign-in form shows directly.**
+  - *What it shows:* on a dark site ground there is a still blueprint grid, with site dust and amber sparks drifting up on a canvas. "BCBP SOLUTIONS" fades in and tracks wider (0–1.4 s). The headline and subline rise (0.5 s, 1.0 s). A glass card (daisyUI `.glass`) drops in (1.2 s), and its facts count up from 2.0 s for 1.2 s. The amber call to action (daisyUI `btn-primary`, `--color-primary: #ffb800` scoped to the intro) rises at 1.8 s, and its glow then pulses.
+  - *The facts:* the product's own statements, not live data. **95%** forecasting accuracy (the sign-in page's highlight), **8** programme sectors (the sign-in slides: airside, ports, roads, bridges, transmission, refineries, chemical plants, villages), and **Live** site monitoring.
+  - *Leaving it:* **Continue to sign in**, **Skip intro** or Escape calls `onComplete`. `SignInScreen` then marks the intro seen, shows the form and moves focus to the email field (the button that had focus is gone).
+  - *Only on a first start:* only the first-start sign-in offers the intro (`askForWorkspace(useCases, undefined, { welcome: true })`). Sign in after a logout, a device-clock refusal or an expiry, and Switch workspace, go straight to the form. A successful sign-in marks the intro seen, so a user who arrived by a deep link or a cached workspace never meets it later.
+  - *(Previously: the email form showed at once on every visit.)*
+  - *Motion:* **Pause animation** stops the canvas loop and holds the glow (WCAG 2.2.2). The entrance still finishes, so nothing stays hidden. The dust keeps its particles across a pause, and the reduced-motion preference is followed live. The canvas also stops while the tab is hidden. Under `prefers-reduced-motion`, the intro shows its final frame: no canvas, no count-up, no glow.
+  - *Cleanup:* on unmount, the frame loop is cancelled and the `resize`, `visibilitychange` and `keydown` listeners are removed. When the form replaces the intro, nothing keeps running.
+  - *Files:* `src/presentation/features/welcome/WelcomeSplash.tsx`; the `splash-*`, `blueprint-grid` and `cta-glow` styles in `src/shared/ui/index.css`; 11 `welcome.*` catalogue keys.
+- **`bcbp.welcomeSeen` in `localStorage`, behind a new domain contract.**
+  - *The pieces:* `WelcomeIntroRepository` (`src/domain/repositories/welcomeIntro.ts`) is implemented by `src/infrastructure/storage/welcomeIntro.ts`. The bootstrap passes it to the screens as `SignInUseCases.welcomeIntro`. Presentation never touches storage.
+  - *Why raw storage:* it holds `1` only, and it is read before any workspace is known, when the SDK's `storage()` ignores writes. So it is the second file exempt from `no-raw-storage` (`eslint.config.js`). Every access is in `try`; with storage blocked, the intro shows again on the next visit.
+- **Tests.**
+  - *Unit:* `test/unit/welcomeIntro.test.ts`.
+  - *Integration:* `test/integration/welcome-splash.test.tsx` (first visit; Continue, Skip and Escape with focus on the email field; a seen intro, a notice or a screen not offering it go straight to the form; count-up; Pause; hidden tab; reduced motion turned on live; no 2D context; nothing left after unmount), an axe case in `accessibility.test.tsx`, and `bootstrap.test.tsx` (the intro on a first start, never after a logout or an expiry, marked seen once signed in).
+  - *e2e:* the first-visit case in `test/e2e/shell.test.tsx`.
+  - *Browser* (`shell.spec.ts`), under the production CSP:
+    - Welcome intro: dust drawn on the canvas, facts counted, the glow held by Pause, Continue to a focused email field.
+    - Pause early: the headline, card and call to action still reach full opacity.
+    - Welcome, reduced motion.
+    - Welcome contrast: axe, plus the call to action measured directly, because axe leaves daisyUI's `.btn` incomplete.
+  - *Returning visitors by default:* the other tests set `bcbp.welcomeSeen` first (`test/setup.ts`; an init script in the browser specs).
+- **Build note.** This is web-shell's first use of daisyUI's `.btn`. Rsbuild's CSS minifier now prints 2 warnings ("Invalid empty selector") for daisyUI's own `.join` group rules inside `.btn`. They are harmless; the shell uses no `.join`.
+
 ### Changed (2026-11-06 — a cinematic opening for the sign-in hero)
 
 - **The sign-in hero opens like a film title, once, then stays still.**

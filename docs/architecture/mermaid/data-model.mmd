@@ -32,13 +32,19 @@ classDiagram
         resolveWorkspace(email): Workspace
         requestPasswordReset(email)
         rememberedEmail: RememberedEmailRepository
+        welcomeIntro: WelcomeIntroRepository
     }
     class RememberedEmailRepository {
         get(): string
         save(email, remember)
     }
+    class WelcomeIntroRepository {
+        seen(): boolean
+        markSeen()
+    }
     ShellValue --> Workspace
     ShellValue --> SessionContext
     SessionContext --> RoleMap : roles
     SignInUseCases --> RememberedEmailRepository
+    SignInUseCases --> WelcomeIntroRepository
     SignInUseCases --> Workspace

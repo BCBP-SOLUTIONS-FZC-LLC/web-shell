@@ -22,7 +22,7 @@ const components = {
   domain: { in: ['src/domain/'] },
   // Use cases; their infrastructure is injected by the composition root.
   application: { in: ['src/application/'] },
-  // Adapters: IAM API, password reset, remembered email (localStorage), router bridge, text registration.
+  // Adapters: IAM API, password reset, remembered email and welcome-intro flag (localStorage), router bridge, text registration.
   infrastructure: { in: ['src/infrastructure/'] },
   // Cross-cutting: the shell's text, constants (help and legal links), UI assets and styles.
   i18n: { in: ['src/shared/i18n/'] },
