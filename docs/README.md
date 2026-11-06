@@ -9,6 +9,8 @@ Operator material for `web-shell`. Product setup stays in the repository [README
 | [pipeline/](pipeline/README.md) | What `ci.yml` and `release.yml` run, and in which order |
 | [runbook-coverage-gate.md](runbook-coverage-gate.md) | A red `validate-test` job |
 | [runbook-image-scan.md](runbook-image-scan.md) | Hadolint, digest pin, Trivy, or the smoke job |
+| [architecture/constitution-assessment.md](architecture/constitution-assessment.md) | web-shell against the Frontend Architecture Constitution 1.0: assessment, violations, target architecture, folder plan, dependency rules, roadmap |
+| [adr/](adr/README.md) | Architecture decision records (constitution deviations and choices) |
 | [observability.md](observability.md) | The observability standard for the shell: tiers, identity labels, metric inventory, adding a metric |
 | [runbook-startup-failure.md](runbook-startup-failure.md) | `the app could not start` errors: the alert, and what to check |
 | [hosting-without-cloudfront.md](hosting-without-cloudfront.md) | Deploying before CloudFront exists: ingress routing, mounted CSP and HSTS, what to undo later |
