@@ -1,0 +1,14 @@
+flowchart TD
+    subgraph http["HTTP caching (nginx/default.conf; CloudFront applies the same rules)"]
+        h1["/assets/* (content-hashed JS, CSS, fonts, images)\nCache-Control: public, max-age=31536000, immutable"]
+        h2["index.html, /config/runtime.json, /remotes/manifest.json, /version.json,\nunhashed public files, every SPA route\nCache-Control: no-cache (revalidate every time)"]
+        h3["/api, /otel, /csp-report: never served by the image (404); routed to their services"]
+    end
+    subgraph browser["In the browser"]
+        b1["SDK workspace cache: localStorage @bcbp-solutions-fzc-llc/frontend-sdk:workspaces\nrealm + slug, up to 20; skips the email screen on return\nwritten by chooseWorkspace (URL slug) and rememberWorkspace (after sign-in)"]
+        b2["Remembered email: localStorage bcbp.rememberEmail / bcbp.loginEmail\nonly when the box is checked"]
+        b3["Session context (P-35): in memory only (createStore), per page load\nreplaced live when the background retry succeeds"]
+        b4["Tokens: SDK memory only, never storage; reload restores from Keycloak SSO (prompt=none)"]
+        b5["Text catalogue en.json: in the entry chunk, registered before the first screen"]
+        b6["Remote manifest: loaded once per page (loadManifest), a changed manifest is read on the next page load\nA new shell build is found by /version.json polling"]
+    end
