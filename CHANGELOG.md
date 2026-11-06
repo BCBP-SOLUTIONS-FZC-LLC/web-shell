@@ -4,31 +4,15 @@ All notable changes to this shell are documented here. Format follows [Keep a Ch
 
 `0.1.0` is the first release. Everything before it is in its section below. `package.json` `version` matches the latest tag without the `v`. This file tracks what is true in each release and what is still outstanding. The development diary, when one is needed, is `git log`.
 
+**Format (as the platform's services keep theirs).** Under `[Unreleased]`, each change sits in a section typed and dated with its topic, newest first (in the order the pull requests merged): `### Added|Changed|Fixed|Removed|Security (YYYY-MM-DD — topic)`. Each entry is a bold one-line summary, then what changed and why, with the files, tests and checks that prove it; a behaviour change ends with *(Previously: …)*. `### Known gaps` and `### Current architecture notes` at the end of `[Unreleased]` say what is true and outstanding on `main` now. Cutting a release turns `[Unreleased]` into `## [X.Y.Z] - YYYY-MM-DD` (`release.yml` needs that heading).
+
 Pull requests that change the shell, its dependencies, or the image add an entry under `[Unreleased]`. `.github/workflows/changelog-check.yml` fails a pull request that touches `src/`, `package.json`, `package-lock.json`, `Dockerfile`, `nginx/`, `rsbuild.config.ts`, `config/**`, `public/config/**`, or `index.html` without updating this file. `.github/workflows/release.yml` rejects a tag that has no matching `## [X.Y.Z]` section (`verify-changelog-entry.sh` looks for the version without the `v`).
 
 ## [Unreleased]
 
+### Changed (2026-11-06 — documentation modelled on the IAM services)
 
-### Added
-
-- **Claude Code automation for this repository (`2026-11-06`).** No change to the app, the bundle or the image.
-  - **Hooks:** `.claude/settings.json` now wires the two existing hooks, which until now did not run.
-    - `guard.sh` blocks edits to `../mfe-dashboard`, `platform-reactcommon`, `node_modules/`, `dist/`, `coverage/` and env files.
-    - `post-edit.sh` now also runs arch-lint on an edited `src/` file and its imports, and checks the platform package pins on `package.json` (`.claude/hooks/check-sdk-pins.mjs`).
-  - **Subagent:** `doc-sync-reviewer`, which checks documentation against the code.
-  - **Skills:** `/sdk-upgrade <version>` (with `bump.sh`) and `/stack-sync <PR>` (with `sync.sh`, which refuses when `main` has diverged from the old base).
-  - **MCP:** `.mcp.json` adds `context7`, pinned to `@upstash/context7-mcp@4.4.4`.
-  - **Tested:**
-    - the guard blocked a write into `dist/` in a live session;
-    - the post-edit hook passes clean files and fails an import cycle and loose pins;
-    - `sync.sh` was run in a throwaway repository, merging when `main` equals the old base and refusing when it diverged;
-    - `bump.sh` refuses an unpublished version.
-
-- **Dependabot can read GitHub Packages (`2026-11-05`).** Its npm job failed with 401 on `npm.pkg.github.com` (run of 2026-11-05: `@bcbp-solutions-fzc-llc/frontend-sdk`, `eslint-plugin`), so no npm update could open, public packages included. `.github/dependabot.yml` now declares the `github-packages` registry with the Dependabot secret `PACKAGES_READ_TOKEN` and ignores `@bcbp-solutions-fzc-llc/*` (moved by hand, in lockstep). Same as mfe-dashboard #29. Needs the secret: an organization Dependabot secret shared with both repositories.
-
-- **The Enterprise Platform Observability Standard, for the shell (`2026-11-05`).** `docs/observability.md` documents the shell's place in the three tiers (identity `portal` / `web-shell`; Tier 3 prefix `portal_web_shell_`; `domain`, `service`, `environment` injected by the SDK), its metric inventory (none of its own today: Tier 1 `platform_web_*` is SDK-bound and pending ratification, the signals are logs), how to add a metric, and that no dashboards, recording rules, SLOs or HPA live in this repo. `npm run metrics-check` (`.github/scripts/metrics-check.mjs`, in `Validate / Quality`) checks every metric `src/` creates **with the SDK's own meters** (`getServiceMeter` / `getDomainMeter` under the shell's identity), so the rules are the SDK's and are not restated here; the script adds only what the SDK cannot see: metrics created outside it (OpenTelemetry metrics API, prom-client), names and labels that are not literals, and metrics missing from the inventory. 9 tests; a probe shows a bad metric failing with the SDK's rule.
-
-### Changed
+- **CHANGELOG keeps the format the IAM services' changelogs use (`2026-11-06`).** `[Unreleased]` is regrouped, with no entry lost, into sections typed and dated with their topic (`### Added|Changed|Fixed|Removed|Security (date — topic)`), newest first, with *(Previously: …)* on the behaviour changes. It also gains current `Removed`, `Security`, `Known gaps` and `Current architecture notes`; the `0.1.0` ones stay as its record. The format is described at the top of this file, in CONTRIBUTING's documentation checklist and in the `doc-sync-reviewer` rule.
 
 - **CONTRIBUTING covers what the IAM services' CONTRIBUTING covers (`2026-11-06`).** Step-by-step recipes per layer (domain contract or rule, use case, infrastructure adapter, session screen or dialog, widget or component, development stand-in, tooling variable, SDK upgrade); testing notes (run one test by name, happy-dom, the SDK in tests, the browser suite); more guardrails and forbidden patterns; a `test/` branch prefix; commit examples that cite the LLD; the CI steps in Deployment (Trivy also fails on UNKNOWN; the browser and contract jobs). The pull request checklist and `.github/pull_request_template.md` now include arch-lint, metrics-check, e2e and the browser and contract suites.
 
@@ -39,6 +23,15 @@ Pull requests that change the shell, its dependencies, or the image add an entry
   - **Data and runtime:** data model, cache strategy, observability stack, Content Security Policy and Trusted Types, concurrency and races.
   - **Deployment and contracts:** hosting until CloudFront, release and rollback safety, contract lifecycle.
   - **Diagrams:** six new `.mmd` sources, listed in `docs/architecture/README.md`.
+
+### Security (2026-11-06 — dependency and disclosure review)
+
+- **No CVE is suppressed.** `.trivyignore` lists none. The CI image scan fails on a CRITICAL, HIGH or UNKNOWN CVE that has a fix; the release scan on CRITICAL or HIGH.
+- **`npm audit`: 0 vulnerabilities**, production and development dependencies alike, on `main` as of 2026-11-06 (CI runs `npm audit --omit=dev --audit-level=high` on every PR).
+- **New dependencies are pinned and at least two weeks old:** `dependency-cruiser` `18.7.0` (development only; nothing in the bundle or the image) and `@upstash/context7-mcp` `4.4.4` (Claude Code configuration only).
+- **No server message reaches the page:** sign-in failures show catalogue words, and the error page shows catalogue words and a reference id (step 5 and the error boundary below), so a problem's `title` or `detail` is never displayed.
+
+### Fixed (2026-11-06 — documentation drift before the next release; the SDK retry rule checked)
 
 - **Documentation brought in line with the code before the next release; the SDK retry rule is now checked (`2026-11-06`).** An independent review of every document against `main` (and of the code since `v0.2.0`, which found no regression) led to these fixes:
   - **Operators:**
@@ -60,11 +53,31 @@ Pull requests that change the shell, its dependencies, or the image add an entry
   - **Stale facts:** the dev proxy answers 503, the contract suite has 4 cases, the identity's environment comes from `runtime.json`, and earlier entries in this section give the paths step 2 moved.
   - **Code: `isTransient` checked against the SDK.** It copies the SDK ApiClient's retry rule, which the SDK does not export. A new test runs the real ApiClient against 12 statuses and fails if the two disagree, so an SDK upgrade that changes the rule breaks the build instead of silently diverging. Dropping 429 from the copy makes it fail.
 
+### Added (2026-11-06 — Claude Code automation)
+
+- **Claude Code automation for this repository (`2026-11-06`).** No change to the app, the bundle or the image.
+  - **Hooks:** `.claude/settings.json` now wires the two existing hooks, which until now did not run.
+    - `guard.sh` blocks edits to `../mfe-dashboard`, `platform-reactcommon`, `node_modules/`, `dist/`, `coverage/` and env files.
+    - `post-edit.sh` now also runs arch-lint on an edited `src/` file and its imports, and checks the platform package pins on `package.json` (`.claude/hooks/check-sdk-pins.mjs`).
+  - **Subagent:** `doc-sync-reviewer`, which checks documentation against the code.
+  - **Skills:** `/sdk-upgrade <version>` (with `bump.sh`) and `/stack-sync <PR>` (with `sync.sh`, which refuses when `main` has diverged from the old base).
+  - **MCP:** `.mcp.json` adds `context7`, pinned to `@upstash/context7-mcp@4.4.4`.
+  - **Tested:**
+    - the guard blocked a write into `dist/` in a live session;
+    - the post-edit hook passes clean files and fails an import cycle and loose pins;
+    - `sync.sh` was run in a throwaway repository, merging when `main` equals the old base and refusing when it diverged;
+    - `bump.sh` refuses an unpublished version.
+
+### Fixed (2026-11-06 — a render error left a blank page)
+
 - **An error boundary around the shell's own screens (`2026-11-06`).** The constitution requires error boundaries. The dashboard had one (`RemoteBoundary`), but a render error in the shell's own routes or widgets left a blank page, logged only by the global handler.
   - `App.tsx` now wraps its router in the SDK's `MFEErrorBoundary` with `mfe="web-shell"`, which logs the error, records it for the SDK's web-error metric (counting once Tier 1 is ratified) and reloads once for a chunk-load error. It shows `presentation/widgets/AppError`: "Something went wrong on this page.", the trace or request reference when there is one, and Try again, which re-renders.
   - The page never shows the error's own message; its words are new catalogue keys `app.error` and `app.error.reference`.
   - The SDK logs it as `remote failed to render` with `mfe: web-shell` (`docs/observability.md`).
   - Tests: integration (a failing child shows the page, focused, without the internal message; Try again recovers) and axe. 203 tests at 100%, browser 18/18, contract 12/12; entry 9.8 KB of 12 KB.
+  *(Previously: a render error in the shell's routes or widgets unmounted the React tree and left a blank page; only the global handler logged it.)*
+
+### Changed (2026-11-06 — constitution step 2: `src/` in the constitution's folders)
 
 - **Frontend Architecture Constitution, step 2: `src/` in the constitution's folders (`2026-11-06`).** Violation V1 of the assessment (#45). The last roadmap step that changes code.
   - **New layout:**
@@ -91,6 +104,12 @@ Pull requests that change the shell, its dependencies, or the image add an entry
   - **Behaviour unchanged:** the same CSS (content hash identical), the same chunks and budget (entry 9.7 KB). 200 tests at 100%; browser suite 18/18 (Chromium, Firefox, WebKit, production CSP); contract 12/12 against mfe-dashboard.
   - **Docs:** layout, module rules and both diagrams rewritten in ARCHITECTURE, the LLD (§2.1, §3, §3.1), `.claude/`, CONTRIBUTING and README.
 
+### Removed (2026-11-06 — the pre-constitution layout)
+
+- **`src/platform/`, `src/pages/`, `src/components/`, `src/assets/`, `src/theme/` and the loose `src/App.tsx`, `src/bootstrap.tsx`, `src/index.ts`, `src/index.css`, `src/globals.d.ts`:** moved, with history, into `app/`, `presentation/`, `application/`, `domain/`, `infrastructure/` and `shared/` (step 2 above). The remembered email had already become `platform/rememberedEmail.ts` behind the domain's `RememberedEmailRepository` (step 3, below); step 2 moved it to `infrastructure/storage/rememberedEmail.ts`.
+
+### Added (2026-11-06 — architecture lint)
+
 - **Architecture lint, like the IAM services' go-arch-lint (`2026-11-06`).** `.dependency-cruiser.cjs` declares the shell's components and what each may depend on, in the same shape as `.go-arch-lint.yml`:
   - **Components:** `domain`, `application`, `i18n`, `assets`, `components`, `pages`, `screen_host`, `session_screens`, `infrastructure`, `routes`, `composition_root` and `entry` at the time; step 2 (above) replaced them with the 15 components of the new folders (`.dependency-cruiser.cjs`, CONTRIBUTING § Architecture lint), each with its `in` paths.
   - **Deps:** `mayDependOn` (other components), `vendors` (packages) and `typeOnlyVendors` (SDK port types).
@@ -99,6 +118,8 @@ Pull requests that change the shell, its dependencies, or the image add an entry
   - **ESLint unchanged:** it keeps the per-layer import rules for editor feedback, plus the browser-global rules a dependency graph cannot see.
   - **New dev dependency:** `dependency-cruiser` `18.7.0`, pinned exactly. It is a dev dependency only, so nothing changes in the bundle or the image.
   - **Results:** 190 tests at 100%.
+
+### Changed (2026-11-06 — Frontend Architecture Constitution, steps 3–5)
 
 - **Frontend Architecture Constitution, step 5: every user-facing word through the SDK's `/i18n` (`2026-11-06`).** Violation V4 of the assessment (ADR 0005, both in #45). The shell's user-facing text, 61 keys, moves to one English catalogue, `src/shared/i18n/en.json`, under the `shell` namespace. That covers the sign-in page and carousel, the session screens, the help and legal link labels, the app banners and the unavailable page.
   - **`src/shared/i18n`:** `useShellText()` (the SDK's `useT('shell')`), `shellText()` (its `t`) and `ShellKey` (an unknown key is a type error). It offers text lookup only, and presentation reaches the SDK's i18n runtime through it and nothing else. A new lint block lets `shared/` import no shell layer and only `/i18n` and `/react` from the SDK.
@@ -111,6 +132,7 @@ Pull requests that change the shell, its dependencies, or the image add an entry
     - `test/unit/shell-text.test.ts` reads presentation's TypeScript syntax tree and fails JSX text, `{'…'}` children, literal `aria-*`, `alt`, `title`, `placeholder` and `label` attributes, and `textContent` assignments. Over the previous code it finds 29 such literals.
     - The bootstrap integration test checks the catalogue loads before the IdP starts. The e2e suite, which starts every page from a fresh SDK, fails without it.
   - **Results:** English text unchanged. 181 tests at 100%; browser suite 18/18 (Chromium, Firefox, WebKit, production CSP); contract 12/12 against mfe-dashboard. The catalogue (1.7 KB gzip) sits in the entry chunk, where the first screen needs it: entry 9.7 KB of 12 KB.
+  *(Previously: the sign-in page showed an error's own message, for example a `TypeError` text or a server's problem title, untranslated.)*
 
 - **Frontend Architecture Constitution, step 4: the layer rules are lint errors (`2026-11-06`).** `eslint.config.js` now enforces the dependency rules step 3 introduced, so violations V2 and V3 of the assessment cannot come back (roadmap step 4, §5):
   - **Domain** (`src/domain/`, `.ts` and `.tsx`): no React, no SDK runtime (type imports allowed), no other shell layer, no browser global (`window`, `document`, `globalThis`, `self`, `localStorage`, `fetch`, `location`, …).
@@ -128,13 +150,24 @@ Pull requests that change the shell, its dependencies, or the image add an entry
   - **Composition root:** the bootstrap builds the use cases from infrastructure.
   Behaviour unchanged: 153 tests at 100% (new: use-case unit tests; the session screens tested over the real use cases with a fake PUB-1); browser suite 18/18; contract 12/12 against the released mfe-dashboard `v0.3.0`. Folder names stay until roadmap step 2.
 
+### Changed (2026-11-06 — platform SDK `1.0.0-alpha.6`, one build for every environment)
+
 - **Platform SDK `1.0.0-alpha.6`: one build for every environment (`2026-11-06`).** All three packages move to `1.0.0-alpha.6`, pinned exactly; the shell goes first, since a remote built on alpha.6 requires `^1.0.0-alpha.6`. The bootstrap now loads `/config/runtime.json` **before** `initializeCore` and passes its `environment` (new optional key, the registry vocabulary) to the identity, then `setRuntimeConfig`; the SDK refuses a config that names another environment than the identity's. Order of the move:
   1. **This release:** the environment comes from `runtime.json` when the file names one, else from the build-time `PLATFORM_ENVIRONMENT` (`__ENVIRONMENT__`). If the config cannot be loaded at all, the identity takes the build-time environment so the failure is still reported (`WebShellStartupFailures`).
   2. **Operators:** each environment's deployed `runtime.json` gets `"environment": "<its environment>"`. The deploy check is the smoke suite: `SMOKE_MODE=live ENVIRONMENT=<target> npm run test-smoke` fails a file that names none or another. The image's default `public/config/runtime.json` names none on purpose (checked in image mode), and `config/runtime.local.json` names `local`.
   3. **Then this repo** drops `__ENVIRONMENT__` / `PLATFORM_ENVIRONMENT` (LLD §15), and a file without the key stops at the unavailable page.
   Checked: 143 tests at 100% (new: the environment from the file, the build-time fallback, the report without a config; e2e with the real SDK: a file naming `dev` makes the identity `dev`); image smoke 27 passed; the deploy check against nginx (target matches; another environment fails; no key fails); browser suite 18/18; contract 12/12 against the released mfe-dashboard `v0.3.0` (alpha.5). alpha.6's other changes (`formatDate` calendar dates, console warnings while logging is off) need nothing here.
 
+### Added (2026-11-05 — guard against duplicating the SDK)
+
 - **A permanent guard against duplicating the SDK (`2026-11-05`).** `test/unit/no-sdk-duplicates.test.ts` runs on every PR: no module-level name in `src/`, `config/` or the browser-suite server may be one of the SDK's public exports (about 170), which also flags the shell's copies of unpublished platform code (`retrySessionContext`, `createStore`, `isTransient`, `ShellRoot`, `buildCsp`) the day the SDK publishes them; and no test or dev-server code may hand-build a problem body. It found one more on its first run: `test/unit/session-context.test.ts` built `ProblemError`s by hand; they now come from the SDK (`parseProblemResponse` of `mockProblem(typeForStatus(status))`, or of a bare response for 502, as the ApiClient does).
+
+### Fixed (2026-11-05 — Dependabot could not read GitHub Packages)
+
+- **Dependabot can read GitHub Packages (`2026-11-05`).** Its npm job failed with 401 on `npm.pkg.github.com` (run of 2026-11-05: `@bcbp-solutions-fzc-llc/frontend-sdk`, `eslint-plugin`), so no npm update could open, public packages included. `.github/dependabot.yml` now declares the `github-packages` registry with the Dependabot secret `PACKAGES_READ_TOKEN` and ignores `@bcbp-solutions-fzc-llc/*` (moved by hand, in lockstep). Same as mfe-dashboard #29. Needs the secret: an organization Dependabot secret shared with both repositories.
+  *(Previously: every weekly npm update run failed with 401, public packages included; the job still fails until the organisation secret exists, see Known gaps.)*
+
+### Changed (2026-11-05 — the SDK's behaviour, not copies of it)
 
 - **Tests and the dev server use the SDK's problem responses (`2026-11-05`).** The e2e suite, its network fixture, the browser suite's server and `config/dev-platform.mjs` built error bodies by hand (`{ title: 'Unauthorized', status: 401 }` as `application/json`), duplicating the SDK's `/testing` `mockProblem`, and unlike the platform's real ones (no `type`, `errorCode`, `timestamp`, not `application/problem+json`), so the SDK's problem parsing was not what the tests exercised. They now use `mockProblem(PlatformProblemTypes.…)`. The platform has no 502 type: the e2e outage case and the dev server's unreachable `DEV_API_URL` answer 503 (Service Unavailable), which the SDK treats the same (transient).
 
@@ -143,8 +176,46 @@ Pull requests that change the shell, its dependencies, or the image add an entry
   - **A second retry layer.** The bootstrap's background P-35 retry wrapped the ApiClient, which already retries GETs (2 times, jitter, `Retry-After`, statuses 429 / 502 / 503 / 504, online network errors, timeouts): one outage could cost up to 12 requests, and the shell's "transient" rule (any 5xx, offline included) disagreed with the SDK's. Background attempts now go through `loadSessionContextOnce` (`retry: false`: one request each, the SDK's retries having run on the first load), and `isTransient` is the ApiClient's rule. A 500, 501 or offline answer is now final, as it is for the SDK.
   - Also: `iam.ts` reads the paid-realm prefix from the runtime config only (it restated the schema's `tenant-` default).
   - Still copied, with no SDK export to use instead (requested upstream, `platform-reactcommon-shell-helpers-export.md`): the session-context retry and store and `ShellRoot` (from `examples/shell`), the realm URL in `passwordReset.ts`, the CSP example.
+  *(Previously: the background P-35 retry treated any 5xx and any network error as transient, and wrapped the ApiClient's own retries, so one outage could cost up to 12 requests.)*
 
 - **Audit against platform-reactcommon: no re-implemented SDK behaviour (`2026-11-05`).** `src/`, the tests and the CI scripts were checked against the SDK's public exports and platform-reactcommon's examples and test tooling (LLD §1.2 lists what the shell takes from unpublished parts and why). One duplicate removed here: the browser suite's server read its own copy of the platform CSP; it now reads `nginx/security.d/csp.conf.example`, so the repository holds the policy once, and that file is enforced in Chromium, Firefox and WebKit on every run (18/18). platform-reactcommon is asked to export the pieces every shell copies (session-context retry and live provider, realm URLs, `buildCsp`): `platform-reactcommon-shell-helpers-export.md`.
+
+### Removed (2026-11-05 — copies of SDK behaviour)
+
+- **`src/platform/consent.ts`:** the SDK's runtime already grants essential-only consent by default (`ESSENTIAL_ONLY_CONSENT`); v1 keeps that through the default.
+- **The second retry layer around P-35:** background attempts make one request each (`loadSessionContextOnce`, `retry: false`).
+- **The browser suite's own copy of the CSP:** it reads `nginx/security.d/csp.conf.example`, the one CSP source.
+
+### Added (2026-11-05 — observability standard)
+
+- **The Enterprise Platform Observability Standard, for the shell (`2026-11-05`).** `docs/observability.md` documents the shell's place in the three tiers (identity `portal` / `web-shell`; Tier 3 prefix `portal_web_shell_`; `domain`, `service`, `environment` injected by the SDK), its metric inventory (none of its own today: Tier 1 `platform_web_*` is SDK-bound and pending ratification, the signals are logs), how to add a metric, and that no dashboards, recording rules, SLOs or HPA live in this repo. `npm run metrics-check` (`.github/scripts/metrics-check.mjs`, in `Validate / Quality`) checks every metric `src/` creates **with the SDK's own meters** (`getServiceMeter` / `getDomainMeter` under the shell's identity), so the rules are the SDK's and are not restated here; the script adds only what the SDK cannot see: metrics created outside it (OpenTelemetry metrics API, prom-client), names and labels that are not literals, and metrics missing from the inventory. 9 tests; a probe shows a bad metric failing with the SDK's rule.
+
+### Known gaps
+
+- **Release `0.3.0` is not cut.** `main` changes what users see since `0.2.0` (the error page, catalogue words for every sign-in failure). Production gets `0.2.0` until a tag is pushed.
+- **Each deployed `runtime.json` must name its `environment`** (LLD §15 #12). Until every one does, the shell keeps the build-time fallback (`__ENVIRONMENT__`), the constitution's open violation V5.
+- **The IAM endpoints exist only as local stubs.** PUB-1 and P-35 must be behind `/api` in every environment (LLD §15 #6).
+- **No CloudFront until next month** (LLD §15 #9). Each environment routes `/api`, `/otel`, `/csp-report`, `/remotes/dashboard/` at its ingress and mounts the CSP (with the IdP in `form-action`) and HSTS ([docs/hosting-without-cloudfront.md](docs/hosting-without-cloudfront.md)).
+- **Dependabot's npm job fails** until the organisation Dependabot secret `PACKAGES_READ_TOKEN` exists (LLD §15 #13; needs an org admin).
+- **Official Privacy, Terms, Trust & Security and Help URLs** are not published (LLD §15 #1); the links stay hidden until they are set in `src/shared/constants/links.ts`.
+- **`tender_admin`'s tender permissions are provisional** in the role map (`src/domain/rules/permissions.ts`) until Tender Service confirms them (LLD §15 #8).
+- **Keycloak SMTP and "Forgot password"** are unconfirmed in the realms (LLD §15 #10).
+- **The `WebShellStartupFailures` alert** is an example rule; it must be deployed to the Loki ruler (LLD §15 #11).
+- **Tier 1 `platform_web_*` metrics** record nothing until governance ratifies them; v1 consent exports only errors and essential warnings.
+- **`isTransient` copies the SDK ApiClient's retry rule**, because the SDK does not export it; a test fails if they diverge. Shell helpers copied from `examples/shell` (`retrySessionContext`, `createStore`, `ShellRoot`) and the realm URL in `passwordReset.ts` wait for platform-reactcommon exports (LLD §1.2).
+- **Deliberate departures from the constitution** (no TanStack Query or Zustand, the SDK's i18n, shell-local UI, the nginx image, tests in `test/`) are recorded in ADRs 0002, 0005–0008: accepted, with the exceptions awaiting Architecture Review.
+- **No cluster deploy** (LLD §15 #7). A tag publishes a signed image; an operator rolls it and serves that environment's runtime config and manifest.
+
+### Current architecture notes
+
+- A static browser app: the production process is nginx on 8080 (uid 101). No backend, database or message bus in this repository.
+- `src/` follows the Frontend Architecture Constitution's folders (`app/`, `presentation/`, `application/`, `domain/`, `infrastructure/`, `shared/`); `eslint.config.js` and `npm run arch-lint` enforce the layers in CI.
+- Only `PLATFORM_ENVIRONMENT` (a fallback now) and `BUILD_VERSION` are compiled in. Everything else is `/config/runtime.json`, validated strictly by the SDK.
+- Every user-facing word is a key of the SDK `/i18n` `shell` namespace (`src/shared/i18n/en.json`), loaded before the first screen.
+- The access token goes only to the page's own origin, by the SDK's `ApiClient`; the browser never sends identity headers. Tokens are never stored.
+- Error boundaries: `RemoteBoundary` for `dashboard`, `MFEErrorBoundary` (`web-shell`) for the shell's own routes.
+- Coverage is gated at 95% (100% today). `COVERAGE_THRESHOLD` can override the gate locally; no workflow sets it.
+- Claude Code: `.claude/settings.json` hooks, the `invariant-reviewer` and `doc-sync-reviewer` subagents, the `/sdk-upgrade` and `/stack-sync` skills.
 
 ## [0.2.0] - 2026-11-05
 
