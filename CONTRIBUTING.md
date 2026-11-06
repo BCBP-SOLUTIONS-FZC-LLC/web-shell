@@ -168,7 +168,7 @@ The text report prints uncovered lines. Cover the branch you changed. The gate i
 
 ## Lint and typecheck
 
-`npm run lint` runs ESLint with typescript-eslint, the React hooks rules, and `@bcbp-solutions-fzc-llc/eslint-plugin`'s recommended rules on `src/`: SDK imports through public subpaths only, no identity headers, no raw `window.localStorage` / `sessionStorage`, no unsafe HTML, API route templates. `validate-quality` runs it with `--max-warnings 0`, then `npm run typecheck`.
+`npm run lint` runs ESLint with typescript-eslint, the React hooks rules, and `@bcbp-solutions-fzc-llc/eslint-plugin`'s recommended rules on `src/`: SDK imports through public subpaths only, no identity headers, no raw `window.localStorage` / `sessionStorage`, no unsafe HTML, API route templates. It also enforces the layer rules (`eslint.config.js`, proven by `test/unit/layer-rules.test.ts`): `domain/` imports no React, SDK runtime, other layer or browser global; `application/` no React, presentation, infrastructure, SDK runtime or browser global; `pages/` and `components/` nothing from `platform/` or the SDK; `platform/SessionScreens.tsx` no other infrastructure module and only `/auth` types from the SDK. Presentation never uses `fetch`, `XMLHttpRequest`, storage, IndexedDB, `location`, `history`, `navigator` or `open`, bare or through `window`, `globalThis`, `self` or `document.location`. A use case needs something from outside: the bootstrap injects it. `validate-quality` runs it with `--max-warnings 0`, then `npm run typecheck`.
 
 `npm run build` runs `tsc` before `rsbuild build`. `strict`, `noUnusedLocals` and `noUnusedParameters` are on. TypeScript is pinned to `~6.0.3`: `typescript-eslint` does not support TypeScript 7 yet, and the SDK builds on 6.
 

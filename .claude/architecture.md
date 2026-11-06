@@ -40,12 +40,14 @@ Condensed from [ARCHITECTURE.md](../ARCHITECTURE.md) and the [LLD](../docs/lld/w
 | `platform/iam.ts`, `permissions.ts`, `passwordReset.ts`, `sessionContext.ts`, `navigator.ts` | SDK subpaths only (`navigator.ts` none) |
 | `platform/ShellRoot.tsx` | React, SDK `/react` and `/auth` types |
 | `platform/screen.tsx` | `react-dom/client` |
-| `platform/SessionScreens.tsx` | `pages/*`, `screen`, `application/signIn` (injected use cases), `domain/errors`, SDK types |
-| `application/` | `domain/`, SDK `/auth` types; no React, no browser APIs |
-| `domain/` | SDK `/auth` types only |
-| `pages/*`, `components/*` | Each other; never `platform/` or the SDK |
+| `platform/SessionScreens.tsx` | `pages/*`, `screen`, `application/signIn` (injected use cases), `domain/errors`, SDK `/auth` types; no other `platform/` module, no SDK runtime |
+| `application/` | `domain/`, SDK types; no React, no browser APIs |
+| `domain/` | SDK types only |
+| `pages/*`, `components/*` | Each other, `domain/` and `application/` types; never `platform/`, the SDK, storage, the network or navigation |
 | `App.tsx` | `react-router-dom`, SDK `/react` |
 | `bootstrap.tsx` | Everything; the only module that renders `#app` |
+
+Layer rows (`domain/`, `application/`, presentation incl. `SessionScreens.tsx`) are ESLint rules in `eslint.config.js`; `test/unit/layer-rules.test.ts` proves each fires. Fix a violation by injecting a port from the bootstrap, never by widening the rule.
 
 SDK subpaths in use: `/core /config /tracing /logging /metrics /flags /auth /http /authz /i18n /mfe /nav /problem /security /react`. Tests also use `/testing` and `contracts/*.json`.
 

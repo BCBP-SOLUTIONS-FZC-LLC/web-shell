@@ -161,16 +161,18 @@ test/                       unit, integration, e2e, fixtures, smoke, browser (§
 |---|---|
 | `platform/iam.ts`, `permissions.ts` | SDK subpaths only |
 | `platform/screen.tsx` | `react-dom/client` |
-| `platform/SessionScreens.tsx` | `pages/*`, `screen`, the sign-in use cases it is given (`application/signIn`), `domain/errors`, SDK types |
-| `application/` | `domain/`, SDK `/auth` types; no React, no browser APIs (ports injected by the bootstrap) |
-| `domain/` | SDK `/auth` types only |
+| `platform/SessionScreens.tsx` | `pages/*`, `screen`, the sign-in use cases it is given (`application/signIn`), `domain/errors`, SDK `/auth` types. No other `platform/` module, no SDK runtime |
+| `application/` | `domain/`, SDK types; no React, no browser APIs (ports injected by the bootstrap) |
+| `domain/` | SDK types only |
 | `platform/rememberedEmail.ts` | `domain/` |
-| `pages/*`, `components/*` | Each other and `domain/` types. Never `platform/`, storage or the SDK |
+| `pages/*`, `components/*` | Each other, `domain/` and `application/` types. Never `platform/`, the SDK, storage, the network or navigation |
 | `App.tsx` | `react-router-dom`, SDK `/react` |
 | `bootstrap.tsx` | Everything above; every SDK subpath it initialises. The composition root: builds the sign-in use cases from infrastructure and passes them to the screens |
 | `index.ts` | `bootstrap.tsx`, dynamically |
 
 The SDK is imported through public subpaths only. `@bcbp-solutions-fzc-llc/eslint-plugin` `configs.recommended` on `src/` fails a root or deep import, identity headers, raw `window.*Storage`, unsafe HTML and non-template API paths; `npm run lint` runs with `--max-warnings 0` in `validate-quality`.
+
+The rows for `domain/`, `application/`, `pages/*`, `components/*` and `platform/SessionScreens.tsx` are lint errors (`eslint.config.js`: `@typescript-eslint/no-restricted-imports`, `no-restricted-globals`, `no-restricted-properties`); `test/unit/layer-rules.test.ts` lints a violation of each rule to prove it fires. Presentation may not use `fetch`, `XMLHttpRequest`, storage, IndexedDB, `location`, `history`, `navigator` or `open`, bare or through `window`, `globalThis`, `self` (and `document.location`); domain and application may not use any browser global. Infrastructure (`platform/`) and the composition root (`bootstrap.tsx`) are not restricted by these rules.
 
 SDK subpaths `src/` uses: `/core`, `/config`, `/tracing`, `/logging`, `/metrics`, `/flags`, `/auth`, `/http`, `/authz`, `/i18n`, `/mfe`, `/security`, `/react`.
 
