@@ -3,6 +3,8 @@
   "app.loadingDashboard": "Loading dashboard…",
   "app.contextUnavailable": "We couldn't load your permissions, so some actions are hidden.",
   "app.updateAvailable": "A new version is available.",
+  "app.error": "Something went wrong on this page.",
+  "app.error.reference": "Reference",
   "common.ok": "OK",
   "common.reload": "Reload",
   "common.signIn": "Sign in",

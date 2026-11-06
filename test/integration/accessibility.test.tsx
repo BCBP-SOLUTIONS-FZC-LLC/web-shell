@@ -72,4 +72,11 @@ describe('accessibility (axe)', () => {
     showUnavailable(new Error('x'))
     expect(await violations()).toEqual([])
   })
+
+  it('the error page around the shell\'s own screens, with a reference', async () => {
+    const { AppError } = await import('../../src/presentation/widgets/AppError')
+    render(<AppError reference="4bf92f3577b34da6a3ce929d0e0e4736" onRetry={vi.fn()} />)
+    expect(await screen.findByRole('alert')).toHaveTextContent('Reference: 4bf92f3577b34da6a3ce929d0e0e4736')
+    expect(await violations()).toEqual([])
+  })
 })

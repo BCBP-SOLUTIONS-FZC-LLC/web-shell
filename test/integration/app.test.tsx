@@ -83,3 +83,26 @@ describe('App', () => {
     expect(screen.getByTestId('remote')).toBeInTheDocument()
   })
 })
+
+describe('App, when its own screens fail to render', () => {
+  // Logging and the web-error count under `mfe` are the SDK boundary's own behaviour (tested in the SDK).
+  it('shows the error page (words from the catalogue, not the error), and Try again recovers', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {}) // React reports the caught render error
+    let fail = true
+    boundaryProps.mockImplementation(() => {
+      if (fail) throw new Error('internal detail the user must not see')
+    })
+    window.history.replaceState({}, '', '/t/acme/dashboard')
+    render(<App basename="/t/acme" />)
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('Something went wrong on this page.')
+    expect(alert).not.toHaveTextContent('internal detail')
+    expect(alert).toHaveFocus()
+
+    fail = false
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
+    expect(await screen.findByTestId('remote')).toHaveAttribute('data-remote', DASHBOARD_REMOTE)
+    boundaryProps.mockReset()
+  })
+})

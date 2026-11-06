@@ -3,17 +3,22 @@
 import { useEffect } from 'react'
 import { BrowserRouter, Navigate, Route, Routes, useNavigate, type NavigateFunction } from 'react-router-dom'
 import {
+  MFEErrorBoundary,
   RemoteBoundary,
   useAppUpdate,
   useRouteTemplate,
   useSessionContext,
 } from '@bcbp-solutions-fzc-llc/frontend-sdk/react'
 import { useShellText } from '../../shared/i18n'
+import { AppError } from '../../presentation/widgets/AppError'
 import { ContextUnavailable } from '../../presentation/widgets/ContextUnavailable'
 import { UpdateAvailable } from '../../presentation/widgets/UpdateAvailable'
 
 /** The remote that renders the dashboard, as named in /remotes/manifest.json. */
 export const DASHBOARD_REMOTE = 'dashboard'
+
+/** The shell's own name in error logs and web-error metrics (the dashboard reports as `dashboard`). */
+export const SHELL_MFE = 'web-shell'
 
 function Loading({ children }: { children: string }) {
   return (
@@ -58,15 +63,20 @@ export default function App({
   onRouter?: (navigate: NavigateFunction) => void
 }) {
   const context = useSessionContext()
+  // The shell's own screens in an error boundary (the SDK's): a render error is logged and counted
+  // under `web-shell` and replaced by AppError instead of a blank page. The remote has its own
+  // (RemoteBoundary), so a dashboard error never reaches this one.
   return (
-    <BrowserRouter {...(basename ? { basename } : {})}>
-      {onRouter ? <RouterBridge onRouter={onRouter} /> : null}
-      <Update />
-      {context ? null : <ContextUnavailable onReload={() => window.location.reload()} />}
-      <Routes>
-        <Route path="/dashboard/*" element={<Dashboard />} />
-        <Route path="*" element={<Navigate to="/dashboard" replace />} />
-      </Routes>
-    </BrowserRouter>
+    <MFEErrorBoundary mfe={SHELL_MFE} fallback={(e) => <AppError reference={e.traceId ?? e.requestId} onRetry={e.retry} />}>
+      <BrowserRouter {...(basename ? { basename } : {})}>
+        {onRouter ? <RouterBridge onRouter={onRouter} /> : null}
+        <Update />
+        {context ? null : <ContextUnavailable onReload={() => window.location.reload()} />}
+        <Routes>
+          <Route path="/dashboard/*" element={<Dashboard />} />
+          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        </Routes>
+      </BrowserRouter>
+    </MFEErrorBoundary>
   )
 }
