@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import LoginPage from '../../src/pages/LoginPage'
+import { localStorageRememberedEmail as remembered } from '../../src/platform/rememberedEmail'
 
 describe('login hero carousel', () => {
   afterEach(() => {
@@ -9,7 +10,7 @@ describe('login hero carousel', () => {
 
   it('advances on a timer and follows the slide controls', async () => {
     vi.useFakeTimers()
-    render(<LoginPage onContinue={async () => {}} />)
+    render(<LoginPage rememberedEmail={remembered} onContinue={async () => {}} />)
 
     expect(screen.getByRole('heading', { name: /Next-Gen System/ })).toBeInTheDocument()
     expect(screen.getByText(/Access your unified workspace/)).toBeInTheDocument()
@@ -58,7 +59,7 @@ describe('login hero carousel', () => {
   it('cross-fades to a slide once its image has loaded, and ignores a click on the current slide', async () => {
     vi.useFakeTimers()
     vi.spyOn(HTMLImageElement.prototype, 'naturalWidth', 'get').mockReturnValue(1200)
-    const { container } = render(<LoginPage onContinue={async () => {}} />)
+    const { container } = render(<LoginPage rememberedEmail={remembered} onContinue={async () => {}} />)
     const images = () => [...container.querySelectorAll('section img')]
 
     fireEvent.click(screen.getByRole('button', { name: 'Show slide 1' }))
@@ -77,7 +78,7 @@ describe('login hero carousel', () => {
   })
 
   it('fetches only the current and the next slide, then each slide as it comes up', () => {
-    const { container } = render(<LoginPage onContinue={async () => {}} />)
+    const { container } = render(<LoginPage rememberedEmail={remembered} onContinue={async () => {}} />)
     const sources = () =>
       [...container.querySelectorAll('section img.object-cover')].map((i) => i.getAttribute('src'))
     expect(sources().filter(Boolean)).toEqual([expect.stringContaining('image1'), expect.stringContaining('image2')])
@@ -87,7 +88,7 @@ describe('login hero carousel', () => {
 
   it('does not mark an image that failed to decode as loaded', () => {
     vi.spyOn(HTMLImageElement.prototype, 'naturalWidth', 'get').mockReturnValue(0)
-    const { container } = render(<LoginPage onContinue={async () => {}} />)
+    const { container } = render(<LoginPage rememberedEmail={remembered} onContinue={async () => {}} />)
     fireEvent.click(screen.getByRole('button', { name: 'Show slide 2' }))
     const img = container.querySelectorAll('section img')[1]!
     fireEvent.load(img)

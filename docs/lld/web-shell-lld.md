@@ -14,6 +14,7 @@
 
 | Date | Change |
 |---|---|
+| 2026-11-06 | Constitution step 3: use cases (`application/`) and repository contracts (`domain/`); presentation no longer reaches storage, PUB-1 or browser navigation |
 | 2026-11-06 | SDK `1.0.0-alpha.6`: `runtime.json` names the environment; config loaded before the identity; deploy check in smoke `live` |
 | 2026-11-05 | Observability standard: inventory (`docs/observability.md`), `metrics-check` in CI |
 | 2026-11-05 | Released `v0.1.0` and `v0.2.0`; status and open items updated |
@@ -140,7 +141,10 @@ src/
     ShellRoot.tsx           PlatformProvider with the live context and locale
     navigator.ts            shellNavigator: the router as the SDK's navigate() target
     screen.tsx              #shell-screen host (fixed overlay outside #app)
-  pages/                    LoginPage, useEmailSignIn, rememberEmail, links, PageLinks
+    rememberedEmail.ts      localStorageRememberedEmail (implements domain RememberedEmailRepository)
+  application/              signIn.ts (SignInUseCases); use-cases/ resolveWorkspace, requestPasswordReset
+  domain/                   repositories/rememberedEmail.ts (contract), errors.ts (WorkspaceNotFoundError)
+  pages/                    LoginPage, useEmailSignIn, links, PageLinks
   components/BrandLogo.tsx
   assets/images/            carousel photos and the logo, bundled into /assets/ with a hash
   theme/, index.css         Tailwind 4 and daisyUI theme
@@ -157,10 +161,13 @@ test/                       unit, integration, e2e, fixtures, smoke, browser (§
 |---|---|
 | `platform/iam.ts`, `permissions.ts` | SDK subpaths only |
 | `platform/screen.tsx` | `react-dom/client` |
-| `platform/SessionScreens.tsx` | `pages/*`, `iam`, `screen`, SDK types |
-| `pages/*`, `components/*` | Each other. Never `platform/` or the SDK |
+| `platform/SessionScreens.tsx` | `pages/*`, `screen`, the sign-in use cases it is given (`application/signIn`), `domain/errors`, SDK types |
+| `application/` | `domain/`, SDK `/auth` types; no React, no browser APIs (ports injected by the bootstrap) |
+| `domain/` | SDK `/auth` types only |
+| `platform/rememberedEmail.ts` | `domain/` |
+| `pages/*`, `components/*` | Each other and `domain/` types. Never `platform/`, storage or the SDK |
 | `App.tsx` | `react-router-dom`, SDK `/react` |
-| `bootstrap.tsx` | Everything above; every SDK subpath it initialises |
+| `bootstrap.tsx` | Everything above; every SDK subpath it initialises. The composition root: builds the sign-in use cases from infrastructure and passes them to the screens |
 | `index.ts` | `bootstrap.tsx`, dynamically |
 
 The SDK is imported through public subpaths only. `@bcbp-solutions-fzc-llc/eslint-plugin` `configs.recommended` on `src/` fails a root or deep import, identity headers, raw `window.*Storage`, unsafe HTML and non-template API paths; `npm run lint` runs with `--max-warnings 0` in `validate-quality`.
@@ -393,7 +400,7 @@ Validated strictly by the SDK (unknown keys rejected). Schema: SDK LLD §12.1.
 |---|---|---|
 | `@bcbp-solutions-fzc-llc/frontend-sdk:*` (workspace cache, session id, last activity, last user, signed-out mark) | `localStorage` | SDK. No tokens |
 | `@bcbp-solutions-fzc-llc/frontend-sdk:storage:<namespace>:<appId>:<key>` | `localStorage` | Remotes through `storage(appId)`; cleared on sign-out. Values under the pre-alpha.4 keys are not read |
-| `bcbp.rememberEmail`, `bcbp.loginEmail` | `localStorage` | `pages/rememberEmail.ts`, only when "Remember Email" is checked; every access in `try`. The one file exempt from `no-raw-storage` (`eslint.config.js`) |
+| `bcbp.rememberEmail`, `bcbp.loginEmail` | `localStorage` | `platform/rememberedEmail.ts` (the domain's `RememberedEmailRepository`), only when "Remember Email" is checked; every access in `try`. The one file exempt from `no-raw-storage` (`eslint.config.js`) |
 
 ---
 

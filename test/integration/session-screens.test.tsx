@@ -4,19 +4,31 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { IdentityProvider, Workspace } from '@bcbp-solutions-fzc-llc/frontend-sdk/auth'
 
 const resolve = vi.fn<(identifier: string) => Promise<Workspace | undefined>>()
-vi.mock('../../src/platform/iam', () => ({ workspaceResolver: { resolve: (i: string) => resolve(i) } }))
-
-vi.mock('../../src/platform/passwordReset', () => ({
-  passwordResetUrl: (w: Workspace) => `https://idp.test/realms/${w.realm}/login-actions/reset-credentials`,
-}))
+const opened = vi.fn<(url: string) => void>()
 const screens = await import('../../src/platform/SessionScreens')
 const { resetScreen } = await import('../../src/platform/screen')
+const { resolveWorkspaceUseCase } = await import('../../src/application/use-cases/resolveWorkspace')
+const { requestPasswordResetUseCase } = await import('../../src/application/use-cases/requestPasswordReset')
+const { localStorageRememberedEmail } = await import('../../src/platform/rememberedEmail')
+
+// The real sign-in use cases, as the bootstrap builds them, over a fake PUB-1 and a recorded navigation.
+const resolveWorkspace = resolveWorkspaceUseCase({ resolve: (i) => resolve(i) })
+const useCases = {
+  resolveWorkspace,
+  requestPasswordReset: requestPasswordResetUseCase({
+    resolveWorkspace,
+    resetUrl: (w: Workspace) => `https://idp.test/realms/${w.realm}/login-actions/reset-credentials`,
+    open: (url: string) => opened(url),
+  }),
+  rememberedEmail: localStorageRememberedEmail,
+}
 
 const acme: Workspace = { realm: 'tenant-acme', trial: false, slug: 'acme' }
 
 afterEach(() => {
   act(() => resetScreen())
   resolve.mockReset()
+  opened.mockReset()
 })
 
 async function typeEmail(email: string) {
@@ -28,7 +40,7 @@ async function typeEmail(email: string) {
 describe('askForWorkspace', () => {
   it('resolves the typed email to a workspace and returns it with the login hint', async () => {
     resolve.mockResolvedValue(acme)
-    const choice = screens.askForWorkspace()
+    const choice = screens.askForWorkspace(useCases)
     await typeEmail('ada@acme.com')
     await expect(choice).resolves.toEqual({ workspace: acme, loginHint: 'ada@acme.com' })
     expect(resolve).toHaveBeenCalledWith('ada@acme.com')
@@ -36,7 +48,7 @@ describe('askForWorkspace', () => {
 
   it('shows one generic message for not found and for an unreachable resolver', async () => {
     resolve.mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error('429'))
-    void screens.askForWorkspace('Your session has ended.')
+    void screens.askForWorkspace(useCases, 'Your session has ended.')
     expect(await screen.findByText('Your session has ended.')).toBeInTheDocument()
     await typeEmail('ada@acme.com')
     expect(await screen.findByText(screens.WORKSPACE_NOT_FOUND)).toBeInTheDocument()
@@ -48,25 +60,39 @@ describe('askForWorkspace', () => {
   })
 
   it("Forgot your password? resolves the email and goes to that realm's reset page", async () => {
-    const assign = vi.mocked(window.location.assign)
     resolve.mockResolvedValueOnce(acme).mockResolvedValueOnce(undefined)
-    void screens.askForWorkspace()
+    void screens.askForWorkspace(useCases)
     const user = userEvent.setup()
     await user.type(await screen.findByRole('textbox', { name: /work email address/i }), 'ada@acme.com')
     await user.click(screen.getByRole('button', { name: 'Forgot your password?' }))
-    await waitFor(() => expect(assign).toHaveBeenCalledWith('https://idp.test/realms/tenant-acme/login-actions/reset-credentials'))
+    await waitFor(() => expect(opened).toHaveBeenCalledWith('https://idp.test/realms/tenant-acme/login-actions/reset-credentials'))
     expect(resolve).toHaveBeenCalledWith('ada@acme.com')
   })
 
   it('Forgot your password? for an unknown email shows the generic message and stays', async () => {
-    const assign = vi.mocked(window.location.assign)
     resolve.mockResolvedValueOnce(undefined)
-    void screens.askForWorkspace()
+    void screens.askForWorkspace(useCases)
     const user = userEvent.setup()
     await user.type(await screen.findByRole('textbox', { name: /work email address/i }), 'nobody@else.com')
     await user.click(screen.getByRole('button', { name: 'Forgot your password?' }))
     expect(await screen.findByText(screens.WORKSPACE_NOT_FOUND)).toBeInTheDocument()
-    expect(assign).not.toHaveBeenCalled()
+    expect(opened).not.toHaveBeenCalled()
+  })
+})
+
+describe('askForWorkspace, other failures', () => {
+  it("shows a use case's own error as is: only WorkspaceNotFoundError becomes the generic message", async () => {
+    void screens.askForWorkspace({
+      ...useCases,
+      requestPasswordReset: async () => {
+        throw new Error('The reset page is unavailable.')
+      },
+    })
+    const user = userEvent.setup()
+    await user.type(await screen.findByRole('textbox', { name: /work email address/i }), 'ada@acme.com')
+    await user.click(screen.getByRole('button', { name: 'Forgot your password?' }))
+    expect(await screen.findByText('The reset page is unavailable.')).toBeInTheDocument()
+    expect(screen.queryByText(screens.WORKSPACE_NOT_FOUND)).toBeNull()
   })
 })
 
@@ -115,7 +141,7 @@ describe('dialogs', () => {
 
   it('wrong workspace: signs out, or switches to a resolved workspace', async () => {
     const idp = { logout: vi.fn(async () => {}), switchWorkspace: vi.fn(async () => {}) } as unknown as IdentityProvider
-    act(() => screens.showWrongWorkspace(idp))
+    act(() => screens.showWrongWorkspace(idp, useCases))
     const user = userEvent.setup()
     await user.click(screen.getByRole('button', { name: 'Sign out' }))
     expect(idp.logout).toHaveBeenCalledOnce()

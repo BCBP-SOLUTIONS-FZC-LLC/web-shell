@@ -7,7 +7,7 @@ sequenceDiagram
     participant KC as Keycloak
 
     User->>Login: submit work email
-    Login->>Login: persistRememberEmail
+    Login->>Login: rememberedEmail.save (injected repository)
     Login->>Screens: onContinue(email)
     Screens->>IAM: GET /v1/public/tenants/resolve?identifier=email (no token)
     alt not found or unreachable

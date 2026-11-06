@@ -2,6 +2,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import LoginLatest from '../../src/pages/LoginPage'
+import { localStorageRememberedEmail as remembered } from '../../src/platform/rememberedEmail'
 import { EMAIL_FIRST } from '../../src/pages/useEmailSignIn'
 
 const pages = [['latest', LoginLatest]] as const
@@ -12,7 +13,7 @@ const submit = () => screen.getByRole('button', { name: /continue with email|red
 
 describe.each(pages)('login page %s', (_name, LoginPage) => {
   it('shows the brand and feature list', () => {
-    render(<LoginPage onContinue={vi.fn()} />)
+    render(<LoginPage rememberedEmail={remembered} onContinue={vi.fn()} />)
     expect(screen.getByRole('img', { name: 'Beyond Code' })).toBeInTheDocument()
     expect(screen.getByText('95% Accuracy Forecasting')).toBeInTheDocument()
     expect(screen.getByText('Real-time Site Monitoring')).toBeInTheDocument()
@@ -22,20 +23,20 @@ describe.each(pages)('login page %s', (_name, LoginPage) => {
   it('prefills a remembered email', () => {
     localStorage.setItem('bcbp.rememberEmail', 'true')
     localStorage.setItem('bcbp.loginEmail', 'ada@bcbp.com')
-    render(<LoginPage onContinue={vi.fn()} />)
+    render(<LoginPage rememberedEmail={remembered} onContinue={vi.fn()} />)
     expect(emailBox()).toHaveValue('ada@bcbp.com')
     expect(rememberBox()).toBeChecked()
   })
 
   it('shows a notice from the bootstrap', () => {
-    render(<LoginPage onContinue={vi.fn()} notice="Your session has ended." />)
+    render(<LoginPage rememberedEmail={remembered} onContinue={vi.fn()} notice="Your session has ended." />)
     expect(screen.getByText('Your session has ended.')).toBeInTheDocument()
   })
 
   it('remembers the email and continues with it trimmed', async () => {
     const user = userEvent.setup()
     const onContinue = vi.fn(() => new Promise<void>(() => {}))
-    render(<LoginPage onContinue={onContinue} />)
+    render(<LoginPage rememberedEmail={remembered} onContinue={onContinue} />)
 
     await user.type(emailBox(), ' ada@bcbp.com ')
     await user.click(rememberBox())
@@ -51,7 +52,7 @@ describe.each(pages)('login page %s', (_name, LoginPage) => {
     localStorage.setItem('bcbp.rememberEmail', 'true')
     localStorage.setItem('bcbp.loginEmail', 'ada@bcbp.com')
     const user = userEvent.setup()
-    render(<LoginPage onContinue={vi.fn(async () => {})} />)
+    render(<LoginPage rememberedEmail={remembered} onContinue={vi.fn(async () => {})} />)
 
     await user.click(rememberBox())
     await user.click(submit())
@@ -63,7 +64,7 @@ describe.each(pages)('login page %s', (_name, LoginPage) => {
   it('shows why continuing failed and lets the user retry', async () => {
     const user = userEvent.setup()
     const onContinue = vi.fn().mockRejectedValueOnce(new Error('We could not find a workspace for that email.'))
-    render(<LoginPage onContinue={onContinue} />)
+    render(<LoginPage rememberedEmail={remembered} onContinue={onContinue} />)
 
     await user.type(emailBox(), 'ada@bcbp.com')
     await user.click(submit())
@@ -74,14 +75,14 @@ describe.each(pages)('login page %s', (_name, LoginPage) => {
 
   it('falls back to a generic message for a non-Error rejection', async () => {
     const user = userEvent.setup()
-    render(<LoginPage onContinue={vi.fn().mockRejectedValueOnce('nope')} />)
+    render(<LoginPage rememberedEmail={remembered} onContinue={vi.fn().mockRejectedValueOnce('nope')} />)
     await user.type(emailBox(), 'ada@bcbp.com')
     await user.click(submit())
     expect(await screen.findByText('Unable to start sign-in.')).toBeInTheDocument()
   })
 
   it('has no dead links: no Forgot without a handler, and no help or legal link without a URL', () => {
-    const { container } = render(<LoginPage onContinue={vi.fn()} />)
+    const { container } = render(<LoginPage rememberedEmail={remembered} onContinue={vi.fn()} />)
     expect(screen.queryByRole('button', { name: 'Forgot your password?' })).toBeNull()
     expect(screen.queryByText('Trouble logging in?')).toBeNull()
     expect(container.querySelector('footer')).toBeNull()
@@ -90,7 +91,7 @@ describe.each(pages)('login page %s', (_name, LoginPage) => {
 
   it('Forgot your password? asks for the email first', async () => {
     const onForgotPassword = vi.fn(async () => {})
-    render(<LoginPage onContinue={vi.fn()} onForgotPassword={onForgotPassword} />)
+    render(<LoginPage rememberedEmail={remembered} onContinue={vi.fn()} onForgotPassword={onForgotPassword} />)
     await userEvent.setup().click(screen.getByRole('button', { name: 'Forgot your password?' }))
     expect(await screen.findByRole('alert')).toHaveTextContent(EMAIL_FIRST)
     expect(onForgotPassword).not.toHaveBeenCalled()
@@ -102,7 +103,7 @@ describe.each(pages)('login page %s', (_name, LoginPage) => {
       .fn<(email: string) => Promise<void>>()
       .mockRejectedValueOnce(new Error('We could not find a workspace for that email.'))
       .mockRejectedValueOnce('nope')
-    render(<LoginPage onContinue={vi.fn()} onForgotPassword={onForgotPassword} />)
+    render(<LoginPage rememberedEmail={remembered} onContinue={vi.fn()} onForgotPassword={onForgotPassword} />)
     await user.type(emailBox(), ' ada@bcbp.com ')
     await user.click(screen.getByRole('button', { name: 'Forgot your password?' }))
     expect(onForgotPassword).toHaveBeenCalledWith('ada@bcbp.com')

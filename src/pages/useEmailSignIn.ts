@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { getRememberedEmail, persistRememberEmail } from './rememberEmail'
+import type { RememberedEmailRepository } from '../domain/repositories/rememberedEmail'
 
 export type LoginPageProps = {
   /**
@@ -14,15 +14,21 @@ export type LoginPageProps = {
   onForgotPassword?: (email: string) => Promise<void>
   /** A message from the bootstrap, e.g. why the last sign-in did not complete. */
   notice?: string | null
+  /** "Remember Email": given by the composition root (the page never touches storage itself). */
+  rememberedEmail: RememberedEmailRepository
 }
 
 /** Shown when "Forgot your password?" is chosen before an email is typed. */
 export const EMAIL_FIRST = 'Enter your work email first, then choose “Forgot your password?”.'
 
 /** The email form state shared by both login layouts. */
-export function useEmailSignIn(onContinue: LoginPageProps['onContinue'], onForgotPassword?: LoginPageProps['onForgotPassword']) {
-  const [email, setEmail] = useState(getRememberedEmail)
-  const [remember, setRemember] = useState(() => getRememberedEmail() !== '')
+export function useEmailSignIn(
+  onContinue: LoginPageProps['onContinue'],
+  rememberedEmail: RememberedEmailRepository,
+  onForgotPassword?: LoginPageProps['onForgotPassword'],
+) {
+  const [email, setEmail] = useState(() => rememberedEmail.get())
+  const [remember, setRemember] = useState(() => rememberedEmail.get() !== '')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -31,7 +37,7 @@ export function useEmailSignIn(onContinue: LoginPageProps['onContinue'], onForgo
     setError(null)
     setSubmitting(true)
     try {
-      persistRememberEmail(email, remember)
+      rememberedEmail.save(email, remember)
       await onContinue(email.trim())
     } catch (err) {
       setSubmitting(false)

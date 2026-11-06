@@ -12,11 +12,14 @@ Condensed from [ARCHITECTURE.md](../ARCHITECTURE.md) and the [LLD](../docs/lld/w
 | `src/platform/iam.ts` | `toWorkspace` (PUB-1), `toSessionContext` (P-35), `workspaceResolver`, `sessionContextSource` over a lazy `createApiClient()` |
 | `src/platform/permissions.ts` | `IAM_ROLES`, `permissions` (role → `action:resource`) |
 | `src/platform/SessionScreens.tsx` | `askForWorkspace`, `showSignedOut`, `showDeviceClock`, `showSessionEnded`, `showWrongWorkspace`, `showWorkspaceNotFound`, `WORKSPACE_NOT_FOUND` |
+| `src/application/` | `signIn.ts` (`SignInUseCases`), `use-cases/resolveWorkspace.ts`, `use-cases/requestPasswordReset.ts` (ports injected) |
+| `src/domain/` | `repositories/rememberedEmail.ts` (contract), `errors.ts` (`WorkspaceNotFoundError`) |
+| `src/platform/rememberedEmail.ts` | `localStorageRememberedEmail` (the one raw-storage file) |
 | `src/platform/screen.tsx` | `#shell-screen` fixed overlay host: `showScreen`, `hideScreen`, `resetScreen` |
 | `src/platform/sessionContext.ts` | `isTransient`, `retrySessionContext` (1 s, 2 s, 4 s; abortable), `createStore` |
 | `src/platform/ShellRoot.tsx` | `PlatformProvider` with the live context (store) and locale (`useLocale`) |
 | `src/platform/navigator.ts` | `shellNavigator(navigate, basename)`: under the basename → router, else a full load |
-| `src/pages/` | `LoginPage`, `useEmailSignIn` (submit, forgot password), `rememberEmail`, `links` + `PageLinks` (help/legal, shown only with a URL) |
+| `src/pages/` | `LoginPage`, `useEmailSignIn` (submit, forgot password; the remembered-email repository is a prop), `links` + `PageLinks` (help/legal, shown only with a URL) |
 | `src/assets/images/` | Carousel photos and the logo, imported so they ship content-hashed under `/assets/` |
 | `src/platform/passwordReset.ts` | `passwordResetUrl(workspace)`: Keycloak `login-actions/reset-credentials` from `getConfig().auth` |
 | `rsbuild.config.ts` | `pluginReact`, `pluginPlatform({ role: 'shell' })`, `pluginVersionJson`; output, CSS, dev server |
@@ -37,7 +40,9 @@ Condensed from [ARCHITECTURE.md](../ARCHITECTURE.md) and the [LLD](../docs/lld/w
 | `platform/iam.ts`, `permissions.ts`, `passwordReset.ts`, `sessionContext.ts`, `navigator.ts` | SDK subpaths only (`navigator.ts` none) |
 | `platform/ShellRoot.tsx` | React, SDK `/react` and `/auth` types |
 | `platform/screen.tsx` | `react-dom/client` |
-| `platform/SessionScreens.tsx` | `pages/*`, `iam`, `screen`, SDK types |
+| `platform/SessionScreens.tsx` | `pages/*`, `screen`, `application/signIn` (injected use cases), `domain/errors`, SDK types |
+| `application/` | `domain/`, SDK `/auth` types; no React, no browser APIs |
+| `domain/` | SDK `/auth` types only |
 | `pages/*`, `components/*` | Each other; never `platform/` or the SDK |
 | `App.tsx` | `react-router-dom`, SDK `/react` |
 | `bootstrap.tsx` | Everything; the only module that renders `#app` |
