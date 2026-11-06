@@ -4,7 +4,7 @@ Standalone Mermaid source. [ARCHITECTURE.md](../../ARCHITECTURE.md) embeds each 
 
 | File | Diagram | Section |
 |---|---|---|
-| [`layer-model.mmd`](mermaid/layer-model.mmd) | Entry, UI, platform ports, SDK, remote, build, and image | ARCHITECTURE.md § Layer model |
+| [`layer-model.mmd`](mermaid/layer-model.mmd) | The constitution's layers: `app/`, `presentation/`, `application/`, `domain/`, `infrastructure/`, `shared/`, the SDK and the remote | ARCHITECTURE.md § Layer model |
 | [`package-dependencies.mmd`](mermaid/package-dependencies.mmd) | TypeScript import direction | ARCHITECTURE.md § Module dependency graph |
 | [`bootstrap-flow.mmd`](mermaid/bootstrap-flow.mmd) | The SDK start-up sequence and the session branches | ARCHITECTURE.md § Bootstrap flow |
 | [`sign-in-flow.mmd`](mermaid/sign-in-flow.mmd) | Email → PUB-1 → Keycloak realm, PKCE through the SDK | ARCHITECTURE.md § Sign-in flow |

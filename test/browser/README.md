@@ -15,7 +15,7 @@ npx playwright install chromium firefox webkit   # once, if the browsers are mis
 
 | Server | Serves |
 |---|---|
-| App | `dist/` with the platform CSP (`platform-reactcommon` `examples/cloudfront/csp.mjs`, copied in `buildCsp`) and the nginx SPA rule; a runtime config pointed at the fake Keycloak; a manifest whose `dashboard` entry is a stub built only on the shell's shared React and SDK (integrity `sha384`); PUB-1 and P-35; recorders for `/otel/*` and `/csp-report`; `GET /__test/state` and `/__test/reset` |
+| App | `dist/` with the production CSP (`buildCsp` reads `nginx/security.d/csp.conf.example`, the one CSP source) and the nginx SPA rule; a runtime config pointed at the fake Keycloak; a manifest whose `dashboard` entry is a stub built only on the shell's shared React and SDK (integrity `sha384`); PUB-1 and P-35; recorders for `/otel/*` and `/csp-report`; `GET /__test/state` and `/__test/reset` |
 | Fake Keycloak (second origin) | Authorize (the user counts as signed in; `prompt=none` fails without an SSO session), the token endpoint with PKCE and CORS, and the end-session endpoint the global sign-out POSTs a form to |
 
 ## Cases (`shell.spec.ts`)

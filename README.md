@@ -117,10 +117,11 @@ web-shell/
 ├── scripts/                     # Local Keycloak compose, health check, user seed
 ├── test/
 │   ├── unit/                    # IAM mappings, entry point, small helpers, dev middleware
-│   ├── integration/             # Login pages, session screens, App, bootstrap (SDK faked)
+│   ├── integration/             # The login page, session screens, App, bootstrap (SDK faked)
 │   ├── e2e/                     # The real shell and SDK, end to end
 │   ├── fixtures/                # FakeKeycloak, FakeNetwork, FakeBroadcastChannel
-│   └── smoke/                   # GET-only checks against the served image or a deployment
+│   ├── smoke/                   # GET-only checks against the served image or a deployment
+│   └── browser/                 # Playwright: the build in three engines under the production CSP; the dashboard contract
 ├── vitest.config.ts             # happy-dom, build constants, SDK inlined; excludes test/smoke
 ├── vitest.smoke.config.ts       # test/smoke only, node environment
 ├── docs/                        # LLD, architecture diagrams, pipeline, runbooks
@@ -227,8 +228,8 @@ Port **8080** is Keycloak in this compose file and also the port the shell image
 
 | Layer | Path | What it exercises |
 |---|---|---|
-| Unit | `test/unit/` | PUB-1 and P-35 mappings and ports, the entry point, remember-email, consent, the screen host, `BrandLogo`, the session-context retry, the navigator adapter, the dev server's platform middleware |
-| Integration | `test/integration/` | Both login layouts and the carousel, the session screens, `App` routes, and the bootstrap's order and branches; axe-core over every shell screen (`accessibility.test.tsx`) |
+| Unit | `test/unit/` | PUB-1 and P-35 mappings and ports, the entry point, remember-email, the screen host, `BrandLogo`, the session-context retry (and its agreement with the SDK ApiClient), the navigator adapter, the dev server's platform middleware, the layer rules and arch-lint firing, the text catalogue and the hard-coded-text guard, the no-SDK-duplicates guard, metrics-check, the use cases, the links, the password reset URL |
+| Integration | `test/integration/` | The login page and the carousel, the session screens, `App` routes, and the bootstrap's order and branches; axe-core over every shell screen (`accessibility.test.tsx`) |
 | End to end | `test/e2e/` | The real bootstrap, screens, `App` and SDK against a fake Keycloak (PKCE) and network: email → PUB-1 → sign-in → the `dashboard` remote under `/t/<slug>/`, deep links, role-map permissions in the remote, deny-all, a failing remote, global sign-out, the device clock |
 | Smoke | `test/smoke/` | `npm run test-smoke` against the served image (CI) or a deployment: the SPA rule, Cache-Control, script integrity, 404s, and the runtime files validated by the SDK. See [test/smoke/README.md](./test/smoke/README.md) |
 | Browser | `test/browser/` | `npm run test-browser` after a build: the production bundle in Chromium, Firefox and WebKit under the production CSP and Trusted Types, with a fake Keycloak on a second origin: fonts, PKCE sign-in, the remote with integrity, `navigate()`, the sign-out form POST, the start-up failure report, colour contrast |
@@ -250,6 +251,7 @@ The SDK reads no environment variables in the browser. It loads `/config/runtime
 
 | Key | Image default (`public/config/runtime.json`) | Local (`config/runtime.local.json`) |
 |---|---|---|
+| `environment` | none: each deployment writes its own (`dev`, `test`, `staging`, `prod`); smoke `live` checks it | `local` |
 | `api.baseUrl` | `/api` | `/api` |
 | `auth.idpOrigin` | `https://auth.bcbpsolutions.com` | `http://localhost:8080` |
 | `auth.clientId` | `tender-web` | `app1` |
@@ -259,8 +261,9 @@ The SDK reads no environment variables in the browser. It loads `/config/runtime
 | `telemetry` | `/otel`, sample `0.1`, `info` | `/otel`, sample `1`, `debug` |
 | `remotes.allowedOrigins` | `[]` | `["http://localhost:5002"]` |
 | `i18n` | `en` | `en` |
+| `flags` | `{}` (platform flags; tenant flags come from P-35) | `{}` |
 
-The full schema is in the SDK's README (Runtime configuration) and LLD §12.1.
+The full schema is in the SDK's README (Runtime configuration) and the SDK LLD §12.1.
 
 ### Build time
 
@@ -293,13 +296,13 @@ The image takes `PLATFORM_ENVIRONMENT`, `BUILD_VERSION` and `SOURCE_DATE_EPOCH` 
 
 ## CI
 
-Five workflow files, eight `ci.yml` jobs. Markdown-only pushes do not run `ci.yml`. Job order and the failure runbooks are in [docs/pipeline](./docs/pipeline/README.md).
+Five workflow files, nine `ci.yml` jobs. Markdown-only pushes do not run `ci.yml`. Job order and the failure runbooks are in [docs/pipeline](./docs/pipeline/README.md).
 
 Every `npm ci` reads `@bcbp-solutions-fzc-llc/*` from GitHub Packages with `GITHUB_TOKEN` (`packages: read`). This repository needs read access on each package's page: Package settings → Manage Actions access → Add repository.
 
 - **`ci.yml`** — orchestrator. `validate-test.yml` and `validate-quality.yml` run in parallel with `build-image` (Hadolint, then a Buildx cache build). Trivy and the smoke job follow the image build; the smoke job sets up Node, runs `npm ci`, then `smoke-tests.sh` (size, startup gate, the smoke suite, and the mounted CSP and HSTS). `browser` runs the real-browser suite (Chromium, Firefox, WebKit) and gates the image push. `dashboard-contract` builds mfe-dashboard (`vars.DASHBOARD_REF`, default `main`) and runs this shell with it; it reports but does not gate. Pull requests get a status comment, failures included. A push to `main` or `master` also pushes `ghcr.io/bcbp-solutions-fzc-llc/web-shell`, tagged with the branch name and `sha-<short>`, and Cosign-signs that digest.
 - **`validate-test.yml`** — `npm ci`, `npm run test:coverage`, the 95% coverage gate, `npm run build`, then the bundle budget (`npm run budget`).
-- **`validate-quality.yml`** — ESLint (`--max-warnings 0`) and `npm run typecheck`. Workflow files must use literal operators and LF line endings, `Dockerfile` `FROM` lines must be digest-pinned, `.dockerignore` must exist, and `npm audit --omit=dev --audit-level=high` must pass.
+- **`validate-quality.yml`** — ESLint (`--max-warnings 0`), `npm run arch-lint`, `npm run metrics-check` and `npm run typecheck`. Workflow files must use literal operators and LF line endings, `Dockerfile` `FROM` lines must be digest-pinned, `.dockerignore` must exist, and `npm audit --omit=dev --audit-level=high` must pass.
 - **`changelog-check.yml`** — a pull request that touches `src/`, `package.json`, `package-lock.json`, `Dockerfile`, `nginx/`, `rsbuild.config.ts`, `config/**`, `public/config/**`, or `index.html` must also update `CHANGELOG.md`.
 - **`release.yml`** — tag `vX.Y.Z` or `vX.Y.Z-*`, or a manual run with a tag input. Re-validates, requires a matching changelog section, packs `web-shell_<tag>_dist.tar.gz` (source maps removed; kept as the workflow artifact `sourcemaps-<tag>`), pushes the image by digest only, scans it, attaches the SBOM and SLSA provenance, signs with Cosign, and only then adds the semver tags and `latest` (`tag-signed-image.sh`), so a failed step leaves an untagged digest and moves no tag; then it opens the GitHub Release. Tagging does not deploy a cluster.
 
@@ -364,7 +367,7 @@ Two stages, both digest-pinned: `node:26-bookworm` runs `npm ci` and `npm run bu
 |---|---|
 | `GET /realms/{realm}/protocol/openid-connect/auth` | Browser redirect to sign in, or a silent `prompt=none` restore |
 | `POST /realms/{realm}/protocol/openid-connect/token` | Code exchange and refresh |
-| `GET /realms/{realm}/protocol/openid-connect/logout` | Sign out |
+| `POST /realms/{realm}/protocol/openid-connect/logout` (a hidden form: `id_token_hint`, `client_id`, `post_logout_redirect_uri`) | Sign out, globally (the CSP's `form-action` must allow the IdP origin) |
 | `GET /realms/{realm}/login-actions/reset-credentials?client_id=` | "Forgot your password?" (browser navigation, built by the shell) |
 
 `{realm}` is the workspace's realm (`trial`, or `tenant-<slug>`). The SDK builds these URLs from `{auth.idpOrigin}/realms/{realm}`; it does not fetch discovery. The shell does not call the Keycloak Admin API. `scripts/seed-keycloak-user.mjs` uses `kcadm` inside the dev container only.
@@ -411,7 +414,7 @@ Setup, how to extend the shell, the test gate, and the pull request checklist ar
 | [ARCHITECTURE.md](./ARCHITECTURE.md) | Module layout, bootstrap, sign-in and dashboard flows, storage, and the threat model |
 | [CONTRIBUTING.md](./CONTRIBUTING.md) | Local setup, extension rules, tests, and the pull request checklist |
 | [VERSIONING.md](./VERSIONING.md) | SemVer rules, image tags, Cosign verify, how to cut a release |
-| [CHANGELOG.md](./CHANGELOG.md) | User-facing history. Releases are still `[Unreleased]` |
+| [CHANGELOG.md](./CHANGELOG.md) | User-facing history: released `0.1.0` and `0.2.0`; `[Unreleased]` for `main` |
 | [SECURITY.md](./.github/SECURITY.md) | How to report a vulnerability |
 | [.github/pull_request_template.md](./.github/pull_request_template.md) | What a pull request needs, including `npm run test:ci` |
 | [.claude/CLAUDE.md](./.claude/CLAUDE.md) | Guidance for Claude Code: critical rules, commands, reference files |

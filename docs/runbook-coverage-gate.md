@@ -5,10 +5,11 @@
 `.github/workflows/validate-test.yml` is the reusable test job for pull requests, pushes to `main`, and release tags.
 
 1. `npm ci`
-2. `npm run test:coverage` (Vitest unit and integration)
+2. `npm run test:coverage` (Vitest unit, integration and e2e)
 3. `.github/scripts/coverage-gate.mjs`
 4. Upload the `coverage/` directory as an artifact
 5. `npm run build` (`tsc`, then the production bundle)
+6. `npm run budget` (bundle size budget over `dist/`)
 
 The gate reads `coverage/coverage-summary.json`. It fails when statements, branches, functions, or lines are below **95%**. `COVERAGE_THRESHOLD` overrides that number. The workflow does not set it. Leave it unset in CI.
 

@@ -20,7 +20,7 @@ Only `__ENVIRONMENT__` and `__BUILD_VERSION__` are compiled into the bundle. Eve
 
 ## Layer model
 
-`src/` follows the Frontend Architecture Constitution's structure. Presentation → application → domain; infrastructure implements the domain's contracts; `app/` is the composition root and the only place that knows every layer. Nothing in `src/` imports the bootstrap except the entry. The arrows below are the real import direction; `npm run arch-lint` checks every one of them.
+`src/` follows the Frontend Architecture Constitution's structure. Presentation → application → domain; infrastructure implements the domain's contracts; `app/` is the composition root and the only place that knows every layer. Nothing in `src/` imports the bootstrap except the entry. Solid arrows are imports in the real direction, and `npm run arch-lint` checks every one of them; dashed arrows are type-only imports or, for the remote, a load at run time.
 
 > Source: [`docs/architecture/mermaid/layer-model.mmd`](docs/architecture/mermaid/layer-model.mmd)
 
@@ -73,7 +73,7 @@ graph TD
     boot --> infra
     boot --> sdkmods
     routes --> widgets
-    routes --> dashboard
+    routes -. loads at run time .-> dashboard
     layouts --> features
     features --> pages
     pages --> components
@@ -94,7 +94,7 @@ The SDK is imported through public subpaths only. `@bcbp-solutions-fzc-llc/eslin
 
 ## Module dependency graph
 
-Arrows are TypeScript imports under `src/`.
+Arrows are TypeScript imports under `src/`. Dashed, labelled arrows carry only what the label names (types, `en.json`, the `/problem` error classes).
 
 > Source: [`docs/architecture/mermaid/package-dependencies.mmd`](docs/architecture/mermaid/package-dependencies.mmd)
 
@@ -135,27 +135,27 @@ graph LR
     boot --> nav
     boot --> msgs
     boot --> sdk
-    root --> usecases
+    root -. types .-> usecases
     root --> sdk
     host --> screens
     host --> screen
     screens --> login
-    screens --> usecases
+    screens -. types, signIn.ts .-> usecases
     screens --> domain
     screens --> text
     login --> comps
-    login --> domain
+    login -. types .-> domain
     login --> text
     comps --> links
     comps --> text
-    links --> text
+    links -. types .-> text
     app --> widgets
     app --> text
     app --> sdk
     widgets --> text
     usecases --> domain
     usecases -. types, /problem .-> sdk
-    remember --> domain
+    remember -. types .-> domain
     iam --> sdk
     reset --> sdk
     msgs --> text
@@ -175,11 +175,12 @@ graph LR
 | `presentation/widgets` | `shared/i18n` (state and actions are props) |
 | `presentation/features/session-screens` | `pages`, `components`, `domain/`, `application/` types, `shared/i18n`, SDK `/auth` types. The screens call the use cases they are given; every failure becomes catalogue words |
 | `shared/i18n` | SDK `/i18n` (`t`) and `/react` (`useT`), no shell layer: `en.json`, `catalogues.ts`, `useShellText`, `shellText`, `ShellKey`. Text lookup only: presentation reaches the SDK's i18n runtime through it and nothing else |
-| `shared/constants`, `shared/ui`, `shared/types` | `shared/i18n` (link labels are keys) |
+| `shared/constants` | `shared/i18n` (link labels are keys) |
+| `shared/ui`, `shared/types` | Nothing (assets, styles, ambient types) |
 | `app/layouts/` | `screen.tsx`: `react-dom/client`. `sessionScreens.tsx`: the session-screen components, the screen host, `application/` and SDK `/auth` types |
 | `app/providers/ShellRoot.tsx` | React, SDK `/react`, the session-context store (`application/`) |
-| `app/routes/App.tsx` | `react-router-dom`, `shared/i18n`, the widgets, SDK `/react` (`RemoteBoundary`, `useRouteTemplate`, `useSessionContext`, `useAppUpdate`). It hands the router's `navigate` to the bootstrap through `onRouter` instead of importing `/nav` |
-| `app/bootstrap/bootstrap.tsx` | Every layer except presentation, which it reaches through `layouts`, `providers` and `routes` (the composition root; the only module that imports `infrastructure/`: builds the use cases from infrastructure), every SDK subpath it initialises, `shared/ui/index.css` |
+| `app/routes/App.tsx` | `react-router-dom`, `shared/i18n`, the widgets, SDK `/react` (`RemoteBoundary`, `MFEErrorBoundary`, `useRouteTemplate`, `useSessionContext`, `useAppUpdate`). It hands the router's `navigate` to the bootstrap through `onRouter` instead of importing `/nav` |
+| `app/bootstrap/bootstrap.tsx` | Every layer except presentation and `shared/constants`, which it reaches through `layouts`, `providers` and `routes` (the composition root; the only module that imports `infrastructure/`: builds the use cases from infrastructure), every SDK subpath it initialises, `shared/ui/index.css` |
 | `app/bootstrap/index.ts` | `bootstrap.tsx`, dynamically; `shared/i18n/en.json` statically (the unavailable page cannot use the SDK) |
 | `rsbuild.config.ts` | The platform plugin, React, Tailwind, `/version.json`, `config/dev-platform.mjs`. `src/` does not import it |
 | Tests | Production modules. `test/integration` replaces SDK subpaths with `vi.mock` fakes; `test/e2e` uses the real SDK with `test/fixtures/` fakes around it |
@@ -201,7 +202,7 @@ sequenceDiagram
     participant Boot as bootstrap.tsx
     participant SDK as frontend-sdk
     participant IAM as /api (IAM)
-    participant Screens as SessionScreens
+    participant Screens as session screens (app/layouts)
 
     Browser->>Index: load document
     Index->>Boot: import('./bootstrap'), bootstrap()
@@ -209,6 +210,7 @@ sequenceDiagram
     Boot->>SDK: initializeCore (environment from runtime.json, else build-time), setRuntimeConfig
     Note over Boot,SDK: a failure is logged as an error (default /otel), then "The app is unavailable right now."
     Boot->>SDK: tracing, logging, metrics, error handlers, web vitals (consent: SDK default, essential only)
+    Boot->>SDK: registerShellMessages: registerNamespace('shell'), setLocale(defaultLocale), before any screen
     Boot->>SDK: createOidcProvider, initializeAuth, setTokenSource
     Boot->>SDK: idp.init()
     alt anonymous
@@ -272,20 +274,27 @@ Routes inside the app:
 sequenceDiagram
     participant User
     participant Login as LoginPage
-    participant Screens as SessionScreens
+    participant Screens as SignInScreen
+    participant UC as resolveWorkspace (use case)
     participant IAM as /api PUB-1
+    participant Boot as bootstrap.tsx
     participant SDK as frontend-sdk /auth
     participant KC as Keycloak
 
+    Boot->>Screens: askForWorkspace(signInUseCases)
     User->>Login: submit work email
     Login->>Login: rememberedEmail.save (injected repository)
     Login->>Screens: onContinue(email)
-    Screens->>IAM: GET /v1/public/tenants/resolve?identifier=email (no token)
-    alt not found or unreachable
-        IAM-->>Login: generic "could not find a workspace" message
+    Screens->>UC: resolveWorkspace(email)
+    UC->>IAM: GET /v1/public/tenants/resolve?identifier=email (no token)
+    alt not found, rate-limited or unreachable
+        UC-->>Screens: WorkspaceNotFoundError
+        Screens-->>Login: generic "could not find a workspace" message
     else realm resolved
-        IAM-->>Screens: realm, strategy
-        Screens->>SDK: idp.login(workspace, loginHint=email)
+        IAM-->>UC: realm, strategy
+        UC-->>Screens: workspace
+        Screens-->>Boot: onChosen(workspace, loginHint=email)
+        Boot->>SDK: idp.login(workspace, loginHint)
         Note over SDK: verifier, S256 challenge, state<br/>location to the realm's authorize URL
         SDK->>KC: GET /realms/{realm}/.../auth?code_challenge_method=S256&login_hint
         KC->>SDK: redirect to {origin}/auth/callback?code&state
@@ -518,7 +527,7 @@ Platform concerns outside this repo: Keycloak credential checks, MFA, realm admi
 | Tests | `npm run test:ci` | Unit, integration and e2e, 95% gate |
 | Image | `docker build --secret id=npm_token,env=NODE_AUTH_TOKEN` then `docker run -p 18080:8080` | nginx as the browser will get it. Use 18080 when Keycloak already has 8080 |
 
-The login page's "Trouble logging in?" link is `href="#help"`. It does not open a help route.
+The login page's "Trouble logging in?" link is not rendered until its official URL is set in `src/shared/constants/links.ts` (none exists yet; LLD §15).
 
 ---
 

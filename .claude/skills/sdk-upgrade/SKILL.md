@@ -15,6 +15,7 @@ The rules are CLAUDE.md's: all three packages, exact pins, one version; the shel
 4. **Adapt and verify**, fixing what each step reports:
    - `npm run lint`, `npm run arch-lint`, `npm run typecheck`, `npm run metrics-check`, `npm run test:ci` (95% gate);
    - `test/unit/no-sdk-duplicates.test.ts`: if the SDK now exports something the shell copied (LLD §1.2), delete the copy and import it;
+   - `test/unit/session-context.test.ts` "isTransient agrees with the SDK ApiClient": if it fails, the SDK changed its retry rule. Import the SDK's predicate if it now exports one (and delete `isTransient`'s copy), else update the copy to match;
    - `npm run build && npm run budget`; confirm the bundle carries the version: `grep -o '1\.0\.0-alpha\.[0-9]*' dist/assets/*.js | sort | uniq -c`;
    - `npm run test-browser` (production CSP, three engines);
    - `REMOTE_DIST=../mfe-dashboard/dist npm run test-contract` against the dashboard's current build. If the contract changed, say so: shell and dashboard must then deploy together.

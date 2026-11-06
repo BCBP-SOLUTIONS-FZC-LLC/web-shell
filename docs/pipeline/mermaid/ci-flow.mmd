@@ -1,6 +1,6 @@
 flowchart LR
     test["validate-test\nVitest and 95% gate\nnpm run build, size budget"]
-    quality["validate-quality\nESLint, tsc, pin, LF, npm audit"]
+    quality["validate-quality\nESLint, arch-lint, metrics, tsc,\npin, LF, npm audit"]
     build["build-image\nHadolint then Buildx cache"]
     trivy["trivy\nCRITICAL HIGH UNKNOWN"]
     smoke["smoke\nsize, startup gate, no .map\nnpm run test-smoke"]

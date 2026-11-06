@@ -1,7 +1,8 @@
 // The P-35 retry: which failures are retried, the backoff, the abort, and the store React reads.
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { NetworkError, TimeoutError, parseProblemResponse, typeForStatus } from '@bcbp-solutions-fzc-llc/frontend-sdk/problem'
-import { mockProblem } from '@bcbp-solutions-fzc-llc/frontend-sdk/testing'
+import { createApiClient } from '@bcbp-solutions-fzc-llc/frontend-sdk/http'
+import { createTestPlatform, mockApi, mockProblem } from '@bcbp-solutions-fzc-llc/frontend-sdk/testing'
 import type { SessionContext } from '@bcbp-solutions-fzc-llc/frontend-sdk/auth'
 import { createStore, isTransient, retrySessionContext } from '../../src/application/use-cases/loadSessionContext'
 
@@ -32,6 +33,34 @@ describe('isTransient', () => {
     expect(isTransient(await problem(501))).toBe(false)
     expect(isTransient(await problem(401))).toBe(false)
     expect(isTransient(new Error('bug'))).toBe(false)
+  })
+})
+
+describe('isTransient agrees with the SDK ApiClient', () => {
+  // isTransient copies the ApiClient's retry rule because the SDK does not export it. This runs the
+  // real client against each status and fails when the two disagree, so an SDK upgrade that changes
+  // the rule breaks here instead of silently (then: import the SDK's predicate if it now has one).
+  const STATUSES = [400, 403, 404, 408, 409, 422, 429, 500, 501, 502, 503, 504]
+
+  it.each(STATUSES)('status %i', async (status) => {
+    createTestPlatform()
+    let calls = 0
+    mockApi({
+      'GET /probe': () => {
+        calls++
+        // Retry-After: 0 makes a retry immediate, so no timers are needed.
+        return new Response(null, { status, headers: { 'Retry-After': '0' } })
+      },
+    })
+    const error = await createApiClient()
+      .get('/probe', { retry: { attempts: 1 } })
+      .then(
+        () => undefined,
+        (e: unknown) => e,
+      )
+    expect(error).toBeDefined()
+    const clientRetried = calls === 2
+    expect(isTransient(error)).toBe(clientRetried)
   })
 })
 

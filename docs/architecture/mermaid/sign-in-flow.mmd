@@ -1,20 +1,27 @@
 sequenceDiagram
     participant User
     participant Login as LoginPage
-    participant Screens as SessionScreens
+    participant Screens as SignInScreen
+    participant UC as resolveWorkspace (use case)
     participant IAM as /api PUB-1
+    participant Boot as bootstrap.tsx
     participant SDK as frontend-sdk /auth
     participant KC as Keycloak
 
+    Boot->>Screens: askForWorkspace(signInUseCases)
     User->>Login: submit work email
     Login->>Login: rememberedEmail.save (injected repository)
     Login->>Screens: onContinue(email)
-    Screens->>IAM: GET /v1/public/tenants/resolve?identifier=email (no token)
-    alt not found or unreachable
-        IAM-->>Login: generic "could not find a workspace" message
+    Screens->>UC: resolveWorkspace(email)
+    UC->>IAM: GET /v1/public/tenants/resolve?identifier=email (no token)
+    alt not found, rate-limited or unreachable
+        UC-->>Screens: WorkspaceNotFoundError
+        Screens-->>Login: generic "could not find a workspace" message
     else realm resolved
-        IAM-->>Screens: realm, strategy
-        Screens->>SDK: idp.login(workspace, loginHint=email)
+        IAM-->>UC: realm, strategy
+        UC-->>Screens: workspace
+        Screens-->>Boot: onChosen(workspace, loginHint=email)
+        Boot->>SDK: idp.login(workspace, loginHint)
         Note over SDK: verifier, S256 challenge, state<br/>location to the realm's authorize URL
         SDK->>KC: GET /realms/{realm}/.../auth?code_challenge_method=S256&login_hint
         KC->>SDK: redirect to {origin}/auth/callback?code&state

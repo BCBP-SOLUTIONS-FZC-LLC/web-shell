@@ -20,7 +20,7 @@ SMOKE_BASE_URL=http://127.0.0.1:18080 npm run test-smoke
 
 This mode also checks what only nginx decides: exact 404s, `/healthz`, and no-cache on unhashed public files.
 
-**Against a deployment** (behind CloudFront):
+**Against a deployment** (behind CloudFront, or until then an ingress with the mounted CSP and HSTS: `docs/hosting-without-cloudfront.md`):
 
 ```sh
 SMOKE_BASE_URL=https://app.dev.bcbpsolutions.com ENVIRONMENT=dev npm run test-smoke

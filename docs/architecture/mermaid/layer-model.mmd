@@ -46,7 +46,7 @@ graph TD
     boot --> infra
     boot --> sdkmods
     routes --> widgets
-    routes --> dashboard
+    routes -. loads at run time .-> dashboard
     layouts --> features
     features --> pages
     pages --> components
