@@ -1,58 +1,62 @@
 graph LR
-    index(["index.ts"])
-    boot(["bootstrap.tsx"])
-    app(["App.tsx"])
-    screens(["platform/SessionScreens.tsx"])
-    screen(["platform/screen.tsx"])
-    iam(["platform/iam.ts"])
-    perms(["platform/permissions.ts"])
-    ctx(["platform/sessionContext.ts\nplatform/ShellRoot.tsx"])
-    nav(["platform/navigator.ts"])
-    login(["pages/LoginPage.tsx"])
-    hook(["pages/useEmailSignIn.ts"])
-    remember(["platform/rememberedEmail.ts\n(localStorage)"])
-    usecases(["application/use-cases\nresolveWorkspace, requestPasswordReset"])
-    domain(["domain/\nRememberedEmailRepository, WorkspaceNotFoundError"])
-    links(["pages/links.ts\npages/PageLinks.tsx"])
-    reset(["platform/passwordReset.ts"])
-    logo(["BrandLogo.tsx"])
+    index(["app/bootstrap/index.ts"])
+    boot(["app/bootstrap/bootstrap.tsx"])
+    app(["app/routes/App.tsx"])
+    root(["app/providers/ShellRoot.tsx"])
+    host(["app/layouts/sessionScreens.tsx"])
+    screen(["app/layouts/screen.tsx"])
+    screens(["presentation/features/session-screens"])
+    login(["presentation/pages/login\nLoginPage, useEmailSignIn"])
+    widgets(["presentation/widgets"])
+    comps(["presentation/components\nBrandLogo, PageLinks"])
+    usecases(["application/use-cases\nresolveWorkspace, requestPasswordReset,\nloadSessionContext"])
+    domain(["domain/\nRememberedEmailRepository, WorkspaceNotFoundError,\nrules/permissions"])
+    iam(["infrastructure/api/iam.ts"])
+    reset(["infrastructure/auth/passwordReset.ts"])
+    remember(["infrastructure/storage/rememberedEmail.ts\n(localStorage)"])
+    nav(["infrastructure/federation/navigator.ts"])
+    msgs(["infrastructure/i18n/shellMessages.ts"])
     text(["shared/i18n\nshell namespace, en.json"])
-    msgs(["platform/shellMessages.ts"])
+    links(["shared/constants/links.ts"])
     sdk(["frontend-sdk subpaths"])
 
     index --> boot
+    index -. en.json .-> text
     boot --> app
-    boot --> screens
+    boot --> root
+    boot --> host
     boot --> screen
+    boot --> usecases
+    boot --> domain
     boot --> iam
-    boot --> perms
-    boot --> ctx
-    boot --> nav
-    ctx --> sdk
+    boot --> reset
     boot --> remember
+    boot --> nav
+    boot --> msgs
     boot --> sdk
-    app --> sdk
+    root --> usecases
+    root --> sdk
+    host --> screens
+    host --> screen
     screens --> login
     screens --> usecases
     screens --> domain
-    screens --> screen
-    boot --> usecases
-    boot --> reset
+    screens --> text
+    login --> comps
+    login --> domain
+    login --> text
+    comps --> links
+    comps --> text
+    links --> text
+    app --> widgets
+    app --> text
+    app --> sdk
+    widgets --> text
     usecases --> domain
+    usecases -. types, /problem .-> sdk
     remember --> domain
-    reset --> sdk
-    login --> hook
-    login --> logo
-    login --> links
-    hook --> domain
     iam --> sdk
-    boot --> msgs
+    reset --> sdk
     msgs --> text
     msgs --> sdk
-    app --> text
-    screens --> text
-    login --> text
-    hook --> text
-    links --> text
-    index -. en.json .-> text
     text --> sdk

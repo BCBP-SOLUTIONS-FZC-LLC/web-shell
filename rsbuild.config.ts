@@ -30,7 +30,7 @@ export default defineConfig(({ envMode }) => {
   return {
     plugins: [pluginReact(), pluginPlatform({ role: 'shell' }), pluginVersionJson(buildVersion)],
     source: {
-      entry: { index: './src/index.ts' },
+      entry: { index: './src/app/bootstrap/index.ts' },
       define: {
         __ENVIRONMENT__: JSON.stringify(environment),
         __BUILD_VERSION__: JSON.stringify(buildVersion),

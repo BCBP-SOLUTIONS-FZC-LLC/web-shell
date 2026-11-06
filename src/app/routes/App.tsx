@@ -8,7 +8,9 @@ import {
   useRouteTemplate,
   useSessionContext,
 } from '@bcbp-solutions-fzc-llc/frontend-sdk/react'
-import { useShellText } from './shared/i18n'
+import { useShellText } from '../../shared/i18n'
+import { ContextUnavailable } from '../../presentation/widgets/ContextUnavailable'
+import { UpdateAvailable } from '../../presentation/widgets/UpdateAvailable'
 
 /** The remote that renders the dashboard, as named in /remotes/manifest.json. */
 export const DASHBOARD_REMOTE = 'dashboard'
@@ -31,52 +33,10 @@ function Dashboard() {
   return <RemoteBoundary remote={DASHBOARD_REMOTE} module="./App" fallback={<Loading>{text('app.loadingDashboard')}</Loading>} />
 }
 
-/**
- * Without IAM's session context the shell runs with deny-all permissions, so actions are hidden. Say
- * so instead of leaving the user to guess, and offer a reload (the bootstrap loads it again).
- */
-function ContextUnavailable() {
-  const text = useShellText()
-  return (
-    <div
-      role="status"
-      className="fixed inset-x-0 bottom-0 z-40 flex flex-wrap items-center justify-center gap-3 bg-amber-50 px-4 py-2 text-center font-sans text-sm text-amber-900 shadow"
-    >
-      <span>{text('app.contextUnavailable')}</span>
-      <button
-        type="button"
-        onClick={() => window.location.reload()}
-        className="cursor-pointer rounded border border-amber-300 bg-white px-3 py-1 font-medium text-amber-900"
-      >
-        {text('common.reload')}
-      </button>
-    </div>
-  )
-}
-
-/**
- * A newer deployment is live (the bootstrap's startVersionPolling found a new /version.json). Offer
- * the reload instead of forcing it: the user may be mid-task in the remote.
- */
-function UpdateAvailable() {
+/** The update notice, with the SDK's update state (presentation takes it as props). */
+function Update() {
   const update = useAppUpdate()
-  const text = useShellText()
-  if (!update.available) return null
-  return (
-    <div
-      role="status"
-      className="fixed inset-x-0 top-0 z-40 flex flex-wrap items-center justify-center gap-3 bg-[#1a1030] px-4 py-2 text-center font-sans text-sm text-white shadow"
-    >
-      <span>{text('app.updateAvailable')}</span>
-      <button
-        type="button"
-        onClick={() => update.reload()}
-        className="cursor-pointer rounded border border-white/30 bg-white px-3 py-1 font-medium text-[#1a1030]"
-      >
-        {text('common.reload')}
-      </button>
-    </div>
-  )
+  return <UpdateAvailable available={update.available} onReload={() => update.reload()} />
 }
 
 /** Hands the router's navigate to the bootstrap, which registers it as the SDK's navigator. */
@@ -101,8 +61,8 @@ export default function App({
   return (
     <BrowserRouter {...(basename ? { basename } : {})}>
       {onRouter ? <RouterBridge onRouter={onRouter} /> : null}
-      <UpdateAvailable />
-      {context ? null : <ContextUnavailable />}
+      <Update />
+      {context ? null : <ContextUnavailable onReload={() => window.location.reload()} />}
       <Routes>
         <Route path="/dashboard/*" element={<Dashboard />} />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />

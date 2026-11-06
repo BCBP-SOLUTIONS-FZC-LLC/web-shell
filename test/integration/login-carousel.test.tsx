@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import LoginPage from '../../src/pages/LoginPage'
-import { localStorageRememberedEmail as remembered } from '../../src/platform/rememberedEmail'
+import LoginPage from '../../src/presentation/pages/login/LoginPage'
+import { localStorageRememberedEmail as remembered } from '../../src/infrastructure/storage/rememberedEmail'
 
 describe('login hero carousel', () => {
   afterEach(() => {

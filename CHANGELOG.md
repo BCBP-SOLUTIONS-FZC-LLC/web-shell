@@ -17,6 +17,31 @@ Pull requests that change the shell, its dependencies, or the image add an entry
 
 ### Changed
 
+- **Frontend Architecture Constitution, step 2: `src/` in the constitution's folders (`2026-11-06`).** Violation V1 of the assessment (#45). The last roadmap step that changes code.
+  - **New layout:**
+
+    | Folder | Contents |
+    |---|---|
+    | `app/` | `bootstrap/` (`index.ts`, `bootstrap.tsx`), `providers/ShellRoot.tsx`, `routes/App.tsx`, `layouts/` (screen host, session-screen mounting) |
+    | `presentation/` | `pages/login/`, `features/session-screens/`, `components/`, `widgets/` |
+    | `application/use-cases/` | adds `loadSessionContext.ts` |
+    | `domain/` | adds `rules/permissions.ts` |
+    | `infrastructure/` | `api/iam.ts`, `auth/passwordReset.ts`, `storage/rememberedEmail.ts`, `federation/navigator.ts`, `i18n/shellMessages.ts` |
+    | `shared/` | `i18n/`, `constants/links.ts`, `ui/` (images, theme, CSS), `types/globals.d.ts` |
+
+    Files keep their names (camelCase) and their git history (`git mv`). Tests stay in `test/` (ADR 0008).
+  - **Session screens split:** the dialogs and the sign-in screen are components in `presentation/features/session-screens/`. `app/layouts/sessionScreens.tsx` mounts them, with the same `askForWorkspace` / `show*` functions. Presentation no longer imports the screen host, which would have been a dependency upward into `app/`.
+  - **Widgets:** the update and missing-permissions notices move to `presentation/widgets/`. They take their state and reload action as props from `App.tsx`, so presentation reaches neither the SDK nor navigation.
+  - **Lint:**
+    - ESLint layer rules rewritten for the new folders, with a new `infrastructure/` rule (no presentation, application or `app/`).
+    - `application/` may use the SDK's `/problem` error classes (`loadSessionContext` tests for `NetworkError` and `TimeoutError`), as the assessment's dependency plan allows.
+    - The arch-lint component map follows the new folders (15 components).
+    - Tighter than before: presentation may import only **types** from `application/` (use cases come in as props), in ESLint and arch-lint (`typeOnlyDependOn`). The ESLint presentation rule covers any folder under `presentation/`, not only the named ones. Presentation may import `domain/` values (errors, the role map), which are pure.
+    - The `no-raw-storage` exemption moves to `infrastructure/storage/rememberedEmail.ts`.
+  - **Build paths:** Rsbuild's entry is now `./src/app/bootstrap/index.ts`. `metrics-check` reads the identity from `src/app/bootstrap/bootstrap.tsx`. The `@config` path in `index.css` follows the move.
+  - **Behaviour unchanged:** the same CSS (content hash identical), the same chunks and budget (entry 9.7 KB). 200 tests at 100%; browser suite 18/18 (Chromium, Firefox, WebKit, production CSP); contract 12/12 against mfe-dashboard.
+  - **Docs:** layout, module rules and both diagrams rewritten in ARCHITECTURE, the LLD (§2.1, §3, §3.1), `.claude/`, CONTRIBUTING and README.
+
 - **Architecture lint, like the IAM services' go-arch-lint (`2026-11-06`).** `.dependency-cruiser.cjs` declares the shell's components and what each may depend on, in the same shape as `.go-arch-lint.yml`:
   - **Components:** `domain`, `application`, `i18n`, `assets`, `components`, `pages`, `screen_host`, `session_screens`, `infrastructure`, `routes`, `composition_root` and `entry`, each with its `in` paths.
   - **Deps:** `mayDependOn` (other components), `vendors` (packages) and `typeOnlyVendors` (SDK port types).

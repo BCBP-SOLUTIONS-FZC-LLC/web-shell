@@ -4,26 +4,31 @@ Condensed from [ARCHITECTURE.md](../ARCHITECTURE.md) and the [LLD](../docs/lld/w
 
 ## Repository layout
 
+`src/` follows the Frontend Architecture Constitution's structure: `app/` (composition root), `presentation/`, `application/`, `domain/`, `infrastructure/`, `shared/`. Tests stay in `test/` (ADR 0008).
+
 | Path | What it is |
 |---|---|
-| `src/index.ts` | `import('./bootstrap')` (Module Federation async boundary); `showUnavailable` replaces `#app` on a throw |
-| `src/bootstrap.tsx` | SDK start-up order, session branches, `idp.subscribe`, render inside `ShellRoot`, P-35 background retry, start-up failure report (`the app could not start`), `registerNavigator` |
-| `src/App.tsx` | `BrowserRouter` (basename `/t/<slug>` when the URL has one, keyed by it); `/dashboard/*` → `RemoteBoundary remote="dashboard" module="./App"`; `*` → `/dashboard`; `onRouter` hands `navigate` to the bootstrap; update banner and missing-context notice |
-| `src/platform/iam.ts` | `toWorkspace` (PUB-1), `toSessionContext` (P-35), `workspaceResolver`, `sessionContextSource` over a lazy `createApiClient()` |
-| `src/platform/permissions.ts` | `IAM_ROLES`, `permissions` (role → `action:resource`) |
-| `src/platform/SessionScreens.tsx` | `askForWorkspace`, `showSignedOut`, `showDeviceClock`, `showSessionEnded`, `showWrongWorkspace`, `showWorkspaceNotFound`, `WORKSPACE_NOT_FOUND` |
-| `src/application/` | `signIn.ts` (`SignInUseCases`), `use-cases/resolveWorkspace.ts`, `use-cases/requestPasswordReset.ts` (ports injected) |
-| `src/domain/` | `repositories/rememberedEmail.ts` (contract), `errors.ts` (`WorkspaceNotFoundError`) |
-| `src/shared/i18n/` | `en.json` (every user-facing word, keyed), `catalogues.ts` (catalogue by tag → language → English), `index.ts`: `useShellText` (React), `shellText`, `ShellKey` |
-| `src/platform/shellMessages.ts` | `registerShellMessages`: registers the `shell` namespace and loads it before any screen (bootstrap only) |
-| `src/platform/rememberedEmail.ts` | `localStorageRememberedEmail` (the one raw-storage file) |
-| `src/platform/screen.tsx` | `#shell-screen` fixed overlay host: `showScreen`, `hideScreen`, `resetScreen` |
-| `src/platform/sessionContext.ts` | `isTransient`, `retrySessionContext` (1 s, 2 s, 4 s; abortable), `createStore` |
-| `src/platform/ShellRoot.tsx` | `PlatformProvider` with the live context (store) and locale (`useLocale`) |
-| `src/platform/navigator.ts` | `shellNavigator(navigate, basename)`: under the basename → router, else a full load |
-| `src/pages/` | `LoginPage`, `useEmailSignIn` (submit, forgot password; the remembered-email repository is a prop), `links` + `PageLinks` (help/legal, shown only with a URL) |
-| `src/assets/images/` | Carousel photos and the logo, imported so they ship content-hashed under `/assets/` |
-| `src/platform/passwordReset.ts` | `passwordResetUrl(workspace)`: Keycloak `login-actions/reset-credentials` from `getConfig().auth` |
+| `src/app/bootstrap/index.ts` | Rsbuild's entry: `import('./bootstrap')` (Module Federation async boundary); `showUnavailable` replaces `#app` on a throw, with words read from `shared/i18n/en.json` |
+| `src/app/bootstrap/bootstrap.tsx` | Composition root: SDK start-up order, session branches, `idp.subscribe`, the sign-in use cases built from infrastructure, render inside `ShellRoot`, P-35 background retry, start-up failure report (`the app could not start`), `registerNavigator` |
+| `src/app/providers/ShellRoot.tsx` | `PlatformProvider` with the live context (store) and locale (`useLocale`) |
+| `src/app/routes/App.tsx` | `BrowserRouter` (basename `/t/<slug>` when the URL has one); `/dashboard/*` → `RemoteBoundary remote="dashboard" module="./App"`; `*` → `/dashboard`; `onRouter` hands `navigate` to the bootstrap; mounts the two widgets with the SDK's state |
+| `src/app/layouts/screen.tsx` | `#shell-screen` fixed overlay host: `showScreen`, `hideScreen`, `resetScreen` |
+| `src/app/layouts/sessionScreens.tsx` | Mounts the session screens: `askForWorkspace`, `showSignedOut`, `showDeviceClock`, `showSessionEnded`, `showWrongWorkspace`, `showWorkspaceNotFound` (re-exports `WORKSPACE_NOT_FOUND`) |
+| `src/presentation/pages/login/` | `LoginPage`, `useEmailSignIn` (submit, forgot password; the remembered-email repository is a prop) |
+| `src/presentation/features/session-screens/SessionScreens.tsx` | The screens as components: `SignInScreen` (calls the use cases it is given; every failure → catalogue words), `SignedOutDialog`, `DeviceClockDialog`, `SessionEndedDialog`, `WrongWorkspaceDialog`, `WorkspaceNotFoundDialog`, `WORKSPACE_NOT_FOUND` |
+| `src/presentation/components/` | `BrandLogo`, `PageLinks` (help/legal links shown only with a URL, Forgot password button) |
+| `src/presentation/widgets/` | `UpdateAvailable`, `ContextUnavailable` (state and reload passed in as props) |
+| `src/application/` | `signIn.ts` (`SignInUseCases`), `use-cases/resolveWorkspace.ts`, `use-cases/requestPasswordReset.ts` (ports injected), `use-cases/loadSessionContext.ts` (`isTransient`, `retrySessionContext` 1 s, 2 s, 4 s, abortable; `createStore`) |
+| `src/domain/` | `repositories/rememberedEmail.ts` (contract), `errors.ts` (`WorkspaceNotFoundError`), `rules/permissions.ts` (`IAM_ROLES`, `permissions`: role → `action:resource`) |
+| `src/infrastructure/api/iam.ts` | `toWorkspace` (PUB-1), `toSessionContext` (P-35), `workspaceResolver`, `sessionContextSource`, `loadSessionContextOnce` over a lazy `createApiClient()` |
+| `src/infrastructure/auth/passwordReset.ts` | `passwordResetUrl(workspace)`: Keycloak `login-actions/reset-credentials` from `getConfig().auth` |
+| `src/infrastructure/storage/rememberedEmail.ts` | `localStorageRememberedEmail` (the one raw-storage file) |
+| `src/infrastructure/federation/navigator.ts` | `shellNavigator(navigate, basename)`: under the basename → router, else a full load |
+| `src/infrastructure/i18n/shellMessages.ts` | `registerShellMessages`: registers the `shell` namespace and loads it before any screen (bootstrap only) |
+| `src/shared/i18n/` | `en.json` (every user-facing word, keyed), `catalogues.ts` (tag → language → English), `index.ts`: `useShellText` (React), `shellText`, `ShellKey` |
+| `src/shared/constants/links.ts` | Help and legal links (labels are keys; URLs unset until official) |
+| `src/shared/ui/` | `assets/images/` (carousel photos and logo, content-hashed under `/assets/`), `theme/`, `index.css` |
+| `src/shared/types/globals.d.ts` | `__ENVIRONMENT__`, `__BUILD_VERSION__` |
 | `rsbuild.config.ts` | `pluginReact`, `pluginPlatform({ role: 'shell' })`, `pluginVersionJson`; output, CSS, dev server |
 | `config/` | Dev only: `runtime.local.json`, `remotes.local.json`, `dev-platform.mjs` (+ `.d.mts`) |
 | `public/` | `config/runtime.json` (prod defaults), `remotes/manifest.json` (`{}`), favicons |
@@ -37,21 +42,17 @@ Condensed from [ARCHITECTURE.md](../ARCHITECTURE.md) and the [LLD](../docs/lld/w
 
 ## Module rules
 
-| Module | May import |
-|---|---|
-| `platform/iam.ts`, `permissions.ts`, `passwordReset.ts`, `sessionContext.ts`, `navigator.ts` | SDK subpaths only (`navigator.ts` none) |
-| `platform/ShellRoot.tsx` | React, SDK `/react` and `/auth` types |
-| `platform/screen.tsx` | `react-dom/client` |
-| `platform/SessionScreens.tsx` | `pages/*`, `screen`, `application/signIn` (injected use cases), `domain/errors`, `shared/i18n`, SDK `/auth` types; no other `platform/` module, no other SDK runtime |
-| `application/` | `domain/`, SDK types; no React, no browser APIs |
-| `domain/` | SDK types only |
-| `pages/*`, `components/*` | Each other, `domain/` and `application/` types, `shared/i18n`; never `platform/`, the SDK, storage, the network or navigation |
-| `shared/i18n` | SDK `/i18n`, `/react`; no shell layer (lint) |
-| `platform/shellMessages.ts` | `shared/i18n`, SDK `/i18n` |
-| `App.tsx` | `react-router-dom`, SDK `/react`, `shared/i18n` |
-| `bootstrap.tsx` | Everything; the only module that renders `#app` |
+| Layer | May import | Never |
+|---|---|---|
+| `domain/` | SDK types only | React, the browser, any other layer |
+| `application/` | `domain/`; SDK types and `/problem` error classes | React, the browser, `infrastructure/`, `presentation/`, `app/` (ports are injected) |
+| `infrastructure/` | `domain/`, `shared/i18n`, the SDK | `presentation/`, `application/`, `app/` |
+| `presentation/` (any folder) | `domain/`, `application/` types, `shared/`; pages → components; features → pages, components; widgets `shared/i18n` only | `infrastructure/`, `app/`, the SDK, `application/` values; `fetch`, storage, `location`, `history`, `navigator`, `open` |
+| `presentation/features/` (session screens) | as above, plus SDK `/auth` types | SDK `/auth` values (no login without a click) |
+| `shared/` | SDK `/i18n`, `/react` (text); each other | any shell layer |
+| `app/` | `bootstrap.tsx`: every layer (the only importer of `infrastructure/`, the only module that renders `#app`); `routes`, `providers`, `layouts`: only what they render or provide (arch-lint) | — |
 
-Layer rows (`domain/`, `application/`, presentation incl. `SessionScreens.tsx`) are ESLint rules in `eslint.config.js`; `test/unit/layer-rules.test.ts` proves each fires. Fix a violation by injecting a port from the bootstrap, never by widening the rule.
+Enforced twice: `eslint.config.js` (editor feedback, browser globals; `test/unit/layer-rules.test.ts`) and `.dependency-cruiser.cjs` (`npm run arch-lint`: every dependency declared per component; `test/unit/arch-lint.test.ts`). Fix a violation by injecting a port or passing a prop from `app/`, never by widening a rule.
 
 SDK subpaths in use: `/core /config /tracing /logging /metrics /flags /auth /http /authz /i18n /mfe /nav /problem /security /react`. Tests also use `/testing` and `contracts/*.json`.
 

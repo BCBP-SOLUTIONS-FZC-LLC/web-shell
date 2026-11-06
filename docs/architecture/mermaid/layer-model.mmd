@@ -1,53 +1,59 @@
 graph TD
-    subgraph entry["Entry"]
-        index["index.ts\nasync boundary, unavailable message"]
-        boot["bootstrap.tsx\nSDK start-up sequence, session handling, render"]
+    subgraph app["app/ — composition root"]
+        index["bootstrap/index.ts\nasync boundary, unavailable message"]
+        boot["bootstrap/bootstrap.tsx\nSDK start-up, session handling, wiring, render"]
+        routes["routes/App.tsx\nsigned-in routes, dashboard RemoteBoundary"]
+        providers["providers/ShellRoot.tsx\nPlatformProvider"]
+        layouts["layouts/\nscreen host, session-screen mounting"]
     end
 
-    subgraph ui["UI"]
-        app["App.tsx\nsigned-in routes, dashboard RemoteBoundary"]
-        screens["platform/SessionScreens.tsx\nemail sign-in, signed out, session ended"]
-        login["pages/LoginPage*.tsx\nemail form, remember email"]
-        logo["BrandLogo.tsx"]
+    subgraph presentation["presentation/"]
+        pages["pages/login\nLoginPage, useEmailSignIn"]
+        features["features/session-screens\nsign-in, signed out, session ended, …"]
+        widgets["widgets/\nupdate notice, missing permissions"]
+        components["components/\nBrandLogo, PageLinks"]
     end
 
-    subgraph ports["Platform ports"]
-        iam["platform/iam.ts\nPUB-1 resolver, P-35 session context"]
-        perms["platform/permissions.ts\nrole → UI permissions"]
-        screen["platform/screen.tsx\nfull-screen host"]
+    subgraph application["application/"]
+        usecases["use-cases/\nresolveWorkspace, requestPasswordReset,\nloadSessionContext"]
+    end
+
+    subgraph domain["domain/"]
+        dom["repositories, errors,\nrules/permissions (role map)"]
+    end
+
+    subgraph infrastructure["infrastructure/ — implements domain contracts"]
+        infra["api/iam (PUB-1, P-35), auth/passwordReset,\nstorage/rememberedEmail, federation/navigator,\ni18n/shellMessages"]
+    end
+
+    subgraph shared["shared/"]
+        sh["i18n (shell text), constants/links,\nui (assets, theme), types"]
     end
 
     subgraph sdk["@bcbp-solutions-fzc-llc/frontend-sdk, shared with remotes"]
-        sdkmods["/core /config /auth /http /authz /flags\n/tracing /logging /metrics /i18n /mfe /security /react"]
+        sdkmods["/core /config /auth /http /authz /flags /problem\n/tracing /logging /metrics /i18n /mfe /nav /security /react"]
     end
 
     subgraph remote["Remote, loaded in the browser"]
         dashboard["dashboard ./App\nSDK hooks, no props"]
     end
 
-    subgraph build["Build, not imported by src/"]
-        rsbuild["rsbuild.config.ts\nplatform plugin, React, Tailwind"]
-        devplat["config/dev-platform.mjs\nruntime.json, manifest, IAM stubs"]
-    end
-
-    subgraph image["Image"]
-        nginx["nginx/default.conf\n8080, /healthz, cache rules"]
-        docker["Dockerfile\nNode 26 builder, nginx runtime"]
-    end
-
     index --> boot
-    boot --> app
-    boot --> screens
-    boot --> iam
-    boot --> perms
-    boot --> screen
+    boot --> routes
+    boot --> providers
+    boot --> layouts
+    boot --> usecases
+    boot --> infra
     boot --> sdkmods
-    screens --> login
-    screens --> iam
-    screens --> screen
-    login --> logo
-    app --> sdkmods
-    app --> dashboard
-    iam --> sdkmods
-    rsbuild --> devplat
-    docker --> nginx
+    routes --> widgets
+    routes --> dashboard
+    layouts --> features
+    features --> pages
+    pages --> components
+    features -. types .-> usecases
+    layouts -. types .-> usecases
+    usecases --> dom
+    infra --> dom
+    infra --> sdkmods
+    presentation --> sh
+    sh --> sdkmods

@@ -3,9 +3,9 @@
 // enforced by dependency-cruiser in "allowed" mode: any dependency not declared below fails
 // `npm run arch-lint`, including a file that belongs to no component.
 //
-// The layers are the Frontend Architecture Constitution's (docs/architecture/constitution-assessment.md):
-// presentation → application → domain; infrastructure (src/platform/) implements domain contracts;
-// bootstrap.tsx is the composition root. eslint.config.js repeats the import rules for editor
+// The layers are the Frontend Architecture Constitution's (docs/architecture/constitution-assessment.md),
+// in its folders: presentation → application → domain; infrastructure implements domain contracts;
+// app/ is the composition root. eslint.config.js repeats the import rules for editor
 // feedback and adds what a dependency graph cannot see (browser globals such as fetch or localStorage).
 //
 // Tests, config/ (dev stand-ins) and scripts are not part of the runtime architecture: only src/ is
@@ -16,42 +16,30 @@ const sdk = (...subpaths) => `^node_modules/@bcbp-solutions-fzc-llc/frontend-sdk
 const ANY_SDK = '^node_modules/@bcbp-solutions-fzc-llc/frontend-sdk/'
 const REACT = '^node_modules/(react|react-dom)/'
 
-/** Where each component lives: a directory, or one file. */
+/** Where each component lives: a directory, or one file. The folders are the constitution's. */
 const components = {
-  // Pure contracts and errors: no framework, no browser, nothing else in the shell.
+  // Pure contracts, errors and rules (the role map): no framework, no browser, nothing else in the shell.
   domain: { in: ['src/domain/'] },
   // Use cases; their infrastructure is injected by the composition root.
   application: { in: ['src/application/'] },
-  // The shell's text (the SDK's /i18n `shell` namespace and its English catalogue).
+  // Adapters: IAM API, password reset, remembered email (localStorage), router bridge, text registration.
+  infrastructure: { in: ['src/infrastructure/'] },
+  // Cross-cutting: the shell's text, constants (help and legal links), UI assets and styles.
   i18n: { in: ['src/shared/i18n/'] },
-  // Static files bundled by Rsbuild: images, styles.
-  assets: { in: ['src/assets/', 'src/index.css', 'src/theme/'] },
-  // Presentation.
-  components: { in: ['src/components/'] },
-  pages: { in: ['src/pages/'] },
-  // Presentation that lives next to infrastructure: the session screens, and the host that mounts them.
-  session_screens: { in: ['src/platform/SessionScreens.tsx'] },
-  screen_host: { in: ['src/platform/screen.tsx'] },
-  // Infrastructure: IAM ports, password reset hand-off, remembered email (localStorage), session
-  // context store and provider, router bridge, role map, text registration.
-  infrastructure: {
-    in: [
-      'src/platform/iam.ts',
-      'src/platform/passwordReset.ts',
-      'src/platform/rememberedEmail.ts',
-      'src/platform/sessionContext.ts',
-      'src/platform/ShellRoot.tsx',
-      'src/platform/navigator.ts',
-      'src/platform/permissions.ts',
-      'src/platform/shellMessages.ts',
-    ],
-  },
-  // Signed-in routes and the dashboard RemoteBoundary.
-  routes: { in: ['src/App.tsx'] },
-  // Composition root: wires everything.
-  composition_root: { in: ['src/bootstrap.tsx'] },
-  // The async boundary and the static "unavailable" page.
-  entry: { in: ['src/index.ts'] },
+  constants: { in: ['src/shared/constants/'] },
+  ui_assets: { in: ['src/shared/ui/'] },
+  // Presentation: render, capture clicks, call the use cases they are given.
+  components: { in: ['src/presentation/components/'] },
+  widgets: { in: ['src/presentation/widgets/'] },
+  pages: { in: ['src/presentation/pages/'] },
+  features: { in: ['src/presentation/features/'] },
+  // app/: the composition root and what only it may know.
+  layouts: { in: ['src/app/layouts/'] },
+  providers: { in: ['src/app/providers/'] },
+  routes: { in: ['src/app/routes/'] },
+  bootstrap: { in: ['src/app/bootstrap/bootstrap.tsx'] },
+  // The async boundary and the static "unavailable" page (Rsbuild's entry).
+  entry: { in: ['src/app/bootstrap/index.ts'] },
 }
 
 /**
@@ -59,28 +47,31 @@ const components = {
  * - mayDependOn: other components.
  * - vendors: packages it may import (resolved paths); anyVendorDeps: any package.
  * - typeOnlyVendors: packages it may import types from, never values (the SDK's ports).
+ * - typeOnlyDependOn: components it may import types from, never values (presentation takes use cases
+ *   as props, so it needs application/ types only).
  */
 const deps = {
   domain: { typeOnlyVendors: [ANY_SDK] },
-  application: { mayDependOn: ['domain'], typeOnlyVendors: [ANY_SDK] },
+  // The SDK's error classes (/problem) are values a use case may test for (instanceof).
+  application: { mayDependOn: ['domain'], vendors: [sdk('problem')], typeOnlyVendors: [ANY_SDK] },
+  infrastructure: { mayDependOn: ['domain', 'i18n'], vendors: [ANY_SDK] },
   i18n: { vendors: [sdk('i18n', 'react')] },
-  assets: {},
-  components: { mayDependOn: ['assets'] },
-  pages: { mayDependOn: ['components', 'assets', 'i18n', 'domain', 'application'], vendors: [REACT] },
-  screen_host: { vendors: [REACT] },
-  session_screens: {
-    mayDependOn: ['pages', 'screen_host', 'i18n', 'domain', 'application'],
-    vendors: [REACT],
-    typeOnlyVendors: [sdk('auth')],
-  },
-  infrastructure: { mayDependOn: ['domain', 'i18n'], vendors: [REACT, ANY_SDK] },
-  routes: { mayDependOn: ['i18n'], vendors: [REACT, '^node_modules/react-router(-dom)?/', sdk('react')] },
-  composition_root: {
-    mayDependOn: ['domain', 'application', 'i18n', 'assets', 'pages', 'session_screens', 'screen_host', 'infrastructure', 'routes'],
+  constants: { mayDependOn: ['i18n'] },
+  ui_assets: {},
+  components: { mayDependOn: ['ui_assets', 'i18n', 'constants'], vendors: [REACT] },
+  widgets: { mayDependOn: ['i18n'], vendors: [REACT] },
+  pages: { mayDependOn: ['components', 'ui_assets', 'i18n', 'constants', 'domain'], typeOnlyDependOn: ['application'], vendors: [REACT] },
+  features: { mayDependOn: ['pages', 'components', 'i18n', 'domain'], typeOnlyDependOn: ['application'], vendors: [REACT], typeOnlyVendors: [sdk('auth')] },
+  layouts: { mayDependOn: ['features', 'i18n', 'application'], vendors: [REACT], typeOnlyVendors: [sdk('auth')] },
+  providers: { mayDependOn: ['application'], vendors: [REACT, sdk('react')], typeOnlyVendors: [sdk('auth')] },
+  routes: { mayDependOn: ['widgets', 'i18n'], vendors: [REACT, '^node_modules/react-router(-dom)?/', sdk('react')] },
+  // Composition root: wires everything.
+  bootstrap: {
+    mayDependOn: ['domain', 'application', 'infrastructure', 'i18n', 'ui_assets', 'layouts', 'providers', 'routes'],
     anyVendorDeps: true,
   },
   // The unavailable page reads the catalogue directly: nothing shared may load before the async boundary.
-  entry: { mayDependOn: ['composition_root', 'i18n'] },
+  entry: { mayDependOn: ['bootstrap', 'i18n'] },
 }
 
 // ---- generated rules -------------------------------------------------------------------------
@@ -101,6 +92,10 @@ const allowed = Object.entries(deps).flatMap(([name, d]) => {
     ...(d.mayDependOn ?? []).map((target) => {
       if (!components[target]) throw new Error(`arch-lint: ${name} may depend on unknown component "${target}"`)
       return { from, to: { path: pathOf(target) } }
+    }),
+    ...(d.typeOnlyDependOn ?? []).map((target) => {
+      if (!components[target]) throw new Error(`arch-lint: ${name} may depend on unknown component "${target}"`)
+      return { from, to: { path: pathOf(target), dependencyTypes: ['type-only'] } }
     }),
     ...(d.anyVendorDeps ? [{ from, to: { path: '^node_modules/' } }] : []),
     ...(d.vendors ?? []).map((path) => ({ from, to: { path } })),
@@ -127,6 +122,6 @@ module.exports = {
       extensions: ['.ts', '.tsx', '.d.ts', '.js', '.json'],
     },
     // Ambient declarations (build constants) are not a component.
-    exclude: { path: '^src/globals\\.d\\.ts$' },
+    exclude: { path: '^src/shared/types/globals\\.d\\.ts$' },
   },
 }

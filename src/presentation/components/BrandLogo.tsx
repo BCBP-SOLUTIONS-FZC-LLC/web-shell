@@ -1,5 +1,5 @@
 // Bundled, so the file is content-hashed under /assets/ and cached immutably.
-import logo from '../assets/images/logo.png'
+import logo from '../../shared/ui/assets/images/logo.png'
 
 type BrandLogoProps = {
   className?: string

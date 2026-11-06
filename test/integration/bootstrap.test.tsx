@@ -128,7 +128,7 @@ vi.mock('@bcbp-solutions-fzc-llc/frontend-sdk/react', async (original) => ({
   },
 }))
 const routerNavigate = vi.fn()
-vi.mock('../../src/App', async () => {
+vi.mock('../../src/app/routes/App', async () => {
   const { useEffect } = await import('react')
   return {
     default: function App({ basename, onRouter }: { basename?: string; onRouter?: (n: typeof routerNavigate) => void }) {
@@ -137,14 +137,14 @@ vi.mock('../../src/App', async () => {
     },
   }
 })
-vi.mock('../../src/platform/iam', () => ({
+vi.mock('../../src/infrastructure/api/iam', () => ({
   workspaceResolver: { resolve: (i: string) => resolve(i) },
   sessionContextSource: { load: () => loadContext() },
   loadSessionContextOnce: () => loadContext(),
 }))
 
-const { bootstrap } = await import('../../src/bootstrap')
-const { resetScreen } = await import('../../src/platform/screen')
+const { bootstrap } = await import('../../src/app/bootstrap/bootstrap')
+const { resetScreen } = await import('../../src/app/layouts/screen')
 
 async function typeEmail(email: string) {
   const u = userEvent.setup()

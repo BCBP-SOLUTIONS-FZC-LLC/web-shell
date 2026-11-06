@@ -1,5 +1,5 @@
 // Domain contract: the email the sign-in page remembers. Infrastructure implements it
-// (platform/rememberedEmail.ts, localStorage); presentation receives it and never touches storage.
+// (infrastructure/storage/rememberedEmail.ts, localStorage); presentation receives it and never touches storage.
 
 /** The email the user asked the sign-in page to remember. Holds the typed email only, never a token. */
 export interface RememberedEmailRepository {

@@ -13,7 +13,7 @@ The browser shell for the BCBP micro-frontend platform. It runs the platform SDK
 
 | This shell owns | Lives elsewhere |
 |---|---|
-| The SDK bootstrap (`src/bootstrap.tsx`) and the routes of the signed-in app: `/t/<slug>/dashboard/*` renders the dashboard remote | Dashboard pages, navigation inside the dashboard and dashboard data (`mfe-dashboard`, loaded as `dashboard`) |
+| The SDK bootstrap (`src/app/bootstrap/bootstrap.tsx`) and the routes of the signed-in app: `/t/<slug>/dashboard/*` renders the dashboard remote | Dashboard pages, navigation inside the dashboard and dashboard data (`mfe-dashboard`, loaded as `dashboard`) |
 | The email sign-in page and the session screens. The SDK does Authorization Code + PKCE against the workspace's Keycloak realm and keeps tokens in memory | Credentials, password policy, MFA and token issuance (Keycloak). This repo ships a local realm and theme for development |
 | The IAM ports: PUB-1 (email or slug → realm) and P-35 (session context), over the SDK's `ApiClient` | The IAM APIs themselves, tenant membership, roles and audit |
 | The shell value remotes read through SDK hooks: the user, workspace, session context and sign-out (`PlatformProvider`) | Any other remote. Only `dashboard` is in the local manifest |
@@ -53,14 +53,14 @@ After sign-in the SDK moves the URL under `/t/<slug>/` (`rememberWorkspace`), an
 
 ### Sign-in sequence
 
-1. `src/index.ts` imports `src/bootstrap.tsx` behind the async boundary Module Federation needs.
+1. `src/app/bootstrap/index.ts` imports `src/app/bootstrap/bootstrap.tsx` behind the async boundary Module Federation needs.
 2. The bootstrap loads `/config/runtime.json` and calls the SDK's `idp.init()`. A reload with a live Keycloak session is restored silently (`prompt=none`).
 3. Signed out with a known workspace (the `/t/<slug>` in the URL, or the SDK's workspace cache): straight to that realm's authorize endpoint, with the remembered email as `login_hint`.
 4. Otherwise the login page asks for the work email. `GET /api/v1/public/tenants/resolve?identifier=<email>` (PUB-1) returns the realm. "Not found" and "unreachable" show the same generic message.
 5. Keycloak redirects to `{origin}/auth/callback`. The SDK checks `state`, exchanges the code with the PKCE verifier, and keeps the tokens in memory.
 6. The bootstrap loads the session context (`GET /api/v1/me/session-context`, P-35), sets permissions and flags, caches the workspace, loads `/remotes/manifest.json`, and renders.
 
-**Forgot your password?** resolves the typed email the same way and opens Keycloak's reset page for that realm (`/realms/{realm}/login-actions/reset-credentials`). Help and legal links appear only once their official URLs are set in `src/pages/links.ts`. When a new deployment is live, "A new version is available." offers a reload.
+**Forgot your password?** resolves the typed email the same way and opens Keycloak's reset page for that realm (`/realms/{realm}/login-actions/reset-credentials`). Help and legal links appear only once their official URLs are set in `src/shared/constants/links.ts`. When a new deployment is live, "A new version is available." offers a reload.
 
 Sign-out is global by default: the Keycloak session ends, every tab drops its tokens, the app unmounts, and "You are signed out" waits for a click. A session that expires during use shows "Session ended". The shell never redirects on its own.
 
@@ -96,17 +96,17 @@ The container listens on **8080** as uid **101**.
 ```
 web-shell/
 ├── src/
-│   ├── index.ts                 # Async boundary; "unavailable" message on a fatal start-up error
-│   ├── bootstrap.tsx            # SDK start-up sequence, session handling, render
-│   ├── App.tsx                  # Signed-in routes, dashboard RemoteBoundary
-│   ├── platform/
-│   │   ├── iam.ts               # PUB-1 resolver and P-35 session context over the ApiClient
-│   │   ├── SessionScreens.tsx   # Email sign-in, signed out, session ended, device clock, wrong workspace
-│   │   ├── screen.tsx           # Full-screen host for those screens, outside the app root
-│   │   ├── passwordReset.ts     # Keycloak reset page for the workspace's realm
-│   │   └── permissions.ts       # Role → UI permission map
-│   ├── pages/                   # Login layouts, the shared email form hook, remember-email
-│   └── components/BrandLogo.tsx
+│   ├── app/                     # Composition root
+│   │   ├── bootstrap/           # index.ts (async boundary, "unavailable" message), bootstrap.tsx (SDK start-up, session handling, wiring, render)
+│   │   ├── providers/           # ShellRoot: PlatformProvider with the live session context
+│   │   ├── routes/              # App.tsx: signed-in routes, dashboard RemoteBoundary
+│   │   └── layouts/             # Full-screen host and the session-screen mounting
+│   ├── presentation/            # pages/login, features/session-screens, components, widgets
+│   ├── application/             # Use cases: resolve workspace, password reset, session context retry
+│   ├── domain/                  # Contracts, errors, the role map
+│   ├── infrastructure/          # api (PUB-1, P-35), auth (password reset), storage (remember email), federation (navigator), i18n
+│   └── shared/                  # i18n (the shell's text), constants (links), ui (images, theme, CSS), types
+├── .dependency-cruiser.cjs      # Architecture lint: components and their allowed dependencies
 ├── rsbuild.config.ts           # Platform plugin, React, Tailwind, dev server
 ├── config/                      # Dev only: runtime.local.json, remotes.local.json, dev-platform.mjs
 ├── public/                      # Static files; config/runtime.json and remotes/manifest.json defaults

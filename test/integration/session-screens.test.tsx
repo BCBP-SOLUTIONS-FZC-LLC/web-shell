@@ -6,11 +6,11 @@ import en from '../../src/shared/i18n/en.json'
 
 const resolve = vi.fn<(identifier: string) => Promise<Workspace | undefined>>()
 const opened = vi.fn<(url: string) => void>()
-const screens = await import('../../src/platform/SessionScreens')
-const { resetScreen } = await import('../../src/platform/screen')
+const screens = await import('../../src/app/layouts/sessionScreens')
+const { resetScreen } = await import('../../src/app/layouts/screen')
 const { resolveWorkspaceUseCase } = await import('../../src/application/use-cases/resolveWorkspace')
 const { requestPasswordResetUseCase } = await import('../../src/application/use-cases/requestPasswordReset')
-const { localStorageRememberedEmail } = await import('../../src/platform/rememberedEmail')
+const { localStorageRememberedEmail } = await import('../../src/infrastructure/storage/rememberedEmail')
 
 // The real sign-in use cases, as the bootstrap builds them, over a fake PUB-1 and a recorded navigation.
 const resolveWorkspace = resolveWorkspaceUseCase({ resolve: (i) => resolve(i) })

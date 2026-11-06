@@ -3,7 +3,7 @@
 // before sign-in, but this value is needed before a workspace is known and must survive sign-out, so
 // it uses localStorage directly: the one file exempt from no-raw-storage (eslint.config.js). It holds
 // only the email the user typed, never a token.
-import type { RememberedEmailRepository } from '../domain/repositories/rememberedEmail'
+import type { RememberedEmailRepository } from '../../domain/repositories/rememberedEmail'
 
 const REMEMBER_KEY = 'bcbp.rememberEmail'
 const EMAIL_KEY = 'bcbp.loginEmail'

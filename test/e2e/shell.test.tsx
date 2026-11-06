@@ -104,7 +104,7 @@ async function load(path?: string): Promise<void> {
   const app = document.createElement('div')
   app.id = 'app'
   document.body.appendChild(app)
-  const { bootstrap } = await import('../../src/bootstrap')
+  const { bootstrap } = await import('../../src/app/bootstrap/bootstrap')
   // An anonymous page never settles bootstrap: it waits for the user, then for the redirect.
   await act(async () => void bootstrap().catch((e: unknown) => (bootError = e)))
 }

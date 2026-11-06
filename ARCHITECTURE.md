@@ -20,67 +20,73 @@ Only `__ENVIRONMENT__` and `__BUILD_VERSION__` are compiled into the bundle. Eve
 
 ## Layer model
 
-The shell is a browser app, not a Clean Architecture service. The layers below are the real import direction. The platform ports do not import pages, and nothing in `src/` imports the bootstrap except the entry.
+`src/` follows the Frontend Architecture Constitution's structure. Presentation → application → domain; infrastructure implements the domain's contracts; `app/` is the composition root and the only place that knows every layer. Nothing in `src/` imports the bootstrap except the entry. The arrows below are the real import direction; `npm run arch-lint` checks every one of them.
 
 > Source: [`docs/architecture/mermaid/layer-model.mmd`](docs/architecture/mermaid/layer-model.mmd)
 
 ```mermaid
 graph TD
-    subgraph entry["Entry"]
-        index["index.ts\nasync boundary, unavailable message"]
-        boot["bootstrap.tsx\nSDK start-up sequence, session handling, render"]
+    subgraph app["app/ — composition root"]
+        index["bootstrap/index.ts\nasync boundary, unavailable message"]
+        boot["bootstrap/bootstrap.tsx\nSDK start-up, session handling, wiring, render"]
+        routes["routes/App.tsx\nsigned-in routes, dashboard RemoteBoundary"]
+        providers["providers/ShellRoot.tsx\nPlatformProvider"]
+        layouts["layouts/\nscreen host, session-screen mounting"]
     end
 
-    subgraph ui["UI"]
-        app["App.tsx\nsigned-in routes, dashboard RemoteBoundary"]
-        screens["platform/SessionScreens.tsx\nemail sign-in, signed out, session ended"]
-        login["pages/LoginPage*.tsx\nemail form, remember email"]
-        logo["BrandLogo.tsx"]
+    subgraph presentation["presentation/"]
+        pages["pages/login\nLoginPage, useEmailSignIn"]
+        features["features/session-screens\nsign-in, signed out, session ended, …"]
+        widgets["widgets/\nupdate notice, missing permissions"]
+        components["components/\nBrandLogo, PageLinks"]
     end
 
-    subgraph ports["Platform ports"]
-        iam["platform/iam.ts\nPUB-1 resolver, P-35 session context"]
-        perms["platform/permissions.ts\nrole → UI permissions"]
-        screen["platform/screen.tsx\nfull-screen host"]
+    subgraph application["application/"]
+        usecases["use-cases/\nresolveWorkspace, requestPasswordReset,\nloadSessionContext"]
+    end
+
+    subgraph domain["domain/"]
+        dom["repositories, errors,\nrules/permissions (role map)"]
+    end
+
+    subgraph infrastructure["infrastructure/ — implements domain contracts"]
+        infra["api/iam (PUB-1, P-35), auth/passwordReset,\nstorage/rememberedEmail, federation/navigator,\ni18n/shellMessages"]
+    end
+
+    subgraph shared["shared/"]
+        sh["i18n (shell text), constants/links,\nui (assets, theme), types"]
     end
 
     subgraph sdk["@bcbp-solutions-fzc-llc/frontend-sdk, shared with remotes"]
-        sdkmods["/core /config /auth /http /authz /flags\n/tracing /logging /metrics /i18n /mfe /security /react"]
+        sdkmods["/core /config /auth /http /authz /flags /problem\n/tracing /logging /metrics /i18n /mfe /nav /security /react"]
     end
 
     subgraph remote["Remote, loaded in the browser"]
         dashboard["dashboard ./App\nSDK hooks, no props"]
     end
 
-    subgraph build["Build, not imported by src/"]
-        rsbuild["rsbuild.config.ts\nplatform plugin, React, Tailwind"]
-        devplat["config/dev-platform.mjs\nruntime.json, manifest, IAM stubs"]
-    end
-
-    subgraph image["Image"]
-        nginx["nginx/default.conf\n8080, /healthz, cache rules"]
-        docker["Dockerfile\nNode 26 builder, nginx runtime"]
-    end
-
     index --> boot
-    boot --> app
-    boot --> screens
-    boot --> iam
-    boot --> perms
-    boot --> screen
+    boot --> routes
+    boot --> providers
+    boot --> layouts
+    boot --> usecases
+    boot --> infra
     boot --> sdkmods
-    screens --> login
-    screens --> iam
-    screens --> screen
-    login --> logo
-    app --> sdkmods
-    app --> dashboard
-    iam --> sdkmods
-    rsbuild --> devplat
-    docker --> nginx
+    routes --> widgets
+    routes --> dashboard
+    layouts --> features
+    features --> pages
+    pages --> components
+    features -. types .-> usecases
+    layouts -. types .-> usecases
+    usecases --> dom
+    infra --> dom
+    infra --> sdkmods
+    presentation --> sh
+    sh --> sdkmods
 ```
 
-**Direction:** `src/platform/iam.ts` and `permissions.ts` import the SDK only. `SessionScreens.tsx` imports the login pages, the resolver and the screen host. `bootstrap.tsx` is the only module that wires them together and the only one that renders the app root. `App.tsx` reads session state through SDK hooks (`useCurrentUser`, `useSignOut`) and never imports `platform/`.
+**Direction:** presentation never imports infrastructure, `app/` or the SDK (the session screens take `/auth` types only); it gets use cases, repositories and state as props from `app/`. `bootstrap.tsx` is the only module that wires the layers together and the only one that renders the app root. `App.tsx` reads session state through SDK hooks and passes it to the widgets; the remote reads its own through SDK hooks (`useCurrentUser`, `useSignOut`).
 
 The SDK is imported through public subpaths only. `@bcbp-solutions-fzc-llc/eslint-plugin` fails a root import (`@bcbp-solutions-fzc-llc/frontend-sdk`) or a deep import, and `npm run lint` runs in `validate-quality`.
 
@@ -94,62 +100,66 @@ Arrows are TypeScript imports under `src/`.
 
 ```mermaid
 graph LR
-    index(["index.ts"])
-    boot(["bootstrap.tsx"])
-    app(["App.tsx"])
-    screens(["platform/SessionScreens.tsx"])
-    screen(["platform/screen.tsx"])
-    iam(["platform/iam.ts"])
-    perms(["platform/permissions.ts"])
-    ctx(["platform/sessionContext.ts\nplatform/ShellRoot.tsx"])
-    nav(["platform/navigator.ts"])
-    login(["pages/LoginPage.tsx"])
-    hook(["pages/useEmailSignIn.ts"])
-    remember(["platform/rememberedEmail.ts\n(localStorage)"])
-    usecases(["application/use-cases\nresolveWorkspace, requestPasswordReset"])
-    domain(["domain/\nRememberedEmailRepository, WorkspaceNotFoundError"])
-    links(["pages/links.ts\npages/PageLinks.tsx"])
-    reset(["platform/passwordReset.ts"])
-    logo(["BrandLogo.tsx"])
+    index(["app/bootstrap/index.ts"])
+    boot(["app/bootstrap/bootstrap.tsx"])
+    app(["app/routes/App.tsx"])
+    root(["app/providers/ShellRoot.tsx"])
+    host(["app/layouts/sessionScreens.tsx"])
+    screen(["app/layouts/screen.tsx"])
+    screens(["presentation/features/session-screens"])
+    login(["presentation/pages/login\nLoginPage, useEmailSignIn"])
+    widgets(["presentation/widgets"])
+    comps(["presentation/components\nBrandLogo, PageLinks"])
+    usecases(["application/use-cases\nresolveWorkspace, requestPasswordReset,\nloadSessionContext"])
+    domain(["domain/\nRememberedEmailRepository, WorkspaceNotFoundError,\nrules/permissions"])
+    iam(["infrastructure/api/iam.ts"])
+    reset(["infrastructure/auth/passwordReset.ts"])
+    remember(["infrastructure/storage/rememberedEmail.ts\n(localStorage)"])
+    nav(["infrastructure/federation/navigator.ts"])
+    msgs(["infrastructure/i18n/shellMessages.ts"])
     text(["shared/i18n\nshell namespace, en.json"])
-    msgs(["platform/shellMessages.ts"])
+    links(["shared/constants/links.ts"])
     sdk(["frontend-sdk subpaths"])
 
     index --> boot
+    index -. en.json .-> text
     boot --> app
-    boot --> screens
+    boot --> root
+    boot --> host
     boot --> screen
+    boot --> usecases
+    boot --> domain
     boot --> iam
-    boot --> perms
-    boot --> ctx
-    boot --> nav
-    ctx --> sdk
+    boot --> reset
     boot --> remember
+    boot --> nav
+    boot --> msgs
     boot --> sdk
-    app --> sdk
+    root --> usecases
+    root --> sdk
+    host --> screens
+    host --> screen
     screens --> login
     screens --> usecases
     screens --> domain
-    screens --> screen
-    boot --> usecases
-    boot --> reset
+    screens --> text
+    login --> comps
+    login --> domain
+    login --> text
+    comps --> links
+    comps --> text
+    links --> text
+    app --> widgets
+    app --> text
+    app --> sdk
+    widgets --> text
     usecases --> domain
+    usecases -. types, /problem .-> sdk
     remember --> domain
-    reset --> sdk
-    login --> hook
-    login --> logo
-    login --> links
-    hook --> domain
     iam --> sdk
-    boot --> msgs
+    reset --> sdk
     msgs --> text
     msgs --> sdk
-    app --> text
-    screens --> text
-    login --> text
-    hook --> text
-    links --> text
-    index -. en.json .-> text
     text --> sdk
 ```
 
@@ -157,29 +167,30 @@ graph LR
 
 | Module | May import |
 |---|---|
-| `platform/iam.ts`, `permissions.ts`, `passwordReset.ts` | SDK subpaths only |
-| `platform/screen.tsx` | `react-dom/client` |
-| `platform/SessionScreens.tsx` | `LoginPage`, `screen`, `application/signIn` (use cases it is given), `domain/errors`, `shared/i18n` (text lookup), SDK `/auth` types. No other `platform/` module, no other SDK runtime, no browser navigation |
-| `application/` (use cases) | `domain/`, SDK types. No React, no browser APIs (ports injected) |
-| `domain/` | Nothing but SDK types: repository contracts, errors |
-| `platform/rememberedEmail.ts` | `domain/` (implements `RememberedEmailRepository` over `localStorage`) |
-| `platform/sessionContext.ts`, `ShellRoot.tsx`, `navigator.ts` | SDK subpaths (`/auth` and `/problem` types, `/react`), React |
-| `pages/*`, `BrandLogo.tsx` | Each other, `domain/` and `application/` types (the remembered-email repository and the use cases are passed in), `shared/i18n` (their words). Never `platform/`, the SDK, storage, the network or navigation |
-| `shared/i18n` | SDK `/i18n` (`t`) and `/react` (`useT`), no shell layer: `en.json`, `catalogues.ts`, `useShellText`, `shellText`, `ShellKey`. Every user-facing word of the shell is a key here. Text lookup only: presentation reaches the SDK's i18n runtime through it and nothing else |
-| `platform/shellMessages.ts` | `shared/i18n`, SDK `/i18n`: `registerShellMessages` (`registerNamespace` + `setLocale`). It changes the page's locale, so only the bootstrap calls it |
-| `App.tsx` | `react-router-dom`, `shared/i18n`, SDK `/react` (`RemoteBoundary`, `useRouteTemplate`, `useSessionContext`, `useAppUpdate`). It hands the router's `navigate` to the bootstrap through `onRouter` instead of importing `/nav` |
-| `bootstrap.tsx` | Everything above (the composition root: builds the sign-in use cases from infrastructure), every SDK subpath it initialises, `index.css` |
-| `index.ts` | `bootstrap.tsx`, dynamically; `shared/i18n/en.json` statically (the unavailable page cannot use the SDK) |
+| `domain/` (contracts, errors, `rules/permissions.ts`) | Nothing but SDK types |
+| `application/` (use cases) | `domain/`, SDK types and the `/problem` error classes. No React, no browser APIs (ports injected) |
+| `infrastructure/` | `domain/`, `shared/i18n`, SDK subpaths. `storage/rememberedEmail.ts` implements `RememberedEmailRepository` over `localStorage`; `i18n/shellMessages.ts` (`registerNamespace` + `setLocale`) changes the page's locale, so only the bootstrap calls it |
+| `presentation/pages` | `components`, `domain/`, `application/` types, `shared/` (their words from `shared/i18n`). Never `infrastructure/`, `app/`, the SDK, `application/` values, storage, the network or navigation: the repository, use cases and state come in as props |
+| `presentation/components` | `shared/` (`ui`, `i18n`, `constants`) |
+| `presentation/widgets` | `shared/i18n` (state and actions are props) |
+| `presentation/features/session-screens` | `pages`, `components`, `domain/`, `application/` types, `shared/i18n`, SDK `/auth` types. The screens call the use cases they are given; every failure becomes catalogue words |
+| `shared/i18n` | SDK `/i18n` (`t`) and `/react` (`useT`), no shell layer: `en.json`, `catalogues.ts`, `useShellText`, `shellText`, `ShellKey`. Text lookup only: presentation reaches the SDK's i18n runtime through it and nothing else |
+| `shared/constants`, `shared/ui`, `shared/types` | `shared/i18n` (link labels are keys) |
+| `app/layouts/` | `screen.tsx`: `react-dom/client`. `sessionScreens.tsx`: the session-screen components, the screen host, `application/` and SDK `/auth` types |
+| `app/providers/ShellRoot.tsx` | React, SDK `/react`, the session-context store (`application/`) |
+| `app/routes/App.tsx` | `react-router-dom`, `shared/i18n`, the widgets, SDK `/react` (`RemoteBoundary`, `useRouteTemplate`, `useSessionContext`, `useAppUpdate`). It hands the router's `navigate` to the bootstrap through `onRouter` instead of importing `/nav` |
+| `app/bootstrap/bootstrap.tsx` | Every layer except presentation, which it reaches through `layouts`, `providers` and `routes` (the composition root; the only module that imports `infrastructure/`: builds the use cases from infrastructure), every SDK subpath it initialises, `shared/ui/index.css` |
+| `app/bootstrap/index.ts` | `bootstrap.tsx`, dynamically; `shared/i18n/en.json` statically (the unavailable page cannot use the SDK) |
 | `rsbuild.config.ts` | The platform plugin, React, Tailwind, `/version.json`, `config/dev-platform.mjs`. `src/` does not import it |
 | Tests | Production modules. `test/integration` replaces SDK subpaths with `vi.mock` fakes; `test/e2e` uses the real SDK with `test/fixtures/` fakes around it |
 
-The rows for `domain/`, `application/`, `pages/*`, `components/*` and `platform/SessionScreens.tsx` are lint errors (`eslint.config.js`: `@typescript-eslint/no-restricted-imports`, `no-restricted-globals`, `no-restricted-properties`); `test/unit/layer-rules.test.ts` lints a violation of each rule to prove it fires. Presentation may not use `fetch`, `XMLHttpRequest`, storage, IndexedDB, `location`, `history`, `navigator` or `open`, bare or through `window`, `globalThis`, `self` (and `document.location`); domain and application may not use any browser global. Infrastructure (`platform/`) and the composition root (`bootstrap.tsx`) are not restricted by these rules. The component graph is also declared in `.dependency-cruiser.cjs` and checked by `npm run arch-lint` (allowed mode: an undeclared dependency, a file in no component, a cycle or an unresolvable import fails; `test/unit/arch-lint.test.ts`).
+These rules are enforced twice. `eslint.config.js` (`@typescript-eslint/no-restricted-imports`, `no-restricted-globals`, `no-restricted-properties`; `test/unit/layer-rules.test.ts`) gives editor feedback and covers browser globals: presentation may not use `fetch`, `XMLHttpRequest`, storage, IndexedDB, `location`, `history`, `navigator` or `open`, bare or through `window`, `globalThis`, `self` (and `document.location`); domain and application may not use any browser global. `.dependency-cruiser.cjs` declares every component and its allowed dependencies, and `npm run arch-lint` fails an undeclared dependency, a file in no component, a cycle or an unresolvable import (`test/unit/arch-lint.test.ts`). `app/` has no ESLint layer rule; arch-lint limits `routes`, `providers` and `layouts` to what they render or provide, and only `bootstrap.tsx` may import `infrastructure/`.
 
 ---
 
 ## Bootstrap flow
 
-`src/index.ts` imports `bootstrap.tsx` dynamically: Module Federation needs an async boundary before a shared module is used. The bootstrap runs once per page load, in the SDK's order (SDK design doc §C2).
+`src/app/bootstrap/index.ts` imports `bootstrap.tsx` dynamically: Module Federation needs an async boundary before a shared module is used. The bootstrap runs once per page load, in the SDK's order (SDK design doc §C2).
 
 > Source: [`docs/architecture/mermaid/bootstrap-flow.mmd`](docs/architecture/mermaid/bootstrap-flow.mmd)
 
@@ -229,13 +240,13 @@ sequenceDiagram
 
 1. `installTrustedTypesPolicy()`, then `loadRuntimeConfig()` fetches `/config/runtime.json` and validates it.
 2. `initializeCore({ serviceName: 'web-shell', domain: 'portal', environment: cfg.environment ?? __ENVIRONMENT__, buildVersion: __BUILD_VERSION__ })`, then `setRuntimeConfig(cfg)`: the deployed `/config/runtime.json` names its environment (`environment`, SDK alpha.6) and the page takes it from there, so one build serves every environment; until every deployed file has the key, the build-time `PLATFORM_ENVIRONMENT` fills in. When the config cannot be loaded, the identity takes the build-time environment so the failure can still be reported. A throw from here on is logged as an essential error (`the app could not start`; logging starts on the default `/otel` when the config never arrived), then reaches `index.ts`, which replaces `#app` with "The app is unavailable right now." (the one text read from `en.json` directly: it shows when the SDK may not have loaded, before the async boundary)
-3. Consent stays the SDK's default (essential only), then tracing, logging and metrics against `telemetry.otlpBaseUrl`, `installGlobalErrorHandlers()`, `startWebVitals()`, platform flags from the runtime config. Then `registerShellMessages(cfg.i18n.defaultLocale)` (`platform/shellMessages.ts`): the shell's `shell` namespace is registered and loaded for the default locale (`setLocale`), so the sign-in screens, which show before step 8, never show raw keys.
+3. Consent stays the SDK's default (essential only), then tracing, logging and metrics against `telemetry.otlpBaseUrl`, `installGlobalErrorHandlers()`, `startWebVitals()`, platform flags from the runtime config. Then `registerShellMessages(cfg.i18n.defaultLocale)` (`infrastructure/i18n/shellMessages.ts`): the shell's `shell` namespace is registered and loaded for the default locale (`setLocale`), so the sign-in screens, which show before step 8, never show raw keys.
 4. `createOidcProvider(cfg.auth, workspaceResolver)`, `setTokenSource(initializeAuth(idp))`, `idp.init()`. On a reload or a new tab `init()` may redirect once with `prompt=none` and never settle.
 5. Anonymous: see the sign-in flow. The bootstrap returns without rendering the app.
 6. Authenticated in the wrong workspace (a trial login through an invitation that landed in another tenant): `showWrongWorkspace`. The app never renders and the workspace is not cached.
 7. Authenticated: `idp.subscribe` handles expiry and sign-out (below). The P-35 session context sets the authorizer subject and tenant flags, and `rememberWorkspace` caches the workspace with its slug and moves the URL to `/t/<slug>/`. Without a context: deny-all and platform flags only, with a warning log; after render a network failure while online, a timeout, 429, 502, 503 or 504 (the SDK ApiClient's own rule) is retried after 1 s, 2 s and 4 s, one request per attempt, and a success updates the subject, flags and provider without a reload. A sign-out stops the retries, and a sign-out during these steps stops the boot before the app mounts.
 8. `initializeI18n` (the user's P-35 `locale` first, through `detect`), `loadManifest()` (a failure is logged; the app still renders), `startVersionPolling()`.
-9. Render `<App>` inside `platform/ShellRoot` (a `PlatformProvider` whose `context` follows the retry store and whose `locale` follows `setLocale`) into `#app`. The router's basename is `/t/<slug>` when `slugFromPath` finds one in the URL. The router is registered as the SDK's navigator: a remote's `navigate()` under the basename stays in the page; any other path is a full load.
+9. Render `<App>` inside `app/providers/ShellRoot` (a `PlatformProvider` whose `context` follows the retry store and whose `locale` follows `setLocale`) into `#app`. The router's basename is `/t/<slug>` when `slugFromPath` finds one in the URL. The router is registered as the SDK's navigator: a remote's `navigate()` under the basename stays in the page; any other path is a full load.
 
 After render the subscription does two things:
 
@@ -299,9 +310,9 @@ The redirect URI is `{origin}{auth.redirectPath}` (`/auth/callback`). The local 
 
 "Not found", a 429 and an unreachable resolver all show one message ("We could not find a workspace for that email."), so the screen never says which input failed.
 
-**Forgot your password?** needs the typed email: the realm decides where the reset happens. The screen resolves it through PUB-1 (same generic message on failure) and sends the browser to `{auth.idpOrigin}/realms/{realm}/login-actions/reset-credentials?client_id={auth.clientId}` (`platform/passwordReset.ts`); Keycloak e-mails the reset link. Without an email the page asks for one first. The SDK has no reset helper, so this is the shell's.
+**Forgot your password?** needs the typed email: the realm decides where the reset happens. The screen resolves it through PUB-1 (same generic message on failure) and sends the browser to `{auth.idpOrigin}/realms/{realm}/login-actions/reset-credentials?client_id={auth.clientId}` (`infrastructure/auth/passwordReset.ts`); Keycloak e-mails the reset link. Without an email the page asks for one first. The SDK has no reset helper, so this is the shell's.
 
-**Help and legal links** (`pages/links.ts`) render only when their URL is set, so the page has no dead links; none is published yet.
+**Help and legal links** (`shared/constants/links.ts`) render only when their URL is set, so the page has no dead links; none is published yet.
 
 ---
 
@@ -342,7 +353,7 @@ Tokens are never written to storage. A reload restores the session from Keycloak
 |---|---|---|---|
 | `@bcbp-solutions-fzc-llc/frontend-sdk:workspaces` | `localStorage` | SDK, `rememberWorkspace` | Cached workspaces (realm, slug), so a return visit skips the email screen |
 | `@bcbp-solutions-fzc-llc/frontend-sdk:session-id`, `:auth:last-activity`, `:auth:last-user` | `localStorage` | SDK | Telemetry session id, idle timeout across tabs, user change detection |
-| `bcbp.rememberEmail`, `bcbp.loginEmail` | `localStorage` | `platform/rememberedEmail.ts` (behind the domain's `RememberedEmailRepository`) | "Remember Email" only. Needed before a workspace is known, so it does not use the SDK's per-workspace `storage()`. Every access is wrapped in `try`; blocked storage just forgets |
+| `bcbp.rememberEmail`, `bcbp.loginEmail` | `localStorage` | `infrastructure/storage/rememberedEmail.ts` (behind the domain's `RememberedEmailRepository`) | "Remember Email" only. Needed before a workspace is known, so it does not use the SDK's per-workspace `storage()`. Every access is wrapped in `try`; blocked storage just forgets |
 
 Remotes that need storage use `storage(appId)` from `/storage`, which is namespaced per workspace and refuses token-like keys.
 
@@ -369,10 +380,10 @@ Remotes that need storage use `storage(appId)` from `/storage`, which is namespa
 | Invariant | Where it holds |
 |---|---|
 | The shell is a public OAuth client. There is no client secret in the repo or the bundle | Runtime config has a `clientId` only |
-| Tokens never touch storage | SDK `/auth`. `no-raw-storage` lint rule on `src/` (off only for `src/platform/rememberedEmail.ts`) |
+| Tokens never touch storage | SDK `/auth`. `no-raw-storage` lint rule on `src/` (off only for `src/infrastructure/storage/rememberedEmail.ts`) |
 | No login starts without a click after a logout | `showSignedOut`, `showDeviceClock`, `showSessionEnded` |
 | The app never renders for a wrong-workspace login | `isWrongWorkspace` check before render |
-| The bootstrap runs once, behind the async boundary | `src/index.ts` |
+| The bootstrap runs once, behind the async boundary | `src/app/bootstrap/index.ts` |
 | Remotes take React, the OTel API and the SDK from the shell | Preset shared map; the plugin's `ProvideSdkRspackPlugin` provides every SDK subpath |
 | Remote entries load only from allowed origins, pinned by integrity outside local, dev and test | SDK `/mfe` manifest validation |
 | Every script the build emits is integrity-pinned | Preset `ChunkIntegrityPlugin` (the entry in `index.html`, every lazy chunk) |
@@ -522,7 +533,7 @@ The login page's "Trouble logging in?" link is `href="#help"`. It does not open 
 
 5. **Remember-email uses `localStorage` directly.** The SDK's `storage()` is per workspace and ignores writes before sign-in, which is exactly when this value is needed. It holds the typed email only.
 
-6. **Screens mount outside the app root.** `platform/screen.tsx` renders into a fixed, full-screen `#shell-screen` host that is hidden when empty, so a dialog can sit over a running app and the sign-in page is visible while `#app` is still empty.
+6. **Screens mount outside the app root.** `app/layouts/screen.tsx` renders into a fixed, full-screen `#shell-screen` host that is hidden when empty, so a dialog can sit over a running app and the sign-in page is visible while `#app` is still empty.
 
 7. **The shell no longer exposes a container.** The SDK's model is a shell that hosts remotes and is not one. `remoteEntry.js` and `./App` are gone.
 
@@ -542,7 +553,7 @@ The login page's "Trouble logging in?" link is `href="#help"`. It does not open 
 
 15. **Updates are offered, not forced.** `App` shows "A new version is available." with Reload when `useAppUpdate()` reports one; the user may be mid-task in the remote.
 
-16. **A failed session context is retried, not left for the page's life.** Ported from alpha.4's reference shell (`platform/sessionContext.ts`, `ShellRoot.tsx`): three retries of transient failures, applied through a store the provider reads, so permissions appear without a reload. Unlike the reference shell, this one has a router basename, so a late context that moves the URL rebuilds the router.
+16. **A failed session context is retried, not left for the page's life.** Ported from alpha.4's reference shell (`application/use-cases/loadSessionContext.ts`, `ShellRoot.tsx`): three retries of transient failures, applied through a store the provider reads, so permissions appear without a reload. Unlike the reference shell, this one has a router basename, so a late context that moves the URL rebuilds the router.
 
 17. **The real dashboard is tested here, but does not gate this repo.** The browser suite's stub remote proves the shell; `dashboard.spec.ts` proves the pairing with a real mfe-dashboard build. CI runs it against the dashboard's `main` and reports it without blocking the image push, since that branch moves with another team.
 

@@ -5,7 +5,7 @@ Condensed from the [LLD](../docs/lld/web-shell-lld.md) §5–§6. Step numbers r
 ## Bootstrap (every page load)
 
 1. `installTrustedTypesPolicy` → `loadRuntimeConfig` → `initializeCore` (`web-shell`, `portal`, environment `cfg.environment ?? __ENVIRONMENT__`) → `setRuntimeConfig`. A throw so far → "The app is unavailable right now."
-2. (Consent: the SDK's default, essential only) → tracing, logging, metrics, `installGlobalErrorHandlers`, `startWebVitals` → runtime-config flags → `registerShellMessages` (`platform/shellMessages.ts`: the `shell` catalogue, default locale, before any screen).
+2. (Consent: the SDK's default, essential only) → tracing, logging, metrics, `installGlobalErrorHandlers`, `startWebVitals` → runtime-config flags → `registerShellMessages` (`infrastructure/i18n/shellMessages.ts`: the `shell` catalogue, default locale, before any screen).
 3. `createOidcProvider(cfg.auth, workspaceResolver)` → `setTokenSource(initializeAuth(idp))` → `idp.init()`.
 4. Anonymous → sign-in (below); return. Wrong workspace → `showWrongWorkspace`; return.
 5. `idp.subscribe` → `roleMapAuthorizer(permissions)` → P-35 into a store (`warn` and deny-all on failure) → subject, context flags, `rememberWorkspace` (URL → `/t/<slug>/`) → `initializeI18n` (`detect`: P-35 `locale`) → `loadManifest` (`error` on failure) → `startVersionPolling` → render.

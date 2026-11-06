@@ -1,6 +1,6 @@
 // The SDK navigator: paths under the router's basename stay in the app; others are full loads.
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { shellNavigator } from '../../src/platform/navigator'
+import { shellNavigator } from '../../src/infrastructure/federation/navigator'
 
 let assigned: string[]
 beforeEach(() => {

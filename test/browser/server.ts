@@ -32,7 +32,7 @@ const DIST = join(ROOT, 'dist')
 const BUILD_DIR = join(import.meta.dirname, '.build')
 export const CLIENT = 'tender-web'
 export const EMAIL = 'ada@acme.test'
-/** The remote this shell loads (src/App.tsx DASHBOARD_REMOTE): manifest key, container `__platform_mfe_<name>`, path. */
+/** The remote this shell loads (src/app/routes/App.tsx DASHBOARD_REMOTE): manifest key, container `__platform_mfe_<name>`, path. */
 export const REMOTE = 'dashboard'
 const REALM = 'tenant-acme'
 /** The Keycloak origin nginx/security.d/csp.conf.example names; replaced with this run's. */
@@ -136,7 +136,7 @@ function remoteBuild(): { dir: string; base: string; version: string; integrity:
   if (!existsSync(entryFile)) throw new Error(`test/browser: REMOTE_DIST=${dist} has no remote-manifest-entry.json; build mfe-dashboard first.`)
   const entries = Object.entries(JSON.parse(readFileSync(entryFile, 'utf8')) as Record<string, { version: string; integrity: string }>)
   const [name, entry] = entries[0] ?? []
-  // The shell loads REMOTE (src/App.tsx DASHBOARD_REMOTE); a build named otherwise cannot load.
+  // The shell loads REMOTE (src/app/routes/App.tsx DASHBOARD_REMOTE); a build named otherwise cannot load.
   if (entries.length !== 1 || name !== REMOTE || !entry) {
     throw new Error(`test/browser: REMOTE_DIST's build names its remote ${JSON.stringify(entries.map(([n]) => n))}; this shell loads "${REMOTE}". Rebuild the matching mfe-dashboard, or rename on both sides together.`)
   }

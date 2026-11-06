@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react'
-import type { RememberedEmailRepository } from '../domain/repositories/rememberedEmail'
-import { useShellText, type ShellKey } from '../shared/i18n'
+import type { RememberedEmailRepository } from '../../../domain/repositories/rememberedEmail'
+import { useShellText, type ShellKey } from '../../../shared/i18n'
 
 export type LoginPageProps = {
   /**
