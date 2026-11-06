@@ -7,13 +7,14 @@
 | **Repository** | `github.com/BCBP-SOLUTIONS-FZC-LLC/web-shell` (private) |
 | **Artifact** | Static bundle served by nginx (`ghcr.io/bcbp-solutions-fzc-llc/web-shell`), never installed as a package (`web-shell`, `"private": true`; `version` = the latest tag) |
 | **Platform SDK** | `@bcbp-solutions-fzc-llc/frontend-sdk`, `webpack-preset`, `eslint-plugin` `1.0.0-alpha.6`, pinned exactly, all three on one version |
-| **Status** | Released: **`v0.2.0`** (remote `dashboard`, pairs with mfe-dashboard `v0.3.0`) is current and `latest`; **`v0.1.0`** (remote `app2`, pairs with mfe-dashboard `v0.2.0`) is kept as its rollback. Both were published by `release.yml` (signed, SBOM, SLSA provenance, tags added after signing). Not deployed yet ([CHANGELOG.md](../../CHANGELOG.md)). Pairs: web-shell `0.2.0` + mfe-dashboard `0.3.0`; `0.1.0` + `0.2.0`. Hosting until CloudFront (next month): [hosting-without-cloudfront.md](../hosting-without-cloudfront.md). Open: §15. `main` is ahead of `v0.2.0` and unreleased (CHANGELOG `[Unreleased]`, PRs #45–#60): the Frontend Architecture Constitution refactor (assessment and ADRs, use cases, layer lint and arch-lint, the `shell` text catalogue, the constitution's folders), the error page around the shell's own screens, Claude Code tooling, and documentation modelled on the IAM services. The next release, `v0.3.0`, is not cut. |
+| **Status** | Released: **`v0.3.0`** (2026-11-06; remote `dashboard`, SDK `1.0.0-alpha.6`, pairs with mfe-dashboard `v0.3.0`) is current and `latest`; **`v0.2.0`** (remote `dashboard`, SDK alpha.5) is its rollback; **`v0.1.0`** (remote `app2`) is superseded. All were published by `release.yml` (signed, SBOM, SLSA provenance, tags added after signing). Not deployed yet ([CHANGELOG.md](../../CHANGELOG.md)). Pairs: web-shell `0.3.0` + mfe-dashboard `0.3.0`; rollback web-shell `0.2.0`. Hosting until CloudFront (next month): [hosting-without-cloudfront.md](../hosting-without-cloudfront.md). Open: §15. |
 | **Owners** | `@BCBP-SOLUTIONS-FZC-LLC/web-shell` (CODEOWNERS) |
 
 ### Revision history
 
 | Date | Change |
 |---|---|
+| 2026-11-06 | Released `v0.3.0` (#62): SDK alpha.6, the constitution refactor, the error page; same remote contract as `v0.2.0`. Status, pairs and open items updated |
 | 2026-11-06 | Claude Code tooling hardened (#60): the edit guard compares canonical paths and blocks `.env` / `docker.local.env` at any depth; `sync.sh` and `bump.sh` validate their arguments |
 | 2026-11-06 | Documentation modelled on the IAM services (#54, #55, #57, #58, #59): ARCHITECTURE flows, data model, caching, observability, CSP, concurrency, contracts; README integration guide and validation; CONTRIBUTING recipes per layer; CHANGELOG in typed, dated sections |
 | 2026-11-06 | Documents aligned with the code before the next release (#53); `isTransient` checked against the SDK `ApiClient`'s real retries |
@@ -524,7 +525,7 @@ Every `npm ci` reads `@bcbp-solutions-fzc-llc/*` from GitHub Packages with `GITH
 | SDK | Pinned exactly; the shell shares it as `1.0.0-alpha.6` under the preset's range `^1.0.0-0`. It loads remotes built on alpha.4, alpha.5 and alpha.6 (each requires `^<its SDK>`) |
 | Remotes | A remote built with the preset requires `^<its SDK version>`: it must not be newer than the shell's. **Upgrade the shell first**, then remotes. A release that changes the shell–remote contract is the exception (alpha.4 changed the container global): the shell and every remote deploy together. `npm run test-contract` checks a pairing |
 | React | Strict singleton `^19.0.0` from the preset; the shell ships 19.3 |
-| `mfe-dashboard` (remote `dashboard`) | Rsbuild remote with `pluginPlatform({ role: 'remote', name: 'dashboard' })`, async-only chunk splitting, reads the user and sign-out through SDK hooks, takes no props. Released pairs: web-shell `v0.2.0` + mfe-dashboard `v0.3.0` (remote `dashboard`, alpha.5), and the rollback web-shell `v0.1.0` + mfe-dashboard `v0.2.0` (remote `app2`). `main` (alpha.6) passes the contract suite (`dashboard.spec.ts`, 12/12 in three engines) against mfe-dashboard `v0.3.0`. An alpha.3 build does not load in this shell |
+| `mfe-dashboard` (remote `dashboard`) | Rsbuild remote with `pluginPlatform({ role: 'remote', name: 'dashboard' })`, async-only chunk splitting, reads the user and sign-out through SDK hooks, takes no props. Released pairs: web-shell `v0.3.0` (alpha.6) + mfe-dashboard `v0.3.0` (remote `dashboard`, alpha.5); the rollback web-shell `v0.2.0` with the same dashboard; mfe-dashboard `v0.4.0` (alpha.6) needs web-shell `v0.3.0` or later and has no recorded contract run against it yet; and the superseded web-shell `v0.1.0` + mfe-dashboard `v0.2.0` (remote `app2`). `v0.3.0` passes the contract suite (`dashboard.spec.ts`, 12/12 in three engines) against mfe-dashboard `v0.3.0`. An alpha.3 build does not load in this shell |
 | Keycloak | Each workspace realm registers `{origin}/auth/callback` and the origin as post-logout redirect for the client |
 
 Details: [VERSIONING.md](../../VERSIONING.md).
@@ -533,13 +534,13 @@ Details: [VERSIONING.md](../../VERSIONING.md).
 
 ## 15. Open items
 
-Numbers are stable; closed items are removed (2 and 4).
+Numbers are stable; closed items are removed (2, 4, and 14 when `v0.3.0` was released).
 
 | # | Item | Owner |
 |---|---|---|
 | 1 | Official Privacy, Terms, Trust & Security and Help URLs: set them in `src/shared/constants/links.ts` (hidden until then; none exists on bcbpsolutions.com) | product / legal |
 | 3 | Consent is essential only in v1 (decision; the SDK's default). A consent manager would be installed with `setConsentProvider` in the bootstrap | product |
-| 5 | Deploy in pairs: web-shell `0.2.0` + mfe-dashboard `0.3.0` (manifest key `dashboard`, `/remotes/dashboard/0.3.0/`), or `0.1.0` + `0.2.0` (`app2`). After a pair is deployed, environments may set `auth.signInUrl` (older SDKs refuse the key), then `SMOKE_MODE=live` | operators |
+| 5 | Deploy web-shell `0.3.0` with mfe-dashboard `0.3.0` (manifest key `dashboard`, `/remotes/dashboard/0.3.0/`); rollback web-shell `0.2.0` with the same dashboard (`0.1.0` + `0.2.0` used `app2`). mfe-dashboard `0.4.0` (alpha.6) needs web-shell `0.3.0` or later: with it, rolling the shell back to `0.2.0` also rolls the dashboard back to `0.3.0`. After a pair is deployed, environments may set `auth.signInUrl` (older SDKs refuse the key), then `SMOKE_MODE=live` | operators |
 | 6 | PUB-1 and P-35 must exist behind `/api` in every environment; they are stubbed only in dev | IAM |
 | 7 | No cluster deploy; each environment serves its own runtime config and manifest (with the remote's integrity) and registers its redirect URIs in each realm | operators |
 | 8 | Tender permissions in the role map are provisional | Tender Service |
@@ -548,7 +549,6 @@ Numbers are stable; closed items are removed (2 and 4).
 | 11 | The `WebShellStartupFailures` alert ([runbook](../runbook-startup-failure.md)) is an example; it must be deployed to the Loki ruler | operators |
 | 12 | One build for every environment (SDK alpha.6): each deployed `runtime.json` must name its `environment` (checked by `SMOKE_MODE=live ENVIRONMENT=<target> npm run test-smoke`); then the shell drops `__ENVIRONMENT__` / `PLATFORM_ENVIRONMENT`, and a file without the key stops at the unavailable page | operators, then this repo |
 | 13 | Dependabot's npm job needs the Dependabot secret `PACKAGES_READ_TOKEN` (read:packages; an organisation secret shared with mfe-dashboard) to read GitHub Packages; until it exists every npm update run fails with 401 | org admin |
-| 14 | Release `v0.3.0` is not cut: `main` changes what users see since `v0.2.0` (the error page, catalogue words for every sign-in failure); production stays on `0.2.0` until a tag is pushed (VERSIONING.md, `docs/runbook-release.md`) | maintainers |
 | 15 | The constitution exceptions in ADRs 0002, 0005–0008 (no TanStack Query or Zustand, the SDK's i18n, shell-local UI, the nginx image, tests in `test/`) await Architecture Review | architecture review |
 | 16 | Copies of unpublished platform code wait for SDK exports (§1.2): `isTransient` (a test fails if it diverges from the `ApiClient`), `retrySessionContext`, `createStore`, `ShellRoot`, the realm URL in `passwordReset.ts` | platform-reactcommon |
 | 17 | Adopt `platform-design-system` when the platform publishes it (ADR 0006; constitution roadmap step 7) | platform |

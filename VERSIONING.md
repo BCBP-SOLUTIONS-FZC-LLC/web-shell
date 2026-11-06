@@ -168,8 +168,8 @@ Both match the `v[0-9]*.[0-9]*.[0-9]*-*` tag trigger and produce a signed, scann
 | web-shell | Node | React | Platform SDK | Dashboard remote |
 |-----------|------|-------|--------------|------------------|
 | Unreleased (`main`) | 26 (image builder `node:26-bookworm`, CI `node-version: 26`) | `^19.0.0` (strict singleton, from the preset) | `@bcbp-solutions-fzc-llc/*` `1.0.0-alpha.6`, all three on one version | From `/remotes/manifest.json`. Must be built with `webpack-preset` `1.0.0-alpha.4`, `alpha.5` or `alpha.6` (container global `__platform_mfe_<name>`; a remote requires `^<its SDK>`, so never newer than this shell's); an alpha.3 build defines the old global, which this shell does not read. Not versioned in this repo |
-| `0.3.0` | 26 | `^19.0.0` | `1.0.0-alpha.6`, all three | Remote `dashboard` (container `__platform_mfe_dashboard`): mfe-dashboard `v0.3.0` (alpha.5; contract suite 12/12) and dashboard builds on alpha.6 |
-| `0.2.0` | 26 | `^19.0.0` | `1.0.0-alpha.5`, all three | Remote `dashboard` (container `__platform_mfe_dashboard`): mfe-dashboard `v0.3.0` (alpha.5). A dashboard built on alpha.6 needs a shell on alpha.6 (`main`) |
+| `0.3.0` | 26 | `^19.0.0` | `1.0.0-alpha.6`, all three | Remote `dashboard` (container `__platform_mfe_dashboard`): mfe-dashboard `v0.3.0` (alpha.5; contract suite 12/12) and builds on alpha.6 such as mfe-dashboard `v0.4.0` (no contract run recorded yet) |
+| `0.2.0` | 26 | `^19.0.0` | `1.0.0-alpha.5`, all three | Remote `dashboard` (container `__platform_mfe_dashboard`): mfe-dashboard `v0.3.0` (alpha.5). A dashboard built on alpha.6 (mfe-dashboard `v0.4.0`) needs web-shell `0.3.0` or later |
 | `0.1.0` | 26 | `^19.0.0` | `1.0.0-alpha.5`, all three | Remote `app2`: mfe-dashboard `v0.1.1`–`v0.2.0` |
 
 Keycloak itself is not a library dependency of the image. The shell talks to the `auth.idpOrigin` and `auth.clientId` in `/config/runtime.json`, and to the realm PUB-1 resolves for the workspace. The runtime image is nginx and the static files.
