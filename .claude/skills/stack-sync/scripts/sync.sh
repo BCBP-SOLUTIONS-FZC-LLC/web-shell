@@ -3,10 +3,13 @@
 # replaying the squashed commits as conflicts. Usage: sync.sh <branch> <old-base-branch-or-sha>
 #  1. Refuses (exit 1) unless origin/main's tree equals the old base's tree: otherwise main has
 #     changes the stack does not, and conflicts must be resolved by hand.
-#  2. Merges origin/main, taking the branch side of any conflict (-X ours).
-#  3. Proves the result: the branch's diff against main must equal the branch's own change (from the
-#     point it was stacked on the old base). A moved block that git merged twice, or a base change
-#     the branch never had, fails this check and the merge is undone.
+#  2. Merges without a 3-way content merge: records origin/main as merged (-s ours), then applies only
+#     what main has that the branch lacks, the diff from where the branch was cut to origin/main.
+#     The branch's own changes are never re-merged, so renames and moved code cannot confuse git
+#     (a plain merge against the pre-squash ancestor duplicated a moved block on PR 48 and failed on
+#     PR 50's folder moves).
+#  3. Proves the result: the branch's diff against main must equal the branch's own change. If not,
+#     or if the delta does not apply, the branch is reset to where it was.
 set -euo pipefail
 branch=${1:?usage: sync.sh <branch> <old base branch or sha>}
 base=${2:?usage: sync.sh <branch> <old base branch or sha>}
@@ -23,15 +26,22 @@ if [ "$oldtree" != "$maintree" ]; then
   exit 1
 fi
 git checkout -q "$branch"
+before=$(git rev-parse HEAD)
+undo() { git merge --abort 2>/dev/null || true; git reset -q --hard "$before"; echo "  $1 The branch is back where it was; merge origin/main by hand." >&2; exit 1; }
 fork=$(git merge-base "$branch" "$base")
 own=$(git diff "$fork" "$branch" | git patch-id --stable | cut -d' ' -f1)
-git merge -q --no-edit -X ours origin/main -m "Merge main after the squash merge of $base"
+git merge -q -s ours --no-edit origin/main -m "Merge main after the squash merge of $base"
+err=$(mktemp)
+if ! git diff --binary "$fork" origin/main | git apply -3 --index 2>"$err"; then
+  cat "$err" >&2; rm -f "$err"
+  undo "✗ main's changes since $branch was cut do not apply cleanly on it."
+fi
+rm -f "$err"
+git commit -q --amend --no-edit
 now=$(git diff origin/main HEAD | git patch-id --stable | cut -d' ' -f1)
 if [ "$own" != "$now" ]; then
   echo "✗ after the merge, $branch's diff against main is not its own change. Files that differ:" >&2
-  diff <(git diff --stat "$fork" "$branch@{1}" | sed '$d') <(git diff --stat origin/main HEAD | sed '$d') >&2 || true
-  git reset -q --hard "$branch@{1}"
-  echo "  The merge was undone. Merge origin/main by hand and fix the listed files." >&2
-  exit 1
+  diff <(git diff --stat "$fork" "$before" | sed '$d') <(git diff --stat origin/main HEAD | sed '$d') >&2 || true
+  undo ""
 fi
 echo "✓ $branch now contains origin/main, and its diff against main is exactly its own change. Push it, then retarget its PR to main."
