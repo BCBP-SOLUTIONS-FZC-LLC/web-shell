@@ -5,6 +5,7 @@ The browser shell for the BCBP micro-frontend platform. It runs the platform SDK
 **Repository:** `github.com/BCBP-SOLUTIONS-FZC-LLC/web-shell`
 **Runtime:** Node.js 26 · Rsbuild 2 (Rspack) · React 19.3 · `@bcbp-solutions-fzc-llc/frontend-sdk` `1.0.0-alpha.6` · private npm package `web-shell` (`"private": true`) · production image is nginx on port **8080**
 **Contract:** Module Federation host `shell`, built with `@bcbp-solutions-fzc-llc/webpack-preset`. It provides React, React DOM, the OTel API and every SDK subpath to remotes, and exposes nothing. Versioning of the image and that contract is in [VERSIONING.md](./VERSIONING.md).
+**Design:** [docs/lld/web-shell-lld.md](./docs/lld/web-shell-lld.md) is the contract (where it and the code disagree, fix one in the same PR). The platform SDK's design doc (`platform-reactcommon` `docs/design/frontend-sdk-design.md`, §C1 ports, §C2 shell bootstrap) defines what a shell must own. The structure follows the Frontend Architecture Constitution ([assessment](./docs/architecture/constitution-assessment.md), [ADRs](./docs/adr/README.md)).
 **Status:** Released: **`v0.2.0`** (remote `dashboard`, pairs with mfe-dashboard `v0.3.0`) is current and `latest`; **`v0.1.0`** (remote `app2`, pairs with mfe-dashboard `v0.2.0`) is kept as its rollback. Both were published by `release.yml` (signed, SBOM, SLSA provenance, tags added after signing). Not deployed yet. Deploy them in pairs: web-shell `0.2.0` + mfe-dashboard `0.3.0` (or `0.1.0` + `0.2.0`). Until CloudFront exists (next month) environments follow [docs/hosting-without-cloudfront.md](./docs/hosting-without-cloudfront.md). What is still open: [LLD §15](./docs/lld/web-shell-lld.md#15-open-items).
 
 ---
@@ -30,6 +31,12 @@ The dashboard is a separate build. The browser still needs one origin that can:
 - Sign the user in to the right workspace once, and give every remote the same session, token source, consent state and telemetry.
 - Load each remote's `remoteEntry.js` from the remote manifest, and keep a single copy of React, the OTel API and the SDK.
 - Keep serving the document when a remote is down. A failed remote stays inside its `RemoteBoundary` ("Something went wrong. / Try again") instead of blanking the page.
+
+This is enforced structurally, not by convention:
+
+- **Layers.** `src/` follows the constitution's folders: presentation → application → domain, with infrastructure implementing domain contracts and `app/` as the composition root. `eslint.config.js` and `npm run arch-lint` (`.dependency-cruiser.cjs`) fail any import across a layer the rules do not allow, in CI.
+- **No copies of the SDK.** `test/unit/no-sdk-duplicates.test.ts` fails when a module-level name in `src/` is an SDK export, so token handling, retries, remote loading and telemetry stay in the SDK.
+- **No login without a click.** The e2e suite proves it after a sign-out and a device-clock refusal, and the bootstrap integration test after an expiry; the e2e suite also proves the app is unmounted before "You are signed out".
 
 Local development runs the shell at `http://localhost:5001`.
 
@@ -91,6 +98,40 @@ The container listens on **8080** as uid **101**.
 
 ---
 
+## Input validation and error handling
+
+The shell has one form (the work email) and reads three files it does not own (`/config/runtime.json`, `/remotes/manifest.json`, `/version.json`). Everything it shows the user comes from its own catalogue (`src/shared/i18n/en.json`), never from a server's message.
+
+Errors from the platform's APIs are RFC 9457 problem responses. The SDK's `ApiClient` turns one into a `ProblemError` (`status`, `typeId`, `errorCode`, `requestId`). For example, a rate-limited PUB-1 call answers with the platform's type `platform/rate-limit-exceeded` (the SDK's `contracts/problem-types.json`):
+
+```json
+{
+  "type": "https://errors.company.com/platform/rate-limit-exceeded",
+  "title": "Too Many Requests",
+  "status": 429,
+  "errorCode": "RATE_LIMIT_EXCEEDED",
+  "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+  "timestamp": "2026-11-06T10:45:22Z"
+}
+```
+
+The shell never shows `title` or `detail`: the sign-in screen maps every failure to a catalogue key.
+
+### Notable validation rules
+
+| Rule | Enforcement |
+|---|---|
+| The email is required and must look like an email | `<input type="email" required>`; the value is trimmed before PUB-1 |
+| PUB-1 never reveals whether an email or a workspace exists | Not found, 429, unreachable and a malformed answer all become `WorkspaceNotFoundError` → "We could not find a workspace for that email." (`resolveWorkspaceUseCase`) |
+| No error message from a server is shown | The session screens map every failure to `login.workspaceNotFound`, `login.error.signIn` or `login.error.passwordReset`; the error page (`AppError`) shows only a reference id |
+| `/config/runtime.json` is validated strictly | The SDK refuses an unknown key, an invalid value, or an `environment` outside the platform's vocabulary: the page shows "The app is unavailable right now." and logs `the app could not start`. Smoke `live` fails a file that names another environment than the deployment's |
+| Remote entries are trusted only when pinned | `/remotes/manifest.json` entries load only from the page's origin or `remotes.allowedOrigins`, with `integrity` required outside `local`, `dev`, `test`; a mismatch fails as a chunk-load error inside the remote's boundary |
+| Identity headers are never sent | The `ApiClient` refuses `x-user-id`, `x-tenant-id`, `x-tenant-roles` and the rest: the gateway sets them from the verified token |
+| Redirects after sign-in stay on this origin | The SDK checks return URLs with `isSafeRedirect`; the redirect URI is `{origin}{auth.redirectPath}` |
+| Text is never rendered as HTML | React text only; `test/unit/shell-text.test.ts` fails a hard-coded literal, and the ESLint plugin forbids unsafe HTML |
+
+---
+
 ## Architecture
 
 ```
@@ -133,14 +174,93 @@ web-shell/
 
 `src/` imports the SDK through public subpaths only (`@bcbp-solutions-fzc-llc/frontend-sdk/auth`, …); the ESLint plugin fails a root or deep import. `src/` never imports the dashboard's source.
 
-Browser storage:
+### Dependency rules (enforced by ESLint and `npm run arch-lint` in CI)
 
-| Key | Store | Purpose |
+| Layer | May import | Never |
 |---|---|---|
-| `@bcbp-solutions-fzc-llc/frontend-sdk:*` | `localStorage` | SDK metadata: workspace cache, session id, last activity, last user. No tokens |
-| `bcbp.rememberEmail`, `bcbp.loginEmail` | `localStorage` | "Remember Email" on the login form only |
+| `domain/` | SDK types | React, the browser, any other layer |
+| `application/` | `domain/`; SDK types and the `/problem` error classes | React, the browser, `infrastructure/`, `presentation/`, `app/` (ports are injected) |
+| `infrastructure/` | `domain/`, `shared/i18n`, the SDK | `presentation/`, `application/`, `app/` |
+| `presentation/` | `pages/`, `features/`: `domain/`, `application/` types, `shared/i18n` (pages also `shared/constants`, `shared/ui`; features also SDK `/auth` types); `components/`: `shared/i18n`, `shared/constants`, `shared/ui`; `widgets/`: `shared/i18n` | `infrastructure/`, `app/`, the SDK, `fetch`, storage, `location`, `history`, `navigator` |
+| `shared/` | SDK `/i18n` and `/react` (`shared/i18n`); `shared/constants` → `shared/i18n` | Any shell layer |
+| `app/` | `bootstrap.tsx` wires every layer except presentation and `shared/constants`; routes, providers and layouts only what they render or provide | — |
 
-Tokens are never written to storage.
+The full component map is in CONTRIBUTING (§ Architecture lint); `test/unit/layer-rules.test.ts` and `test/unit/arch-lint.test.ts` prove each rule fires.
+
+### Storage and messaging
+
+| Key or channel | Store | Purpose |
+|---|---|---|
+| `@bcbp-solutions-fzc-llc/frontend-sdk:*` | `localStorage` | SDK metadata: workspace cache (up to 20), session id, last activity, last user. No tokens |
+| `bcbp.rememberEmail`, `bcbp.loginEmail` | `localStorage` | "Remember Email" on the login form only (`infrastructure/storage/rememberedEmail.ts`, the one raw-storage file) |
+| `BroadcastChannel` `platform-auth` | Browser | SDK: sign-out and workspace switches reach every tab |
+| Session context, tokens | Memory | Per page; tokens are never written to storage |
+
+Remotes that need storage use `storage(appId)` from the SDK's `/storage`, namespaced per workspace. Details: ARCHITECTURE § Browser storage, § Cache strategy.
+
+### Shared library dependencies
+
+| Package | Version | What it provides |
+|---|---|---|
+| `@bcbp-solutions-fzc-llc/frontend-sdk` | `1.0.0-alpha.6` (exact) | Identity, runtime config, Keycloak sign-in (PKCE, tokens in memory), `ApiClient`, telemetry, authorization hints, flags, i18n, remote loading, navigation, Trusted Types, React hooks and `PlatformProvider`, test helpers |
+| `@bcbp-solutions-fzc-llc/webpack-preset` | `1.0.0-alpha.6` (exact) | `pluginPlatform({ role: 'shell' })`: Module Federation host, the shared map, chunk integrity, `SdkVersionPlugin` |
+| `@bcbp-solutions-fzc-llc/eslint-plugin` | `1.0.0-alpha.6` (exact) | Public-subpath imports, no identity headers, no raw storage, no unsafe HTML, API route templates |
+| `react`, `react-dom` | 19.3 | Strict singletons shared with remotes |
+| `react-router-dom` | 7 | The signed-in routes under `/t/<slug>/` |
+| Tailwind 4, daisyUI, `@fontsource-variable/*` | — | Shell-local UI and self-hosted fonts (ADR 0006) |
+| `dependency-cruiser` | `18.7.0` (dev) | `npm run arch-lint` |
+
+The three platform packages move together, shell before remotes (`/sdk-upgrade`, CONTRIBUTING).
+
+---
+
+## Integrating a remote with the shell
+
+How a new micro-frontend joins the page. The checklist form, with the hosting side, is ARCHITECTURE § Host and remote checklist.
+
+### 1. Prerequisites
+
+Build the remote with `@bcbp-solutions-fzc-llc/webpack-preset` (`pluginPlatform({ role: 'remote', name: '<name>', exposes: { './App': … } })` in Rsbuild, or the preset's Rspack or webpack config), on an SDK version **no newer than the shell's** (`1.0.0-alpha.6` today). A Vite ES-module remote does not load through the SDK's `loadRemote`. The remote takes React and the SDK from the shell's share scope; it never bundles its own copy.
+
+### 2. Register it in the manifest
+
+Each environment's `/remotes/manifest.json` gets `{ "<name>": { "entry", "version", "ownerDomain", "integrity" } }`. `integrity` (sha384 of the entry) is required outside `local`, `dev` and `test`. An entry on another origin must be in `remotes.allowedOrigins` in `/config/runtime.json`.
+
+### 3. Render it
+
+A route in `src/app/routes/App.tsx` renders `<RemoteBoundary remote="<name>" module="./App" />` with **no props**, and calls `useRouteTemplate('/t/:slug/<path>')` so telemetry groups by route template. Data the remote needs goes into the `PlatformProvider` shell value; see CONTRIBUTING § Adding a remote or changing what the shell passes to one.
+
+### 4. What the remote reads (SDK `/react` hooks)
+
+| Need | Hook |
+|---|---|
+| The signed-in user, the workspace | `useCurrentUser()`, `useWorkspace()` |
+| Roles, plan, flags, read-only (P-35) | `useSessionContext()`, `useHasPermission(action, resource)` or `<Can>`, `useFeatureFlag(key, fallback)`, `useReadOnly()` |
+| Sign out, switch workspace, step-up MFA | `useSignOut()`, `useSwitchWorkspace()`, `useStepUp()` |
+| Calls to `/api` | `useApi(fn, deps)` or `useApiClient()`: the shell's token source, the remote's `mfe` label on spans and metrics |
+| Text and locale | `useT('<name>')` over its own namespace (`registerNamespace('<name>', loader)`), `useLocale()` |
+
+The remote never runs its own Keycloak client, never reads tokens, and never imports the shell's source.
+
+### 5. Navigation
+
+`navigate()` from the SDK's `/nav` goes through the shell's router when the path is under the current `/t/<slug>` basename (no reload), and is a full load otherwise (`infrastructure/federation/navigator.ts`).
+
+### 6. Errors
+
+A render error inside the remote stays in its `RemoteBoundary` ("Try again"); the rest of the shell keeps running. A failed load (manifest, timeout, integrity) shows the same boundary. The remote may add its own `MFEErrorBoundary` around parts of itself.
+
+### 7. Storage
+
+`storage('<appId>')` from `/storage` is namespaced per workspace and refuses token-like keys. Raw `localStorage` is forbidden by the platform's ESLint plugin.
+
+### 8. Telemetry
+
+Nothing to set up: the shell starts tracing, logging, metrics and web vitals once, and the SDK tags the remote's spans, logs and API metrics with its `mfe`. v1 consent exports only errors and essential warnings.
+
+### 9. Verify
+
+For `dashboard`, run `REMOTE_DIST=../mfe-dashboard/dist npm run test-contract` (§ Testing the dashboard contract locally): integrity, the share scope, CSS, the role map reaching the remote, navigation and sign-out, in three engines under the production CSP. A new remote needs its own contract spec and a server entry in `test/browser/server.ts`: the current suite refuses a build not named `dashboard`.
 
 ---
 
@@ -179,6 +299,30 @@ The dev server stands in for what CloudFront and the platform APIs provide (`con
 Set `DEV_API_URL` to proxy `/api` to a real API instead of the stubs, or `DEV_REALM` to stub a different realm.
 
 The dashboard is a second process. Start `mfe-dashboard` (`npm run dev` there) so it serves `remoteEntry.js` at `http://localhost:5002`. While it is not running, `/t/bcbp/dashboard` shows the remote boundary's error and the rest of the shell keeps working.
+
+### Trying the flows locally
+
+With Keycloak and the dev server running (`mfe-dashboard` too for the sign-out rows: the shell has no sign-out control of its own):
+
+| Flow | How |
+|---|---|
+| Sign in | Open http://localhost:5001, enter the seeded user's email (the seed script prints it; its password is set in `scripts/seed-keycloak-user.mjs`), continue to Keycloak |
+| Silent restore | Reload the page: the SDK restores the session from Keycloak's SSO cookie (`prompt=none`) without the email screen |
+| Sign-out, no silent sign-in | Sign out from the dashboard: "You are signed out" waits; the next sign-in asks for credentials (`prompt=login`) |
+| Cross-tab sign-out | Open two tabs, sign out in one: the other shows "You are signed out" |
+| Session expiry | Set `auth.idleTimeoutMs` to `60000` (the SDK's minimum; lower values are refused) in `config/runtime.local.json` and leave the tab idle: "Session ended" appears over the app |
+| Missing permissions | Sign in once without it (that caches the workspace), then restart with `DEV_API_URL=http://localhost:9 npm run dev` (nothing listens there) and reload: P-35 gets a 503 problem, the amber notice says some actions are hidden, and the background retry runs. PUB-1 is proxied too, so the email screen cannot resolve while it is set |
+| A different role | `DEV_ROLES=member,tenant_admin npm run dev` |
+| Remote down | Stop `mfe-dashboard`: `/t/bcbp/dashboard` shows the boundary's error, the shell keeps running |
+
+### Developer tools
+
+| Tool | What it does |
+|---|---|
+| `npm run hooks:install` | Pre-commit gate: staged env files, workflow hygiene, Dockerfile digest pin, `tsc --noEmit` |
+| `npm run arch-lint` | Component boundaries (`.dependency-cruiser.cjs`) |
+| Claude Code (`.claude/`) | `settings.json` hooks: `guard.sh` blocks edits to sibling repos, `node_modules/`, `dist/`, `coverage/`, env files; `post-edit.sh` runs ESLint, arch-lint, the SDK pin check and the diagram check. Subagents `invariant-reviewer`, `doc-sync-reviewer`; skills `/sdk-upgrade`, `/stack-sync`; MCP `context7` (`.mcp.json`) |
+| `node .claude/hooks/check-diagrams.mjs` | Every diagram in ARCHITECTURE.md equals its `.mmd` source |
 
 ### Common commands
 
@@ -224,6 +368,45 @@ Port **8080** is Keycloak in this compose file and also the port the shell image
 
 ---
 
+## Testing the dashboard contract locally
+
+The contract suite (`test/browser/dashboard.spec.ts`) serves a **real** mfe-dashboard production build as `dashboard` inside this shell's production build, in Chromium, Firefox and WebKit under the production CSP. Run it before a release that changes the SDK, the remote contract or the shell value.
+
+### Step 1 — Build the dashboard
+
+```bash
+cd ../mfe-dashboard
+export NODE_AUTH_TOKEN=$(gh auth token)
+npm ci && npm run build      # writes dist/ with remoteEntry.js and remote-manifest-entry.json
+```
+
+### Step 2 — Build the shell
+
+```bash
+cd ../web-shell
+npm ci && npm run build
+```
+
+### Step 3 — Run the suite
+
+```bash
+REMOTE_DIST=../mfe-dashboard/dist npm run test-contract
+```
+
+12 cases (4 × 3 engines): the remote loads with its own integrity and CSS and no CSP violation, every image it shows loads, the role map reaches it, its `NavLink` stays in the page, and its Logout POSTs to Keycloak through the shell. A wrong integrity fails it.
+
+### Troubleshooting
+
+| Symptom | Cause |
+|---|---|
+| The remote does not load; a shared-scope error in the console | The dashboard was built on a newer SDK than the shell's. Upgrade the shell first (`/sdk-upgrade`) |
+| Integrity failure | `remote-manifest-entry.json` does not match the built `remoteEntry.js`: rebuild the dashboard |
+| A CSP report | The remote adds an inline script or style, or a third-party origin |
+| `test/browser: REMOTE_DIST's build names its remote …` when the suite starts | The remote is not named `dashboard` (container `__platform_mfe_dashboard`) |
+| Browsers not installed | `npx playwright install --with-deps` once (CI uses the Playwright container) |
+
+---
+
 ## Testing
 
 | Layer | Path | What it exercises |
@@ -236,6 +419,16 @@ Port **8080** is Keycloak in this compose file and also the port the shell image
 | Dashboard contract | `test/browser/dashboard.spec.ts`, CI `dashboard-contract` | The real mfe-dashboard build (`REMOTE_DIST`) in this shell, three engines, production CSP: integrity, share scope and CSS, the role map reaching it, its navigation, its Logout through the shell's form POST. Informational in CI |
 
 Vitest uses happy-dom and Testing Library. `vitest.config.ts` defines `__ENVIRONMENT__` and `__BUILD_VERSION__` as `test`. The bootstrap test replaces every SDK subpath with a recording fake. The e2e suite runs the real SDK (Vitest inlines it, so each simulated page load gets a fresh one) against `test/fixtures/` fakes, modelled on platform-reactcommon's. No suite calls Keycloak, the IAM APIs or port 5002.
+
+### Canonical tests (do not break)
+
+- **`test/e2e/shell.test.tsx`** — the real shell and SDK: sign-out unmounts the app, nothing signs in without a click (`prompt=login` next), tokens never reach storage, the device-clock refusal.
+- **`test/unit/no-sdk-duplicates.test.ts`** — no module-level name in `src/` is an SDK export; no test hand-builds a problem body.
+- **`test/unit/layer-rules.test.ts`, `test/unit/arch-lint.test.ts`** — every layer rule fires on a probe.
+- **`test/unit/shell-text.test.ts`** — no hard-coded user-facing text in presentation; the catalogue's fallback.
+- **`test/unit/session-context.test.ts`** — `isTransient` agrees with the SDK `ApiClient`'s real retries (12 statuses).
+- **`test/integration/bootstrap.test.tsx`** — the exact start-up order, every branch, the catalogue loaded before the IdP.
+- **`test/browser/shell.spec.ts`** — the production build under the production CSP and Trusted Types; any CSP report fails.
 
 ### Coverage
 
@@ -277,6 +470,19 @@ The image takes `PLATFORM_ENVIRONMENT`, `BUILD_VERSION` and `SOURCE_DATE_EPOCH` 
 
 `docker.local.env` is for the Keycloak helper scripts (`DOCKER_CLI` on Windows). The shell does not read it.
 
+### Development and tooling variables
+
+| Variable | Read by | Purpose |
+|---|---|---|
+| `DEV_API_URL` | `config/dev-platform.mjs` | Proxy `/api` to a real API instead of the stubs (unreachable → 503 problem) |
+| `DEV_REALM` | `config/dev-platform.mjs` | The realm the PUB-1 stub returns (default `tenant-bcbp`) |
+| `DEV_ROLES` | `config/dev-platform.mjs` | The roles the P-35 stub returns (default `member,tenant_owner`) |
+| `SMOKE_BASE_URL` | `test/smoke` | The image or deployment the smoke suite checks (required) |
+| `SMOKE_MODE` | `test/smoke` | `image` (adds nginx's headers) or `live` (adds the CSP, HSTS and the `environment` check) |
+| `ENVIRONMENT` | `test/smoke` | The page environment the runtime config is validated with (default `prod` for `image`, `dev` for `live`); in `live` also the environment the deployed `runtime.json` must name |
+| `REMOTE_DIST` | `test/browser/server.ts` (and the specs' skips) | A built mfe-dashboard `dist/` for `npm run test-contract` |
+| `COVERAGE_THRESHOLD` | `.github/scripts/coverage-gate.mjs` | Overrides the 95% gate locally; CI never sets it |
+
 ---
 
 ## Security
@@ -291,6 +497,45 @@ The image takes `PLATFORM_ENVIRONMENT`, `BUILD_VERSION` and `SOURCE_DATE_EPOCH` 
 | **CSP** | The bundle is Trusted-Types and `script-src 'self'` safe (preset output, `installTrustedTypesPolicy`). nginx sends no CSP by default; the platform's CloudFront distribution does. An environment served without CloudFront mounts `nginx/security.d/csp.conf.example` (with its IdP origin) as `/etc/nginx/security.d/csp.conf`; one behind CloudFront mounts nothing, since two CSPs are both enforced. Fonts (Geist, Inter) are self-hosted under `/assets/`, so `font-src 'self'` and `style-src 'self'` hold |
 | **Image** | nginx runs as uid 101. `.env` is not copied into the build context. The registry token is a BuildKit secret and never lands in a layer. Source maps are deleted from the image |
 | **Reporting** | [SECURITY.md](./.github/SECURITY.md). Email vijay@bcbpsolutions.com with subject `[web-shell]` |
+
+---
+
+## Observability
+
+The shell starts the SDK's telemetry once for the whole page; the remote's telemetry flows through the same pipeline under its own `mfe` label. The standard, the tiers and the inventory are in [docs/observability.md](./docs/observability.md).
+
+**Identity.** `service` `web-shell`, `domain` `portal`, `environment` from `runtime.json` (else the build-time fallback), `buildVersion`. The SDK injects them into every span, log and metric; code never sets them.
+
+### Metrics
+
+Per the Enterprise Platform Observability Standard's three tiers:
+
+- **Tier 1 — `platform_web_*`** (web vitals, remote loads, API client, errors): bound by the SDK, recording once governance ratifies them.
+- **Tier 2 — `portal_*`**: none in the registry yet.
+- **Tier 3 — `portal_web_shell_*`**: the shell creates **none** today. `npm run metrics-check` (CI) refuses a metric that breaks the standard or is missing from the inventory.
+
+### Alerts and dashboards
+
+One alert is defined here: `WebShellStartupFailures` (Loki, on `the app could not start`), with its [runbook](./docs/runbook-startup-failure.md); it must be deployed to the Loki ruler (LLD §15). The platform's browser dashboards and SLOs for `platform_web_*` live in `platform-reactcommon`.
+
+### Tracing and logs
+
+OTLP/HTTP to the same-origin `telemetry.otlpBaseUrl` (`/otel`), sampled by `telemetry.sampleRatio`. API calls carry `x-request-id`, `traceparent` and `x-session-id`. v1 consent is essential only, so error logs and essential warnings leave the page and the rest stays in it. The shell's own events: `the app could not start` (error), `manifest load failed` (error), `session context unavailable` (warning, kept in the page under v1 consent). Error boundaries (`RemoteBoundary`, `MFEErrorBoundary` `web-shell`) log render errors with their `mfe`.
+
+---
+
+## Deployment
+
+A tag publishes a signed image; nothing in this repository deploys it.
+
+| Concern | Where |
+|---|---|
+| Image | `ghcr.io/bcbp-solutions-fzc-llc/web-shell`, nginx on 8080 as uid 101 (§ Docker); tags, Cosign verification and how to cut a release in [VERSIONING.md](./VERSIONING.md) |
+| Per environment | `/config/runtime.json` (with its `environment`), `/remotes/manifest.json`, the redirect URIs in each realm, and the CSP (§ Docker, Minimum per-environment configuration) |
+| Until CloudFront | The ingress routes `/api`, `/otel`, `/csp-report`, `/remotes/dashboard/` and the image gets the CSP and HSTS as mounted files: [docs/hosting-without-cloudfront.md](./docs/hosting-without-cloudfront.md) |
+| Pairs | web-shell `0.2.0` + mfe-dashboard `0.3.0` (remote `dashboard`); rollback `0.1.0` + `0.2.0` (`app2`). On an SDK upgrade the shell deploys first |
+| Deploy check | `SMOKE_BASE_URL=https://<host> SMOKE_MODE=live ENVIRONMENT=<target> npm run test-smoke` |
+| Rollback | Redeploy the previous image; `index.html` and the config are `no-cache`, so it takes effect on the next load (ARCHITECTURE § Release and rollback safety) |
 
 ---
 
@@ -343,6 +588,31 @@ docker run --rm -p 18080:8080 \
 
 Two stages, both digest-pinned: `node:26-bookworm` runs `npm ci` and `npm run build`, then deletes the source maps; `nginxinc/nginx-unprivileged:1.31-alpine` serves `/usr/share/nginx/html` as uid 101. The CI smoke job fails the image above 200 MB, requires `/healthz`, `/` (a document that contains `id="app"`), `/config/runtime.json` and `/version.json` to return 200, fails when the image contains a `.map` file, and then runs the smoke suite against the container (`npm run test-smoke`, [test/smoke/README.md](./test/smoke/README.md)). To run it locally: `docker run -d --rm -p 127.0.0.1:18080:8080 web-shell:local`, then `SMOKE_BASE_URL=http://127.0.0.1:18080 npm run test-smoke`.
 
+### Minimum per-environment configuration
+
+The image ships `public/config/runtime.json` with production defaults and no `environment`. A mounted file replaces it whole and the SDK validates it strictly, so start from the image's file and change at least these keys:
+
+```jsonc
+// /config/runtime.json (mounted, or written by the deploy pipeline)
+{
+  "environment": "staging",                       // must match the deployment; checked by smoke live
+  "auth": {
+    "idpOrigin": "https://auth.<env>.example",     // that environment's Keycloak
+    "clientId": "tender-web"
+    // keep the other auth keys from the image's file
+  },
+  "remotes": { "killSwitch": [], "loadTimeoutMs": 10000, "retries": 2, "allowedOrigins": [] }  // add the remotes' origin if not same-origin
+  // …every other key as in the image's file
+}
+```
+
+```json
+// /remotes/manifest.json
+{ "dashboard": { "entry": "/remotes/dashboard/0.3.0/remoteEntry.js", "version": "0.3.0", "ownerDomain": "…", "integrity": "sha384-…" } }
+```
+
+Plus, until CloudFront: `nginx/security.d/csp.conf.example` (with that environment's Keycloak origin in `connect-src` and `form-action`) and `hsts.conf.example`, mounted at `/etc/nginx/security.d/`. Each realm registers `{origin}/auth/callback` as a redirect URI.
+
 ### Local Keycloak compose
 
 | Container | Image | Host port | Purpose |
@@ -361,7 +631,9 @@ Two stages, both digest-pinned: `node:26-bookworm` runs `npm ci` and `npm run bu
 
 ## Cross-service dependencies
 
-### Keycloak (through the SDK)
+### 1. Synchronous outbound calls (the browser → other services)
+
+#### Keycloak (through the SDK)
 
 | Call | When |
 |---|---|
@@ -372,20 +644,44 @@ Two stages, both digest-pinned: `node:26-bookworm` runs `npm ci` and `npm run bu
 
 `{realm}` is the workspace's realm (`trial`, or `tenant-<slug>`). The SDK builds these URLs from `{auth.idpOrigin}/realms/{realm}`; it does not fetch discovery. The shell does not call the Keycloak Admin API. `scripts/seed-keycloak-user.mjs` uses `kcadm` inside the dev container only.
 
-### IAM HTTP APIs (same origin, `/api`)
+#### IAM HTTP APIs (same origin, `/api`)
 
 | Call | When |
 |---|---|
 | `GET /api/v1/public/tenants/resolve?identifier=` (PUB-1) | The email sign-in screen, and workspace switching. No token |
 | `GET /api/v1/me/session-context` (P-35) | Once after sign-in (with the SDK's own retries); after a network failure while online, a timeout, 429, 502, 503 or 504 (the SDK ApiClient's own rule), again after 1 s, 2 s, 4 s, one request each. Until it answers the app renders with deny-all permissions |
 
-### Dashboard remote (`dashboard`)
+### 2. Inbound callers (what depends on the shell)
+
+| Caller | Contract |
+|---|---|
+| Browsers | The document, `/config/runtime.json`, `/remotes/manifest.json`, `/version.json`, `/assets/*`, `GET /healthz` (§ nginx paths) |
+| The `dashboard` remote, and any future remote | The share scope (React, React DOM, the OTel API, every SDK subpath at the shell's version), the `PlatformProvider` shell value through SDK hooks, the router through `navigate()` |
+
+#### Dashboard remote (`dashboard`)
 
 The shell loads `dashboard`'s entry from `/remotes/manifest.json` in the browser and renders its `./App` with no props; the remote reads the user and sign-out from the SDK. A missing or failing remote stays inside its boundary; the shell keeps running.
 
-### Telemetry
+### 3. Async dependencies
+
+| Mechanism | Between | What flows |
+|---|---|---|
+| `BroadcastChannel` `platform-auth` | Tabs of this origin (SDK) | Sign-out and workspace switches |
+| `/version.json` polling | The shell and its own deployment | A new shell build (every 300 s) |
+| OTLP export | The browser → `/otel` | Logs, traces, metrics (below) |
+
+#### Telemetry
 
 Traces, logs and metrics are exported over OTLP/HTTP to `telemetry.otlpBaseUrl` (`/otel`), gated by consent. v1 grants `essential` only (a decision: no analytics consent manager), so errors and essential warnings are exported and traces, metrics and info logs are not.
+
+### 4. Infrastructure dependencies
+
+| System | Role |
+|---|---|
+| CloudFront (or, until next month, the ingress) | Routes `/api`, `/otel`, `/csp-report`, `/remotes/*`; sends the CSP and HSTS |
+| An OTLP collector behind `/otel`, Loki | Telemetry intake; the `WebShellStartupFailures` alert |
+| GitHub Packages | `@bcbp-solutions-fzc-llc/*` at build time (`NODE_AUTH_TOKEN`; the Dependabot secret `PACKAGES_READ_TOKEN`) |
+| GHCR | The signed image |
 
 ---
 
@@ -411,8 +707,14 @@ Setup, how to extend the shell, the test gate, and the pull request checklist ar
 |---|---|
 | [docs/lld/web-shell-lld.md](./docs/lld/web-shell-lld.md) | Low-level design: responsibilities, contracts, start-up order, flows, hosting, tests, open items |
 | [docs/README.md](./docs/README.md) | LLD, pipeline map, architecture diagrams, and runbooks |
-| [ARCHITECTURE.md](./ARCHITECTURE.md) | Module layout, bootstrap, sign-in and dashboard flows, storage, and the threat model |
+| [ARCHITECTURE.md](./ARCHITECTURE.md) | Layers and module graph; bootstrap, sign-in, API, PUB-1, session and dashboard flows; data model, caching, observability, CSP, concurrency, deployment, contracts and the threat model |
 | [CONTRIBUTING.md](./CONTRIBUTING.md) | Local setup, extension rules, tests, and the pull request checklist |
+| [docs/observability.md](./docs/observability.md) | Observability standard: identity, tiers, inventory, how to add a metric |
+| [docs/hosting-without-cloudfront.md](./docs/hosting-without-cloudfront.md) | Ingress routing and the mounted CSP and HSTS until CloudFront |
+| [docs/runbook-startup-failure.md](./docs/runbook-startup-failure.md), [runbook-release.md](./docs/runbook-release.md), [runbook-image-scan.md](./docs/runbook-image-scan.md), [runbook-coverage-gate.md](./docs/runbook-coverage-gate.md) | Runbooks |
+| [docs/architecture/constitution-assessment.md](./docs/architecture/constitution-assessment.md), [docs/adr/](./docs/adr/README.md) | Constitution compliance, the roadmap and the decisions |
+| [test/browser/README.md](./test/browser/README.md), [test/smoke/README.md](./test/smoke/README.md) | The browser and contract suites; the smoke suite and its modes |
+| [.claude/architecture.md](./.claude/architecture.md), [request-flows.md](./.claude/request-flows.md), [operations.md](./.claude/operations.md) | Condensed reference for Claude Code: layout and rules, flows, commands and CI |
 | [VERSIONING.md](./VERSIONING.md) | SemVer rules, image tags, Cosign verify, how to cut a release |
 | [CHANGELOG.md](./CHANGELOG.md) | User-facing history: released `0.1.0` and `0.2.0`; `[Unreleased]` for `main` |
 | [SECURITY.md](./.github/SECURITY.md) | How to report a vulnerability |
