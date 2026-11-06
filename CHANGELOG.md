@@ -17,6 +17,12 @@ Pull requests that change the shell, its dependencies, or the image add an entry
 
 ### Changed
 
+- **An error boundary around the shell's own screens (`2026-11-06`).** The constitution requires error boundaries. The dashboard had one (`RemoteBoundary`), but a render error in the shell's own routes or widgets left a blank page, logged only by the global handler.
+  - `App.tsx` now wraps its router in the SDK's `MFEErrorBoundary` with `mfe="web-shell"`, which logs the error, records it for the SDK's web-error metric (counting once Tier 1 is ratified) and reloads once for a chunk-load error. It shows `presentation/widgets/AppError`: "Something went wrong on this page.", the trace or request reference when there is one, and Try again, which re-renders.
+  - The page never shows the error's own message; its words are new catalogue keys `app.error` and `app.error.reference`.
+  - The SDK logs it as `remote failed to render` with `mfe: web-shell` (`docs/observability.md`).
+  - Tests: integration (a failing child shows the page, focused, without the internal message; Try again recovers) and axe. 203 tests at 100%, browser 18/18, contract 12/12; entry 9.8 KB of 12 KB.
+
 - **Frontend Architecture Constitution, step 2: `src/` in the constitution's folders (`2026-11-06`).** Violation V1 of the assessment (#45). The last roadmap step that changes code.
   - **New layout:**
 

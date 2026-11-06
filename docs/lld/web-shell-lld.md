@@ -362,6 +362,7 @@ Here (a remote's `useSignOut()`) or in another tab (`BroadcastChannel('platform-
 | P-35 | degrade | Deny-all, platform flags, no `/t/<slug>/` move, `warn` log; `App` shows "We couldn't load your permissions…" with Reload (`role="status"`) |
 | Manifest | degrade | `error` log; the boundary shows its error |
 | Remote load or render | degrade | Boundary message, "Try again" |
+| Shell render (routes, widgets) | stop that tree | SDK `MFEErrorBoundary` `mfe="web-shell"` around `App`'s router: `error` log (the SDK's text `remote failed to render`, attribute `mfe: web-shell`), the SDK's web-error record (Tier 1, once ratified), then `AppError` (catalogue words, reference, Try again) |
 | Telemetry export | ignore | SDK queues; nothing beyond `essential` without consent |
 | `/healthz` | liveness only | Constant `ok`; does not check Keycloak, IAM or `dashboard` |
 
