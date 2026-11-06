@@ -11,6 +11,19 @@ Pull requests that change the shell, its dependencies, or the image add an entry
 
 ### Added
 
+- **Claude Code automation for this repository (`2026-11-06`).** No change to the app, the bundle or the image.
+  - **Hooks:** `.claude/settings.json` now wires the two existing hooks, which until now did not run.
+    - `guard.sh` blocks edits to `../mfe-dashboard`, `platform-reactcommon`, `node_modules/`, `dist/`, `coverage/` and env files.
+    - `post-edit.sh` now also runs arch-lint on an edited `src/` file and its imports, and checks the platform package pins on `package.json` (`.claude/hooks/check-sdk-pins.mjs`).
+  - **Subagent:** `doc-sync-reviewer`, which checks documentation against the code.
+  - **Skills:** `/sdk-upgrade <version>` (with `bump.sh`) and `/stack-sync <PR>` (with `sync.sh`, which refuses when `main` has diverged from the old base).
+  - **MCP:** `.mcp.json` adds `context7`, pinned to `@upstash/context7-mcp@4.4.4`.
+  - **Tested:**
+    - the guard blocked a write into `dist/` in a live session;
+    - the post-edit hook passes clean files and fails an import cycle and loose pins;
+    - `sync.sh` was run in a throwaway repository, merging when `main` equals the old base and refusing when it diverged;
+    - `bump.sh` refuses an unpublished version.
+
 - **Dependabot can read GitHub Packages (`2026-11-05`).** Its npm job failed with 401 on `npm.pkg.github.com` (run of 2026-11-05: `@bcbp-solutions-fzc-llc/frontend-sdk`, `eslint-plugin`), so no npm update could open, public packages included. `.github/dependabot.yml` now declares the `github-packages` registry with the Dependabot secret `PACKAGES_READ_TOKEN` and ignores `@bcbp-solutions-fzc-llc/*` (moved by hand, in lockstep). Same as mfe-dashboard #29. Needs the secret: an organization Dependabot secret shared with both repositories.
 
 - **The Enterprise Platform Observability Standard, for the shell (`2026-11-05`).** `docs/observability.md` documents the shell's place in the three tiers (identity `portal` / `web-shell`; Tier 3 prefix `portal_web_shell_`; `domain`, `service`, `environment` injected by the SDK), its metric inventory (none of its own today: Tier 1 `platform_web_*` is SDK-bound and pending ratification, the signals are logs), how to add a metric, and that no dashboards, recording rules, SLOs or HPA live in this repo. `npm run metrics-check` (`.github/scripts/metrics-check.mjs`, in `Validate / Quality`) checks every metric `src/` creates **with the SDK's own meters** (`getServiceMeter` / `getDomainMeter` under the shell's identity), so the rules are the SDK's and are not restated here; the script adds only what the SDK cannot see: metrics created outside it (OpenTelemetry metrics API, prom-client), names and labels that are not literals, and metrics missing from the inventory. 9 tests; a probe shows a bad metric failing with the SDK's rule.

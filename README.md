@@ -124,7 +124,8 @@ web-shell/
 ├── vitest.config.ts             # happy-dom, build constants, SDK inlined; excludes test/smoke
 ├── vitest.smoke.config.ts       # test/smoke only, node environment
 ├── docs/                        # LLD, architecture diagrams, pipeline, runbooks
-├── .claude/                     # Claude Code guidance, hooks, reviewer agent
+├── .claude/                     # Claude Code guidance, settings (hooks), hook scripts, reviewer agents, skills
+├── .mcp.json                    # Claude Code MCP servers (context7, pinned)
 ├── .github/workflows/           # ci, test, quality, changelog, release
 └── VERSIONING.md                # Image tags and how to cut a release
 ```
