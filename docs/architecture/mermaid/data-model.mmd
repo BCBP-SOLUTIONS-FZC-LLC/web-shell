@@ -1,0 +1,44 @@
+classDiagram
+    class Workspace {
+        realm: string
+        trial: boolean
+        slug?: string
+        tenantIdHint?: string
+    }
+    class SessionContext {
+        tenantId: string
+        slug: string
+        roles: string[]
+        departments: IdLevel[]
+        plan?: string
+        featureFlags: string[]
+        readOnly: boolean
+        mfaFreshnessSeconds?: number
+        locale?: string
+    }
+    class ShellValue {
+        user
+        workspace: Workspace
+        context: SessionContext
+        locale: string
+        switchWorkspace(identifier)
+        signOut(global?)
+    }
+    class RoleMap {
+        IAM_ROLES: Role[]
+        permissions: Record~Role, Permission[]~
+    }
+    class SignInUseCases {
+        resolveWorkspace(email): Workspace
+        requestPasswordReset(email)
+        rememberedEmail: RememberedEmailRepository
+    }
+    class RememberedEmailRepository {
+        get(): string
+        save(email, remember)
+    }
+    ShellValue --> Workspace
+    ShellValue --> SessionContext
+    SessionContext --> RoleMap : roles
+    SignInUseCases --> RememberedEmailRepository
+    SignInUseCases --> Workspace

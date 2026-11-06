@@ -1,6 +1,6 @@
 # Architecture
 
-This document describes the internal structure, dependency direction, and browser flows of `web-shell`.
+This document describes the internal structure, dependency direction, browser flows, data, caching, observability, security and deployment of `web-shell`.
 
 `web-shell` is a **private Rsbuild application** (`github.com/BCBP-SOLUTIONS-FZC-LLC/web-shell`, Node.js 26, React 19.3) built on the platform SDK (`@bcbp-solutions-fzc-llc/frontend-sdk` `1.0.0-alpha.6`). The npm package name is `web-shell` and `"private": true`. Nothing installs it. What ships is a static bundle: the SDK bootstrap, the sign-in and session screens, and a Module Federation host (`shell`) that renders the dashboard remote. The production process is nginx on port **8080**, uid **101**. There is no API server, database, or message bus in this repository.
 
@@ -235,7 +235,7 @@ sequenceDiagram
         Boot->>Browser: render App inside ShellRoot (PlatformProvider), registerNavigator
         opt no session context
             Boot->>IAM: retry after 1 s, 2 s, 4 s (online network error, timeout, 429, 502-504)
-            Boot->>SDK: subject, flags, rememberWorkspace; the provider updates live
+            Boot->>SDK: subject, flags, rememberWorkspace, and the provider updates live
         end
     end
 ```
@@ -354,6 +354,163 @@ The shell passes no props. `dashboard` reads the user with `useCurrentUser()` an
 
 ---
 
+## API request flow
+
+Every call to `/api`, from the shell or from a remote, goes through the SDK's `ApiClient` (`createApiClient`, or `useApi` in a remote). The shell never calls `fetch` itself (presentation is lint-blocked from it), and it never sets identity headers: the gateway derives them from the verified token.
+
+> Source: [`docs/architecture/mermaid/api-request-flow.mmd`](docs/architecture/mermaid/api-request-flow.mmd)
+
+```mermaid
+sequenceDiagram
+    participant Caller as Shell or remote (useApi / createApiClient)
+    participant Client as SDK ApiClient
+    participant Token as SDK /auth token source
+    participant Ingress as /api (CloudFront or ingress)
+    participant GW as API gateway (Envoy, AuthZ enrichment)
+    participant IAM as IAM service
+
+    Caller->>Client: get('/v1/me/session-context')
+    Client->>Client: refuse identity headers (x-user-id, x-tenant-id, …)
+    Client->>Token: getAccessToken() (same-origin calls only)
+    Token-->>Client: access token, in memory
+    Client->>Client: x-request-id, traceparent, x-session-id (same origin or allowlisted)
+    Client->>Ingress: GET /api/v1/me/session-context, Bearer token, timeout 35 s
+    Ingress->>GW: forward
+    Note over GW,IAM: platform services, outside this repo
+    GW->>GW: verify JWT, inject x-user-id, x-tenant-id, x-tenant-roles
+    GW->>IAM: GET /v1/me/session-context
+    alt 2xx
+        IAM-->>Client: JSON
+        Client-->>Caller: { data, status, requestId }
+    else 401
+        Client->>Token: refresh once, retry with the new token
+    else 429, 502, 503, 504, network error while online, timeout (GET, PUT, DELETE, or retry.unsafe)
+        Client->>Client: wait Retry-After (up to 30 s) or a random backoff up to 250 ms × 2ⁿ (cap 5 s), at most 2 retries
+    else other 4xx or 5xx
+        IAM-->>Client: application/problem+json
+        Client-->>Caller: throws ProblemError (status, typeId, errorCode, requestId)
+    end
+```
+
+| Concern | Behaviour (SDK `ApiClient`, alpha.6) |
+|---|---|
+| Token | `Authorization: Bearer` only to the page's own origin, from the in-memory token source (`setTokenSource(initializeAuth(idp))`); `auth: false` sends none (PUB-1) |
+| Identity headers | `x-user-id`, `x-tenant-id`, `x-tenant-roles`, `x-departments`, `x-plan`, `x-feature-flags`, `x-residency-mode` are refused: a `TypeError` in `local`, `dev` or before an environment is identified, dropped with an essential warning elsewhere |
+| Correlation | `x-request-id` (per call), W3C `traceparent`, and `x-session-id` (unless `telemetry.sendSessionHeader` is false), on same-origin or `api.propagationAllowlist` URLs only |
+| Timeout | `api.timeoutMs` (35 000 ms in the image's `runtime.json`) → `TimeoutError` |
+| Retries | GET, PUT and DELETE (POST and PATCH only with `retry.unsafe`): up to 2 by default, on 429, 502, 503, 504, a network error while online, or a timeout. Waits `Retry-After` (capped at 30 s), else a random wait up to 250 ms × 2ⁿ, capped at 5 s. `isTransient` in `application/use-cases/loadSessionContext.ts` mirrors this rule; a test fails if they diverge |
+| 401 | One token refresh and a retry; then the token source's `onUnauthorized` |
+| Errors | `application/problem+json` → `ProblemError` (`status`, `typeId`, `errorCode`, `requestId`); offline → `NetworkError(offline)`. The shell shows catalogue words, never a server's message |
+| Redirects | Not followed when the request carries a token or correlation headers; an opaque or 3xx answer becomes a 502 problem |
+
+---
+
+## Pre-login workspace resolution (PUB-1)
+
+Before sign-in the browser has no token and no realm. PUB-1 answers one question for it: which Keycloak realm the sign-in redirect goes to.
+
+- **Only when needed.** The bootstrap first asks the SDK's `chooseWorkspace`. A cached workspace (`localStorage` `…:workspaces`: the URL's `/t/<slug>/`, or with no slug the most recent) skips PUB-1 and the email screen; an uncached slug in the URL is resolved through PUB-1 without the email screen. A failed silent sign-in names its own workspace.
+- **No token.** `GET /api/v1/public/tenants/resolve?identifier=<email or slug>` with `auth: false`; PUB-1 is public and rate-limited per IP.
+- **Mapping (`toWorkspace`).** `strategy: "shared"` is the trial realm, and the slug is known only when the identifier was the slug. `tenant_id` becomes `tenantIdHint`. `"dedicated"` is a paid realm: the slug is the realm without `auth.paidRealmPrefix` (`tenant-`). `found: false`, or a missing realm, is no workspace.
+- **One message for every failure.** `resolveWorkspaceUseCase` turns not found, 429, unreachable and malformed alike into `WorkspaceNotFoundError`; the screen shows "We could not find a workspace for that email." It never says whether the email or the workspace was wrong.
+- **No shell cache, no retry loop.** One request per submit; the ApiClient's own retries apply to 429 and 502–504. An email resolved on the email screen is cached only after a successful sign-in (`rememberWorkspace`, with the slug from P-35). A slug from the URL that PUB-1 resolves is cached by `chooseWorkspace` at once, after the SDK checks that realm and slug match.
+
+> Source: [`docs/architecture/mermaid/pub1-resolution-flow.mmd`](docs/architecture/mermaid/pub1-resolution-flow.mmd)
+
+```mermaid
+sequenceDiagram
+    participant Boot as bootstrap.tsx
+    participant SDK as SDK /auth (chooseWorkspace)
+    participant Cache as localStorage workspaces (SDK)
+    participant Screen as Sign-in screen
+    participant UC as resolveWorkspace (use case)
+    participant Port as workspaceResolver (infrastructure/api/iam.ts)
+    participant PUB as /api PUB-1
+
+    Boot->>SDK: chooseWorkspace(pathname, resolver)
+    alt URL has a workspace slug that is cached, or no slug and any workspace is cached
+        SDK->>Cache: the slug's workspace, or the most recent one
+        Cache-->>Boot: Workspace (no PUB-1 call)
+    else URL has a workspace slug that is not cached
+        SDK->>PUB: resolve(slug) through workspaceResolver
+        PUB-->>SDK: realm
+        SDK->>Cache: write it at once (realm and slug must match)
+        SDK-->>Boot: Workspace (or none: ask for the email)
+    else no slug and nothing cached
+        Boot->>Screen: askForWorkspace(signInUseCases)
+        loop until a workspace is found
+            Screen->>UC: resolveWorkspace(email)
+            UC->>Port: resolve(email)
+            Port->>PUB: GET /api/v1/public/tenants/resolve?identifier= (auth false, no token)
+            PUB-->>Port: 200 found, realm, strategy, tenant_id
+            Port->>Port: toWorkspace (shared is the trial realm, dedicated is realm minus paidRealmPrefix)
+            alt found
+                UC-->>Screen: Workspace
+            else not found, 429, unreachable, malformed
+                UC-->>Screen: WorkspaceNotFoundError
+                Screen->>Screen: "We could not find a workspace for that email." (the user can try again)
+            end
+        end
+        Screen-->>Boot: Workspace and the email (onChosen)
+    end
+    Boot->>SDK: idp.login(workspace, loginHint)
+    Note over SDK: after sign-in rememberWorkspace caches it with the slug from P-35
+```
+
+---
+
+## Session context (P-35), roles and flags
+
+Roles, plan and flags are not in the token. After sign-in the bootstrap loads them from IAM P-35 (`GET /api/v1/me/session-context`) and maps them with `toSessionContext` (snake_case to camelCase; missing lists become empty).
+
+| Step | What happens |
+|---|---|
+| Load | `sessionContextSource.load()`, with the ApiClient's own retries |
+| Success | `setAuthzSubject({ roles, tenantId })`; `setFlagProvider(sessionContextFlagProvider(context))`; `rememberWorkspace({ …workspace, slug })` moves the URL under `/t/<slug>/`; the IAM `locale` feeds `initializeI18n` |
+| Failure | Warning `session context unavailable`; the authorizer denies all and only platform flags apply; `App` shows the missing-permissions notice with Reload |
+| Background retry | Only after a transient failure (`isTransient`): 3 tries after 1 s, 2 s, 4 s, one request each (`loadSessionContextOnce`, `retry: false`). A success updates the subject, the flags and the `PlatformProvider` live, and re-renders the router if the URL moved. A sign-out aborts it |
+| Role map | `domain/rules/permissions.ts`: keys are IAM's closed set (`member`, `tenant_owner`, `tenant_admin`, `tender_admin`); `roleMapAuthorizer` turns roles into `action:resource` UI permissions. Department levels are never roles. UI hints only: the services enforce |
+
+---
+
+## Session events and cross-tab sync
+
+After render the bootstrap reacts to the SDK's session events through `idp.subscribe`. None of them signs in without a click.
+
+> Source: [`docs/architecture/mermaid/session-events.mmd`](docs/architecture/mermaid/session-events.mmd)
+
+```mermaid
+sequenceDiagram
+    participant TabA as This tab (bootstrap idp.subscribe)
+    participant SDK as SDK /auth
+    participant Chan as BroadcastChannel "platform-auth"
+    participant TabB as Another tab
+    participant Poll as SDK /mfe startVersionPolling
+
+    Note over SDK: idle timeout (auth.idleTimeoutMs, last activity shared across tabs)
+    SDK-->>TabA: status expired (idle, failed refresh, or serverEnded)
+    TabA->>TabA: showSessionEnded over the running app, nothing happens until the user clicks Sign in
+    TabB->>Chan: workspace-switched
+    Chan-->>SDK: this tab's session belongs to the old workspace
+    SDK-->>TabA: status expired, shown the same way
+    TabB->>Chan: logout
+    Chan-->>SDK: signed out in this tab too
+    SDK-->>TabA: status anonymous, reason signed-out
+    TabA->>TabA: abort the boot and the P-35 retry, unmount the app root, then showSignedOut
+    Note over TabA: the next sign-in asks for credentials (prompt=login)
+    Poll->>Poll: GET /version.json every appUpdate.pollIntervalMs (300 s)
+    Poll-->>TabA: a new shell build, useAppUpdate().available, UpdateAvailable banner, Reload on click
+```
+
+| Event | Source | The shell's reaction |
+|---|---|---|
+| `expired` (idle, a failed refresh, ended at the server: `serverEnded`, or a workspace switch in another tab) | SDK `/auth`: the idle timer (`auth.idleTimeoutMs`, last activity shared across tabs), the token refresh, or `workspace-switched` on `platform-auth` | `showSessionEnded`: "Session ended" with Sign in, over the running app; `signInAgain` runs only on the click |
+| `anonymous`, reason `signed-out` | Sign-out here or in another tab (`BroadcastChannel` `platform-auth`) | Abort the boot and the P-35 retry, unmount `#app`, then "You are signed out". The next sign-in sends `prompt=login` |
+| New shell build | `startVersionPolling` (`/version.json` holds the shell's build version; every `appUpdate.pollIntervalMs`, 300 s) | `UpdateAvailable` banner; reload only on the user's click. A new dashboard (a changed manifest only) is picked up on the next page load |
+| P-35 recovered | The background retry | Permissions and flags appear without a reload |
+
+---
+
 ## Browser storage
 
 Tokens are never written to storage. A reload restores the session from Keycloak's SSO cookie with `prompt=none`.
@@ -365,6 +522,184 @@ Tokens are never written to storage. A reload restores the session from Keycloak
 | `bcbp.rememberEmail`, `bcbp.loginEmail` | `localStorage` | `infrastructure/storage/rememberedEmail.ts` (behind the domain's `RememberedEmailRepository`) | "Remember Email" only. Needed before a workspace is known, so it does not use the SDK's per-workspace `storage()`. Every access is wrapped in `try`; blocked storage just forgets |
 
 Remotes that need storage use `storage(appId)` from `/storage`, which is namespaced per workspace and refuses token-like keys.
+
+---
+
+## Data model
+
+The shell has no database. Its data is a few contracts: what IAM returns, what the SDK keeps, and what remotes read. Field names are the code's (`infrastructure/api/iam.ts`, SDK `/auth` types, `domain/`).
+
+> Source: [`docs/architecture/mermaid/data-model.mmd`](docs/architecture/mermaid/data-model.mmd)
+
+```mermaid
+classDiagram
+    class Workspace {
+        realm: string
+        trial: boolean
+        slug?: string
+        tenantIdHint?: string
+    }
+    class SessionContext {
+        tenantId: string
+        slug: string
+        roles: string[]
+        departments: IdLevel[]
+        plan?: string
+        featureFlags: string[]
+        readOnly: boolean
+        mfaFreshnessSeconds?: number
+        locale?: string
+    }
+    class ShellValue {
+        user
+        workspace: Workspace
+        context: SessionContext
+        locale: string
+        switchWorkspace(identifier)
+        signOut(global?)
+    }
+    class RoleMap {
+        IAM_ROLES: Role[]
+        permissions: Record~Role, Permission[]~
+    }
+    class SignInUseCases {
+        resolveWorkspace(email): Workspace
+        requestPasswordReset(email)
+        rememberedEmail: RememberedEmailRepository
+    }
+    class RememberedEmailRepository {
+        get(): string
+        save(email, remember)
+    }
+    ShellValue --> Workspace
+    ShellValue --> SessionContext
+    SessionContext --> RoleMap : roles
+    SignInUseCases --> RememberedEmailRepository
+    SignInUseCases --> Workspace
+```
+
+| Contract | Shape | Owner |
+|---|---|---|
+| PUB-1 response | `{ found, realm, strategy: shared or dedicated, tenant_id? }` | IAM (public) |
+| P-35 response | `{ tenant_id, slug, roles, departments, plan, feature_flags, read_only, mfa_freshness_seconds, locale }` | IAM |
+| `Workspace` | `realm`, `trial`, `slug?`, `tenantIdHint?` | SDK `/auth`; mapped by `toWorkspace` |
+| `SessionContext` | `tenantId`, `slug`, `roles`, `departments` (`{ id, level }[]`, drawn as `IdLevel[]`), `plan?`, `featureFlags`, `readOnly`, `mfaFreshnessSeconds?`, `locale?` | SDK `/auth`; mapped by `toSessionContext` |
+| Shell value | `user`, `workspace`, `context`, `locale`, `switchWorkspace`, `signOut` | This shell, in `PlatformProvider`; remotes read it through SDK hooks (no props) |
+| Runtime config | `/config/runtime.json`, validated strictly by the SDK (README § Configuration, LLD §9.1) | Each environment |
+| Remote manifest | `/remotes/manifest.json`: `dashboard` → entry URL and `integrity` | Each environment |
+| Storage keys | § Browser storage | SDK and `infrastructure/storage/rememberedEmail.ts` |
+
+---
+
+## Cache strategy
+
+Nothing the shell caches is a source of truth: every cache can be lost without breaking a flow, and tokens are never cached outside memory.
+
+> Source: [`docs/architecture/mermaid/cache-strategy.mmd`](docs/architecture/mermaid/cache-strategy.mmd)
+
+```mermaid
+flowchart TD
+    subgraph http["HTTP caching (nginx/default.conf; CloudFront applies the same rules)"]
+        h1["/assets/* (content-hashed JS, CSS, fonts, images)\nCache-Control: public, max-age=31536000, immutable"]
+        h2["index.html, /config/runtime.json, /remotes/manifest.json, /version.json,\nunhashed public files, every SPA route\nCache-Control: no-cache (revalidate every time)"]
+        h3["/api, /otel, /csp-report: never served by the image (404); routed to their services"]
+    end
+    subgraph browser["In the browser"]
+        b1["SDK workspace cache: localStorage @bcbp-solutions-fzc-llc/frontend-sdk:workspaces\nrealm + slug, up to 20; skips the email screen on return\nwritten by chooseWorkspace (URL slug) and rememberWorkspace (after sign-in)"]
+        b2["Remembered email: localStorage bcbp.rememberEmail / bcbp.loginEmail\nonly when the box is checked"]
+        b3["Session context (P-35): in memory only (createStore), per page load\nreplaced live when the background retry succeeds"]
+        b4["Tokens: SDK memory only, never storage; reload restores from Keycloak SSO (prompt=none)"]
+        b5["Text catalogue en.json: in the entry chunk, registered before the first screen"]
+        b6["Remote manifest: loaded once per page (loadManifest), a changed manifest is read on the next page load\nA new shell build is found by /version.json polling"]
+    end
+```
+
+| What | Where | Lifetime | Invalidated by |
+|---|---|---|---|
+| Hashed assets | Browser and CDN | One year, `immutable` | A new build (new file names) |
+| `index.html`, runtime config, manifest, `/version.json`, SPA routes | Browser and CDN | Revalidated every request (`no-cache`) | Each deployment |
+| Workspaces (realm, slug) | `localStorage`, SDK | Up to 20, most recent first | `chooseWorkspace` (a URL slug resolved by PUB-1) and `rememberWorkspace` (after sign-in) replace the entry for a slug, and write only when slug and realm match; a wrong-workspace login is never cached |
+| Remembered email | `localStorage` | Until unchecked | Unchecking "Remember Email" |
+| Session context | Memory | The page | A reload, or the background retry's success |
+| Tokens | Memory (SDK) | Until expiry or sign-out | Refresh, sign-out (all tabs) |
+
+---
+
+## Observability stack
+
+The shell starts the SDK's telemetry once per page and emits only three log events of its own; everything else is the SDK's, for the shell and every remote alike. Details, tiers and the metric inventory: [docs/observability.md](docs/observability.md).
+
+> Source: [`docs/architecture/mermaid/observability-stack.mmd`](docs/architecture/mermaid/observability-stack.mmd)
+
+```mermaid
+graph LR
+    subgraph shell["web-shell (identity: portal / web-shell / environment from runtime.json)"]
+        boot["bootstrap.tsx\ninitializeTracing · initializeLogging · initializeMetrics\ninstallGlobalErrorHandlers · startWebVitals"]
+        logs["shell logs\nmanifest load failed (error)\nthe app could not start (error)\nsession context unavailable (warn: stays in the page under v1 consent)"]
+        bnd["Error boundaries (SDK)\nRemoteBoundary: dashboard\nMFEErrorBoundary: web-shell routes → AppError"]
+    end
+    subgraph sdk["SDK, for the shell and every remote"]
+        api["ApiClient spans · x-request-id · traceparent · x-session-id"]
+        mfe["remote load logs and spans"]
+        vit["web vitals"]
+        err["uncaught errors and rejections"]
+        consent["consent: essential only (v1)\nerror logs and essential warnings leave the page"]
+    end
+    otel["same-origin /otel (telemetry.otlpBaseUrl)\nOTLP logs, traces, metrics"]
+    loki["Loki: alert WebShellStartupFailures\n(docs/runbook-startup-failure.md)"]
+    boot --> api
+    boot --> vit
+    boot --> err
+    logs --> consent
+    bnd --> consent
+    api --> consent
+    mfe --> consent
+    vit --> consent
+    err --> consent
+    consent --> otel
+    otel --> loki
+```
+
+| Signal | Emitted by | Notes |
+|---|---|---|
+| Identity | `initializeCore` | `service` `web-shell`, `domain` `portal`, `environment` from `runtime.json` (else the build-time fallback), `buildVersion`; injected into every data point |
+| Logs | SDK logger; three shell events (LLD §11) | `the app could not start` and `manifest load failed` are errors and leave the page; `session context unavailable` is a non-essential warning and stays in the page under v1 consent. `the app could not start` is reported even when the config never loaded (default `/otel`) |
+| Traces | `initializeTracing`; ApiClient and remote-load spans | `traceparent` on same-origin and allowlisted calls; `telemetry.sampleRatio` |
+| Metrics | `initializeMetrics`; SDK Tier 1 `platform_web_*` (pending ratification) | The shell creates none (`npm run metrics-check`) |
+| Errors | `installGlobalErrorHandlers`; `RemoteBoundary` (`dashboard`); `MFEErrorBoundary` (`web-shell`) | A boundary logs `remote failed to render` (error) with its `mfe`; an API, timeout or network error is a non-essential warning (`remote showed an error`) that v1 consent keeps in the page. It reloads once on a chunk-load error, then shows its fallback |
+| Consent | SDK default, essential only (v1) | Only error logs and essential warnings leave the page |
+| Alert | `WebShellStartupFailures` (Loki, example rule) | [runbook](docs/runbook-startup-failure.md); must be deployed to the Loki ruler (LLD §15) |
+
+---
+
+## Content Security Policy and Trusted Types
+
+The browser enforces the shell's security boundary: a strict CSP with Trusted Types. It is the defence that remains if a script ever runs in the page (§ Threat model).
+
+| Layer | Where | What it enforces |
+|---|---|---|
+| Build | Rsbuild `inlineScripts`/`inlineStyles: false`; preset `ChunkIntegrityPlugin` | No inline code, so no `unsafe-inline`; every script carries `integrity` (sha384); HTML tags and cross-origin chunks carry `crossorigin="anonymous"` |
+| Policy | CloudFront, or until then `nginx/security.d/csp.conf.example` mounted per environment (never both) | `default-src 'none'`; `script-src`, `style-src`, `font-src` `'self'`; `connect-src 'self'` + the IdP; `form-action 'self'` + the IdP (the global sign-out POSTs a form to Keycloak); `frame-ancestors 'none'`; `report-uri /csp-report` |
+| Trusted Types | `require-trusted-types-for 'script'`; policies `platform-sdk`, `platform-webpack`, `dompurify` | `installTrustedTypesPolicy()` is the bootstrap's first call, so chunk loading and sanitised HTML go through named policies |
+| Fonts and images | Self-hosted (`@fontsource-variable/*`), bundled under `/assets/` | No third-party origin in `index.html` or the CSP |
+| Proof | `test/browser` (Playwright, three engines) | The production build runs under the production CSP; any CSP report fails the test. Smoke `live` checks the deployed header, including `form-action` |
+
+---
+
+## Concurrency and races
+
+A browser shell has no locks, but it has races: an async start-up that a sign-out can interrupt, several tabs, and React's double effects in development.
+
+| Race | Guard |
+|---|---|
+| Sign-out while the bootstrap is still awaiting (P-35, i18n, manifest) | `signedOutDuringBoot` (`AbortController`): checked after every await, so the app never mounts for a user who is gone |
+| Sign-out during the P-35 background retry | The same signal aborts the retry's sleep and request; a late answer is discarded |
+| Another tab signs out | `BroadcastChannel` `platform-auth` (SDK) → `anonymous`, `signed-out`; the shell unmounts `#app` before "You are signed out" |
+| The idle timer fires, or another tab switches workspace | Last activity is shared across tabs; `workspace-switched` on `platform-auth` (SDK) → `expired`: "Session ended" is shown over the app, and nothing signs in until the click |
+| Overlapping `setLocale` calls (a language switch while a catalogue loads). The bootstrap's two calls cannot overlap: `registerShellMessages` is awaited before `initializeI18n` | The SDK's generation counter: the later call wins |
+| The router's basename changes after the P-35 retry moves the URL | `App` is keyed by the basename, so a new router mounts |
+| React StrictMode runs effects twice | `registerNavigator` simply replaces the navigator; tests assert the double registration |
+| Concurrent loads of one catalogue | The SDK shares one promise per namespace and locale |
 
 ---
 
@@ -439,6 +774,28 @@ There is no Helm chart and no deploy job.
 
 The dev server serves `config/runtime.local.json` and `config/remotes.local.json`, stubs PUB-1 and P-35 (realm `tenant-bcbp`, slug `bcbp`), and drops `/otel` posts (`config/dev-platform.mjs`). `DEV_API_URL` proxies `/api` to a real API instead. The preview and the image have none of that; they serve the files in `dist/`.
 
+### Hosting until CloudFront
+
+CloudFront arrives next month. Until then every environment serves the image behind an ingress that does CloudFront's job ([docs/hosting-without-cloudfront.md](docs/hosting-without-cloudfront.md)):
+
+| Concern | Until CloudFront | With CloudFront |
+|---|---|---|
+| `/api`, `/otel`, `/csp-report`, `/remotes/dashboard/` | Ingress routes | CloudFront behaviours |
+| CSP, HSTS | Mounted at `/etc/nginx/security.d/` (`csp.conf.example`, `hsts.conf.example`) | CloudFront response headers; remove the mounts (two CSPs are both enforced) |
+| Runtime config, manifest | Mounted or baked per environment | S3 objects per environment |
+| Deploy check | `SMOKE_BASE_URL=https://<host> SMOKE_MODE=live ENVIRONMENT=<target> npm run test-smoke` | Same |
+
+### Release and rollback safety
+
+| Rule | Why |
+|---|---|
+| A tag publishes; nothing deploys | Operators choose when an environment moves |
+| Deploy in pairs with the dashboard (LLD §15) | `0.2.0` + mfe-dashboard `0.3.0` (remote `dashboard`), rollback `0.1.0` + `0.2.0` (`app2`). A remote must not be built against a newer SDK than the shell's |
+| Shell before remotes on an SDK upgrade | A remote built on a newer SDK requires that version from the shell's shared scope (e.g. `^1.0.0-alpha.6`) and does not load in an older shell |
+| The image ships no `environment` in `runtime.json` | Each deployment writes its own; smoke `live` fails a file that names none or another |
+| `index.html`, config, manifest are `no-cache`; assets are immutable | A rollback takes effect on the next load. The image serves only its own `/assets/`, so an open tab of the rolled-back build that requests a chunk the older image lacks gets a 404, and the SDK reloads it once |
+| Signed images, SBOM, provenance; tags added after signing | `docs/runbook-release.md` |
+
 ---
 
 ## Testing strategy
@@ -487,6 +844,21 @@ Use this before serving this image in an environment, or before changing `dashbo
 
 - [ ] Public client, standard flow, PKCE S256. This shell does not send a client secret.
 - [ ] Paid realms are named `tenant-<slug>`; the trial realm is `auth.trialRealm`.
+
+---
+
+## Contract lifecycle
+
+What the shell promises to others, and how each promise changes (VERSIONING.md has the SemVer rules).
+
+| Contract | Changes how | Checked by |
+|---|---|---|
+| Platform SDK version | All three packages together, exact pins; shell first, unless the release changes the shell–remote contract (then deploy together); `/sdk-upgrade` | `check-sdk-pins.mjs` (hook), `SdkVersionPlugin` (build), `test-contract` |
+| `runtime.json` schema | The SDK's schema (strict; unknown keys refused). New keys arrive with an SDK release (alpha.6: `environment`) | The SDK at start-up; smoke `image` and `live` |
+| Remote contract | Remote name `dashboard`, container `__platform_mfe_dashboard`, no props, the `PlatformProvider` shell value. A rename is a MAJOR change and deploys with the dashboard | `npm run test-contract` against a real mfe-dashboard build; CI `Dashboard contract` |
+| Routes and storage keys | `/t/<slug>/dashboard/*`; `bcbp.*` keys. A change updates README, ARCHITECTURE, the LLD and CHANGELOG together | e2e and browser suites |
+| IAM ports (PUB-1, P-35) | IAM's swagger; the SDK's contract cases | `test/unit/iam.test.ts` against the SDK's contract cases |
+| The shell's text | Keys of `src/shared/i18n/en.json`; a new locale adds a catalogue | `test/unit/shell-text.test.ts` |
 
 ---
 

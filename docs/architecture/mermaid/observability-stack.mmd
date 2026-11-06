@@ -1,0 +1,26 @@
+graph LR
+    subgraph shell["web-shell (identity: portal / web-shell / environment from runtime.json)"]
+        boot["bootstrap.tsx\ninitializeTracing · initializeLogging · initializeMetrics\ninstallGlobalErrorHandlers · startWebVitals"]
+        logs["shell logs\nmanifest load failed (error)\nthe app could not start (error)\nsession context unavailable (warn: stays in the page under v1 consent)"]
+        bnd["Error boundaries (SDK)\nRemoteBoundary: dashboard\nMFEErrorBoundary: web-shell routes → AppError"]
+    end
+    subgraph sdk["SDK, for the shell and every remote"]
+        api["ApiClient spans · x-request-id · traceparent · x-session-id"]
+        mfe["remote load logs and spans"]
+        vit["web vitals"]
+        err["uncaught errors and rejections"]
+        consent["consent: essential only (v1)\nerror logs and essential warnings leave the page"]
+    end
+    otel["same-origin /otel (telemetry.otlpBaseUrl)\nOTLP logs, traces, metrics"]
+    loki["Loki: alert WebShellStartupFailures\n(docs/runbook-startup-failure.md)"]
+    boot --> api
+    boot --> vit
+    boot --> err
+    logs --> consent
+    bnd --> consent
+    api --> consent
+    mfe --> consent
+    vit --> consent
+    err --> consent
+    consent --> otel
+    otel --> loki

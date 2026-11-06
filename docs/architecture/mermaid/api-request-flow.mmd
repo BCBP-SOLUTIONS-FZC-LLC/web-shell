@@ -1,0 +1,29 @@
+sequenceDiagram
+    participant Caller as Shell or remote (useApi / createApiClient)
+    participant Client as SDK ApiClient
+    participant Token as SDK /auth token source
+    participant Ingress as /api (CloudFront or ingress)
+    participant GW as API gateway (Envoy, AuthZ enrichment)
+    participant IAM as IAM service
+
+    Caller->>Client: get('/v1/me/session-context')
+    Client->>Client: refuse identity headers (x-user-id, x-tenant-id, …)
+    Client->>Token: getAccessToken() (same-origin calls only)
+    Token-->>Client: access token, in memory
+    Client->>Client: x-request-id, traceparent, x-session-id (same origin or allowlisted)
+    Client->>Ingress: GET /api/v1/me/session-context, Bearer token, timeout 35 s
+    Ingress->>GW: forward
+    Note over GW,IAM: platform services, outside this repo
+    GW->>GW: verify JWT, inject x-user-id, x-tenant-id, x-tenant-roles
+    GW->>IAM: GET /v1/me/session-context
+    alt 2xx
+        IAM-->>Client: JSON
+        Client-->>Caller: { data, status, requestId }
+    else 401
+        Client->>Token: refresh once, retry with the new token
+    else 429, 502, 503, 504, network error while online, timeout (GET, PUT, DELETE, or retry.unsafe)
+        Client->>Client: wait Retry-After (up to 30 s) or a random backoff up to 250 ms × 2ⁿ (cap 5 s), at most 2 retries
+    else other 4xx or 5xx
+        IAM-->>Client: application/problem+json
+        Client-->>Caller: throws ProblemError (status, typeId, errorCode, requestId)
+    end

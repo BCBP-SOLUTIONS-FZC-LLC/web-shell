@@ -30,6 +30,12 @@ Pull requests that change the shell, its dependencies, or the image add an entry
 
 ### Changed
 
+- **ARCHITECTURE.md covers what the IAM services' architecture documents cover (`2026-11-06`).** New sections, each checked against the code:
+  - **Flows:** API request flow (the SDK `ApiClient`: token, correlation, timeout, retries, problems); pre-login workspace resolution (PUB-1, the cache and the URL slug); session context (P-35), roles and flags; session events and cross-tab sync.
+  - **Data and runtime:** data model, cache strategy, observability stack, Content Security Policy and Trusted Types, concurrency and races.
+  - **Deployment and contracts:** hosting until CloudFront, release and rollback safety, contract lifecycle.
+  - **Diagrams:** six new `.mmd` sources, listed in `docs/architecture/README.md`.
+
 - **Documentation brought in line with the code before the next release; the SDK retry rule is now checked (`2026-11-06`).** An independent review of every document against `main` (and of the code since `v0.2.0`, which found no regression) led to these fixes:
   - **Operators:**
     - README's sign-out is a form POST (the CSP's `form-action` must allow the IdP), not a GET.

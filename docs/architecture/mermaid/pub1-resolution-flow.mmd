@@ -1,0 +1,37 @@
+sequenceDiagram
+    participant Boot as bootstrap.tsx
+    participant SDK as SDK /auth (chooseWorkspace)
+    participant Cache as localStorage workspaces (SDK)
+    participant Screen as Sign-in screen
+    participant UC as resolveWorkspace (use case)
+    participant Port as workspaceResolver (infrastructure/api/iam.ts)
+    participant PUB as /api PUB-1
+
+    Boot->>SDK: chooseWorkspace(pathname, resolver)
+    alt URL has a workspace slug that is cached, or no slug and any workspace is cached
+        SDK->>Cache: the slug's workspace, or the most recent one
+        Cache-->>Boot: Workspace (no PUB-1 call)
+    else URL has a workspace slug that is not cached
+        SDK->>PUB: resolve(slug) through workspaceResolver
+        PUB-->>SDK: realm
+        SDK->>Cache: write it at once (realm and slug must match)
+        SDK-->>Boot: Workspace (or none: ask for the email)
+    else no slug and nothing cached
+        Boot->>Screen: askForWorkspace(signInUseCases)
+        loop until a workspace is found
+            Screen->>UC: resolveWorkspace(email)
+            UC->>Port: resolve(email)
+            Port->>PUB: GET /api/v1/public/tenants/resolve?identifier= (auth false, no token)
+            PUB-->>Port: 200 found, realm, strategy, tenant_id
+            Port->>Port: toWorkspace (shared is the trial realm, dedicated is realm minus paidRealmPrefix)
+            alt found
+                UC-->>Screen: Workspace
+            else not found, 429, unreachable, malformed
+                UC-->>Screen: WorkspaceNotFoundError
+                Screen->>Screen: "We could not find a workspace for that email." (the user can try again)
+            end
+        end
+        Screen-->>Boot: Workspace and the email (onChosen)
+    end
+    Boot->>SDK: idp.login(workspace, loginHint)
+    Note over SDK: after sign-in rememberWorkspace caches it with the slug from P-35

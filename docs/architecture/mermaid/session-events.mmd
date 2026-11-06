@@ -1,0 +1,20 @@
+sequenceDiagram
+    participant TabA as This tab (bootstrap idp.subscribe)
+    participant SDK as SDK /auth
+    participant Chan as BroadcastChannel "platform-auth"
+    participant TabB as Another tab
+    participant Poll as SDK /mfe startVersionPolling
+
+    Note over SDK: idle timeout (auth.idleTimeoutMs, last activity shared across tabs)
+    SDK-->>TabA: status expired (idle, failed refresh, or serverEnded)
+    TabA->>TabA: showSessionEnded over the running app, nothing happens until the user clicks Sign in
+    TabB->>Chan: workspace-switched
+    Chan-->>SDK: this tab's session belongs to the old workspace
+    SDK-->>TabA: status expired, shown the same way
+    TabB->>Chan: logout
+    Chan-->>SDK: signed out in this tab too
+    SDK-->>TabA: status anonymous, reason signed-out
+    TabA->>TabA: abort the boot and the P-35 retry, unmount the app root, then showSignedOut
+    Note over TabA: the next sign-in asks for credentials (prompt=login)
+    Poll->>Poll: GET /version.json every appUpdate.pollIntervalMs (300 s)
+    Poll-->>TabA: a new shell build, useAppUpdate().available, UpdateAvailable banner, Reload on click

@@ -37,6 +37,6 @@ sequenceDiagram
         Boot->>Browser: render App inside ShellRoot (PlatformProvider), registerNavigator
         opt no session context
             Boot->>IAM: retry after 1 s, 2 s, 4 s (online network error, timeout, 429, 502-504)
-            Boot->>SDK: subject, flags, rememberWorkspace; the provider updates live
+            Boot->>SDK: subject, flags, rememberWorkspace, and the provider updates live
         end
     end
