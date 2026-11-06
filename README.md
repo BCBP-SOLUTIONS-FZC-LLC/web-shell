@@ -403,7 +403,7 @@ REMOTE_DIST=../mfe-dashboard/dist npm run test-contract
 | Integrity failure | `remote-manifest-entry.json` does not match the built `remoteEntry.js`: rebuild the dashboard |
 | A CSP report | The remote adds an inline script or style, or a third-party origin |
 | `test/browser: REMOTE_DIST's build names its remote …` when the suite starts | The remote is not named `dashboard` (container `__platform_mfe_dashboard`) |
-| Browsers not installed | `npx playwright install --with-deps` once (CI uses the Playwright container) |
+| Browsers not installed | `npx playwright install chromium firefox webkit` once (test/browser/README.md; CI uses the Playwright container) |
 
 ---
 

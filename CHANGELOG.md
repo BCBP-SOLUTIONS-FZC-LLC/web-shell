@@ -30,6 +30,8 @@ Pull requests that change the shell, its dependencies, or the image add an entry
 
 ### Changed
 
+- **CONTRIBUTING covers what the IAM services' CONTRIBUTING covers (`2026-11-06`).** Step-by-step recipes per layer (domain contract or rule, use case, infrastructure adapter, session screen or dialog, widget or component, development stand-in, tooling variable, SDK upgrade); testing notes (run one test by name, happy-dom, the SDK in tests, the browser suite); more guardrails and forbidden patterns; a `test/` branch prefix; commit examples that cite the LLD; the CI steps in Deployment (Trivy also fails on UNKNOWN; the browser and contract jobs). The pull request checklist and `.github/pull_request_template.md` now include arch-lint, metrics-check, e2e and the browser and contract suites.
+
 - **README covers what the IAM services' READMEs cover (`2026-11-06`).** New: a Design line; how the rules are enforced; input validation and error handling; dependency rules, storage and messaging, and shared libraries under Architecture; a numbered guide to integrating a remote; trying the flows locally and developer tools; step-by-step dashboard contract testing; canonical tests; development and tooling variables; observability; deployment; the minimum per-environment configuration; cross-service dependencies as outbound, inbound, async and infrastructure; more related documents.
 
 - **ARCHITECTURE.md covers what the IAM services' architecture documents cover (`2026-11-06`).** New sections, each checked against the code:
