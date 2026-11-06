@@ -30,6 +30,8 @@ Pull requests that change the shell, its dependencies, or the image add an entry
 
 ### Changed
 
+- **README covers what the IAM services' READMEs cover (`2026-11-06`).** New: a Design line; how the rules are enforced; input validation and error handling; dependency rules, storage and messaging, and shared libraries under Architecture; a numbered guide to integrating a remote; trying the flows locally and developer tools; step-by-step dashboard contract testing; canonical tests; development and tooling variables; observability; deployment; the minimum per-environment configuration; cross-service dependencies as outbound, inbound, async and infrastructure; more related documents.
+
 - **ARCHITECTURE.md covers what the IAM services' architecture documents cover (`2026-11-06`).** New sections, each checked against the code:
   - **Flows:** API request flow (the SDK `ApiClient`: token, correlation, timeout, retries, problems); pre-login workspace resolution (PUB-1, the cache and the URL slug); session context (P-35), roles and flags; session events and cross-tab sync.
   - **Data and runtime:** data model, cache strategy, observability stack, Content Security Policy and Trusted Types, concurrency and races.
