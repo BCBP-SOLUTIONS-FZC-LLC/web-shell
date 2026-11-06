@@ -3,6 +3,8 @@
 # checks the pins. Usage: bump.sh <version>
 set -euo pipefail
 v=${1:?usage: bump.sh <version, e.g. 1.0.0-alpha.7>}
+# An exact version only (what check-sdk-pins.mjs requires), checked before anything is installed.
+[[ "$v" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]] || { echo "✗ \"$v\" is not an exact version (e.g. 1.0.0-alpha.7)" >&2; exit 1; }
 cd "$(git rev-parse --show-toplevel)"
 [ -n "${NODE_AUTH_TOKEN:-}" ] || export NODE_AUTH_TOKEN=$(gh auth token)
 
