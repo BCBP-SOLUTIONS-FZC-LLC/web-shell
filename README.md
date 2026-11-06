@@ -35,7 +35,7 @@ The dashboard is a separate build. The browser still needs one origin that can:
 This is enforced structurally, not by convention:
 
 - **Layers.** `src/` follows the constitution's folders: presentation → application → domain, with infrastructure implementing domain contracts and `app/` as the composition root. `eslint.config.js` and `npm run arch-lint` (`.dependency-cruiser.cjs`) fail any import across a layer the rules do not allow, in CI.
-- **No copies of the SDK.** `test/unit/no-sdk-duplicates.test.ts` fails when a module-level name in `src/` is an SDK export, so token handling, retries, remote loading and telemetry stay in the SDK.
+- **No copies of the SDK.** `test/unit/no-sdk-duplicates.test.ts` fails when a module-level name in `src/`, `config/` or `test/browser/server.ts` is an SDK export, so token handling, retries, remote loading and telemetry stay in the SDK.
 - **No login without a click.** The e2e suite proves it after a sign-out and a device-clock refusal, and the bootstrap integration test after an expiry; the e2e suite also proves the app is unmounted before "You are signed out".
 
 Local development runs the shell at `http://localhost:5001`.
@@ -207,6 +207,7 @@ Remotes that need storage use `storage(appId)` from the SDK's `/storage`, namesp
 | `@bcbp-solutions-fzc-llc/eslint-plugin` | `1.0.0-alpha.6` (exact) | Public-subpath imports, no identity headers, no raw storage, no unsafe HTML, API route templates |
 | `react`, `react-dom` | 19.3 | Strict singletons shared with remotes |
 | `react-router-dom` | 7 | The signed-in routes under `/t/<slug>/` |
+| `@opentelemetry/api` | `1.10.0` (exact) | Strict singleton shared with remotes; the SDK's telemetry runs on it |
 | Tailwind 4, daisyUI, `@fontsource-variable/*` | — | Shell-local UI and self-hosted fonts (ADR 0006) |
 | `dependency-cruiser` | `18.7.0` (dev) | `npm run arch-lint` |
 
@@ -423,7 +424,7 @@ Vitest uses happy-dom and Testing Library. `vitest.config.ts` defines `__ENVIRON
 ### Canonical tests (do not break)
 
 - **`test/e2e/shell.test.tsx`** — the real shell and SDK: sign-out unmounts the app, nothing signs in without a click (`prompt=login` next), tokens never reach storage, the device-clock refusal.
-- **`test/unit/no-sdk-duplicates.test.ts`** — no module-level name in `src/` is an SDK export; no test hand-builds a problem body.
+- **`test/unit/no-sdk-duplicates.test.ts`** — no module-level name in `src/`, `config/` or `test/browser/server.ts` is an SDK export; no test hand-builds a problem body.
 - **`test/unit/layer-rules.test.ts`, `test/unit/arch-lint.test.ts`** — every layer rule fires on a probe.
 - **`test/unit/shell-text.test.ts`** — no hard-coded user-facing text in presentation; the catalogue's fallback.
 - **`test/unit/session-context.test.ts`** — `isTransient` agrees with the SDK `ApiClient`'s real retries (12 statuses).
@@ -606,9 +607,10 @@ The image ships `public/config/runtime.json` with production defaults and no `en
 }
 ```
 
+`/remotes/manifest.json` (`ownerDomain` must be a registry domain, or the SDK drops the entry; `integrity` comes from the dashboard's `remote-manifest-entry.json`):
+
 ```json
-// /remotes/manifest.json
-{ "dashboard": { "entry": "/remotes/dashboard/0.3.0/remoteEntry.js", "version": "0.3.0", "ownerDomain": "…", "integrity": "sha384-…" } }
+{ "dashboard": { "entry": "/remotes/dashboard/0.3.0/remoteEntry.js", "version": "0.3.0", "ownerDomain": "portal", "integrity": "sha384-…" } }
 ```
 
 Plus, until CloudFront: `nginx/security.d/csp.conf.example` (with that environment's Keycloak origin in `connect-src` and `form-action`) and `hsts.conf.example`, mounted at `/etc/nginx/security.d/`. Each realm registers `{origin}/auth/callback` as a redirect URI.
@@ -667,7 +669,7 @@ The shell loads `dashboard`'s entry from `/remotes/manifest.json` in the browser
 | Mechanism | Between | What flows |
 |---|---|---|
 | `BroadcastChannel` `platform-auth` | Tabs of this origin (SDK) | Sign-out and workspace switches |
-| `/version.json` polling | The shell and its own deployment | A new shell build (every 300 s) |
+| `/version.json` polling | The shell and its own deployment | A new shell build (every `appUpdate.pollIntervalMs`, 300 s in the image's config) |
 | OTLP export | The browser → `/otel` | Under v1 consent, error logs and essential warnings only (below) |
 
 #### Telemetry
