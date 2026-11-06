@@ -4,7 +4,7 @@ This document describes the internal structure, dependency direction, browser fl
 
 `web-shell` is a **private Rsbuild application** (`github.com/BCBP-SOLUTIONS-FZC-LLC/web-shell`, Node.js 26, React 19.3) built on the platform SDK (`@bcbp-solutions-fzc-llc/frontend-sdk` `1.0.0-alpha.6`). The npm package name is `web-shell` and `"private": true`. Nothing installs it. What ships is a static bundle: the SDK bootstrap, the sign-in and session screens, and a Module Federation host (`shell`) that renders the dashboard remote. The production process is nginx on port **8080**, uid **101**. There is no API server, database, or message bus in this repository.
 
-Current release: `v0.2.0` (remote `dashboard`); `v0.1.0` (remote `app2`) is its rollback. This document describes `main`, which is ahead of `v0.2.0` (CHANGELOG `[Unreleased]`); the next release is `v0.3.0`. `package.json` `version` matches the latest tag. Image tags, the SemVer contract, and how to cut a release are in [VERSIONING.md](./VERSIONING.md).
+Current release: `v0.3.0` (remote `dashboard`, SDK alpha.6); `v0.2.0` is its rollback; `v0.1.0` (remote `app2`) is superseded. `package.json` `version` matches the latest tag. Image tags, the SemVer contract, and how to cut a release are in [VERSIONING.md](./VERSIONING.md).
 
 | This shell owns | Lives elsewhere |
 |---|---|
@@ -759,7 +759,7 @@ A browser shell has no locks, but it has races: an async start-up that a sign-ou
 
 Build args: `BUILD_VERSION`, `SOURCE_DATE_EPOCH`, `PLATFORM_ENVIRONMENT` (default `prod`; only a fallback now: each environment's `runtime.json` names its own `environment`). The image ships `public/config/runtime.json` (SDK defaults: `https://auth.bcbpsolutions.com`, client `tender-web`) and an empty manifest `{}`. An environment serves its own files over those paths, from CloudFront or a mount. The image sends no CSP or HSTS: CloudFront does, and until it exists (next month) each environment mounts `nginx/security.d/csp.conf` and `hsts.conf` and routes `/api`, `/otel`, `/csp-report` and `/remotes/dashboard/` on the same origin at its ingress ([docs/hosting-without-cloudfront.md](docs/hosting-without-cloudfront.md)).
 
-CI on `main` pushes `ghcr.io/bcbp-solutions-fzc-llc/web-shell` with the branch tag and `sha-<short>`, then Cosign-signs the digest. A Git tag `vX.Y.Z` publishes image tags `X.Y.Z`, `X.Y`, `X`, and `latest` when the tag has no pre-release suffix. The Git tag keeps the `v`. The static tarball on the GitHub Release is `web-shell_<tag>_dist.tar.gz`, without source maps (the release keeps them as the workflow artifact `sourcemaps-<tag>`). `BUILD_VERSION` is the version without the `v`. The tarball does not include the nginx `/healthz` location. Releases so far: `v0.1.0`, `v0.2.0`; `main` is ahead of `v0.2.0`, and `v0.3.0` is not cut.
+CI on `main` pushes `ghcr.io/bcbp-solutions-fzc-llc/web-shell` with the branch tag and `sha-<short>`, then Cosign-signs the digest. A Git tag `vX.Y.Z` publishes image tags `X.Y.Z`, `X.Y`, `X`, and `latest` when the tag has no pre-release suffix. The Git tag keeps the `v`. The static tarball on the GitHub Release is `web-shell_<tag>_dist.tar.gz`, without source maps (the release keeps them as the workflow artifact `sourcemaps-<tag>`). `BUILD_VERSION` is the version without the `v`. The tarball does not include the nginx `/healthz` location. Releases so far: `v0.1.0`, `v0.2.0`, `v0.3.0`.
 
 There is no Helm chart and no deploy job.
 
@@ -790,7 +790,7 @@ CloudFront arrives next month. Until then every environment serves the image beh
 | Rule | Why |
 |---|---|
 | A tag publishes; nothing deploys | Operators choose when an environment moves |
-| Deploy in pairs with the dashboard (LLD §15) | `0.2.0` + mfe-dashboard `0.3.0` (remote `dashboard`), rollback `0.1.0` + `0.2.0` (`app2`). A remote must not be built against a newer SDK than the shell's |
+| Deploy in pairs with the dashboard (LLD §15) | `0.3.0` + mfe-dashboard `0.3.0` (remote `dashboard`), rollback web-shell `0.2.0` with the same dashboard. mfe-dashboard `0.4.0` (alpha.6) needs web-shell `0.3.0` or later: with it, rolling the shell back to `0.2.0` also rolls the dashboard back to `0.3.0`. A remote must not be built against a newer SDK than the shell's |
 | Shell before remotes on an SDK upgrade | A remote built on a newer SDK requires that version from the shell's shared scope (e.g. `^1.0.0-alpha.6`) and does not load in an older shell |
 | The image ships no `environment` in `runtime.json` | Each deployment writes its own; smoke `live` fails a file that names none or another |
 | `index.html`, config, manifest are `no-cache`; assets are immutable | A rollback takes effect on the next load. The image serves only its own `/assets/`, so an open tab of the rolled-back build that requests a chunk the older image lacks gets a 404, and the SDK reloads it once |
