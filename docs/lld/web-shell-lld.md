@@ -14,6 +14,7 @@
 
 | Date | Change |
 |---|---|
+| 2026-11-11 | §15 #6 closed: IAM confirmed PUB-1 and P-35 behind `/api` in dev, staging and prod (reply of 2026-11-10), and IAM added `Cache-Control: no-store` to P-35's 200 |
 | 2026-11-06 | Released `v0.3.0` (#62): SDK alpha.6, the constitution refactor, the error page; same remote contract as `v0.2.0`. Status, pairs and open items updated |
 | 2026-11-06 | Claude Code tooling hardened (#60): the edit guard compares canonical paths and blocks `.env` / `docker.local.env` at any depth; `sync.sh` and `bump.sh` validate their arguments |
 | 2026-11-06 | Documentation modelled on the IAM services (#54, #55, #57, #58, #59): ARCHITECTURE flows, data model, caching, observability, CSP, concurrency, contracts; README integration guide and validation; CONTRIBUTING recipes per layer; CHANGELOG in typed, dated sections |
@@ -534,14 +535,13 @@ Details: [VERSIONING.md](../../VERSIONING.md).
 
 ## 15. Open items
 
-Numbers are stable; closed items are removed (2, 4, and 14 when `v0.3.0` was released).
+Numbers are stable; closed items are removed (2, 4; 6 when IAM confirmed PUB-1 and P-35 behind `/api` in every environment, 2026-11-10; 14 when `v0.3.0` was released).
 
 | # | Item | Owner |
 |---|---|---|
 | 1 | Official Privacy, Terms, Trust & Security and Help URLs: set them in `src/shared/constants/links.ts` (hidden until then; none exists on bcbpsolutions.com) | product / legal |
 | 3 | Consent is essential only in v1 (decision; the SDK's default). A consent manager would be installed with `setConsentProvider` in the bootstrap | product |
 | 5 | Deploy web-shell `0.3.0` with mfe-dashboard `0.3.0` (manifest key `dashboard`, `/remotes/dashboard/0.3.0/`); rollback web-shell `0.2.0` with the same dashboard (`0.1.0` + `0.2.0` used `app2`). mfe-dashboard `0.4.0` (alpha.6) needs web-shell `0.3.0` or later: with it, rolling the shell back to `0.2.0` also rolls the dashboard back to `0.3.0`. After a pair is deployed, environments may set `auth.signInUrl` (older SDKs refuse the key), then `SMOKE_MODE=live` | operators |
-| 6 | PUB-1 and P-35 must exist behind `/api` in every environment; they are stubbed only in dev | IAM |
 | 7 | No cluster deploy; each environment serves its own runtime config and manifest (with the remote's integrity) and registers its redirect URIs in each realm | operators |
 | 8 | Tender permissions in the role map are provisional | Tender Service |
 | 9 | No CloudFront until next month: environments route `/api`, `/otel`, `/csp-report`, `/remotes/dashboard/` at the ingress and mount the CSP (IdP in `form-action`) and HSTS ([hosting-without-cloudfront.md](../hosting-without-cloudfront.md)); remove the mounts when CloudFront arrives | operators |
