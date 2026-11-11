@@ -20,7 +20,7 @@ describe('the shell namespace', () => {
   })
 
   it('fills placeholders', () => {
-    expect(shellText('login.carousel.show', { number: 3 })).toBe('Show slide 3')
+    expect(shellText('login.carousel.slide', { number: 3, total: 9 })).toBe('3 of 9')
   })
 
   it('falls back to English in a locale without a catalogue, and sets the page direction', async () => {
@@ -49,7 +49,7 @@ describe('the shell namespace', () => {
 })
 
 // Text the guard accepts as it is: the brand (not translated) and typography.
-const BRAND = new Set(['BCBP SOLUTIONS', 'BCBP', 'SOLUTIONS', 'Beyond Code', '‹', '›', '|'])
+const BRAND = new Set(['BCBP SOLUTIONS', 'BCBP', 'SOLUTIONS', 'Beyond Code', '|'])
 /** A catalogue key (a `ShellKey` prop such as the dialogs' `title`), not text. */
 const KEY = /^[a-z][A-Za-z]*(\.[A-Za-z0-9]+)+$/
 /** Attributes whose value a person reads or hears. */

@@ -1,7 +1,8 @@
 // The shell's production build in real engines under the production CSP (test/browser/README.md):
 // what happy-dom cannot check. Trusted Types, script-src 'self', integrity on the remote's entry,
 // Module Federation's share scope, self-hosted fonts, the sign-out form POST under form-action, the
-// start-up failure report, the sign-in hero's one-time opening and reduced motion, and colour contrast.
+// start-up failure report, the sign-in hero's one-time opening, slideshow and reduced motion, and
+// colour contrast.
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { expect, test, type Page } from '@playwright/test'
@@ -65,8 +66,12 @@ const animations = (page: Page) =>
     document.getAnimations().map((a) => `${(a as Partial<CSSAnimation>).animationName ?? 'transition'}:${a.playState}`),
   )
 
-test('the sign-in hero opens in about 2.4 s and is then still; the form takes input from the first frame', async ({ page }) => {
+test("the sign-in hero's opening ends in about 2.4 s; the form takes input from the first frame", async ({ page }) => {
+  // The slideshow's timer is held on Playwright's clock, so the first slide (and its bars) stays.
+  const t0 = new Date('2026-01-05T09:00:00Z')
+  await page.clock.install({ time: t0 })
   await page.goto(`${APP}/`)
+  await page.clock.pauseAt(new Date(t0.getTime() + 500))
   // Hold the opening mid-frame (bars, grain and hidden copy on screen): the email field already takes input.
   const held = await page.evaluate(() => {
     const opening = document.getAnimations().filter((a) => (a as Partial<CSSAnimation>).animationName?.startsWith('cine-'))
@@ -79,7 +84,8 @@ test('the sign-in hero opens in about 2.4 s and is then still; the form takes in
   await email.fill(EMAIL)
   await expect(email).toHaveValue(EMAIL)
   await page.evaluate(() => document.getAnimations().forEach((a) => a.play()))
-  // Every animation of the opening ends by 2.5 s (its own timing, not the wall clock); then nothing runs.
+  // Every animation of the opening ends by 2.5 s (its own timing, not the wall clock); then none of
+  // it runs (the slideshow's slow zoom carries on).
   const ends = await page.evaluate(() =>
     document
       .getAnimations()
@@ -88,9 +94,50 @@ test('the sign-in hero opens in about 2.4 s and is then still; the form takes in
   )
   expect(ends.length).toBeGreaterThan(0)
   expect(Math.max(...ends)).toBeLessThanOrEqual(2500)
-  await expect.poll(() => animations(page), { timeout: 10_000 }).not.toContainEqual(expect.stringMatching(/:running$/))
+  await expect.poll(() => animations(page), { timeout: 10_000 }).not.toContainEqual(expect.stringMatching(/^cine-.*:running$/))
   await expect(page.getByRole('heading', { level: 1 })).toHaveCSS('opacity', '1')
   await expect(page.locator('.cine-bar').first()).toHaveCSS('transform', /matrix\(1, 0, 0, 0,/)
+  expect(await violations(page)).toEqual([])
+})
+
+test('the sign-in hero moves on its own: every 7 s the next photograph crossfades in while the one on screen zooms; Pause holds both', async ({ page }) => {
+  const t0 = new Date('2026-01-05T09:00:00Z')
+  await page.clock.install({ time: t0 })
+  await page.goto(`${APP}/`)
+  await page.clock.pauseAt(new Date(t0.getTime() + 1000))
+  await expect.poll(() => animations(page)).toContainEqual('hero-kb:running')
+  expect(await page.getByRole('button', { name: /slide \d|next slide|previous slide/i }).count()).toBe(0)
+
+  const second = page.getByRole('group', { name: '2 of 9' })
+  while ((await second.count()) === 0) await page.clock.runFor(500)
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText(/Airside programs/)
+  // Mid-crossfade (its settle timer is on the held clock): the new frame on top and fading in (a
+  // running opacity transition), the last one under it.
+  const frames = page.locator('section > div[aria-hidden]:has(img.object-cover)')
+  await expect(frames.nth(1)).toHaveClass(/z-\[1\].*opacity-100/)
+  await expect(frames.nth(0)).toHaveClass(/opacity-100/)
+  expect(
+    await frames.nth(1).evaluate((el) => el.getAnimations().some((a) => a instanceof CSSTransition && a.transitionProperty === 'opacity')),
+  ).toBe(true)
+
+  // Pause, then move the mouse and focus out of the hero: only Pause holds it now.
+  await page.getByRole('button', { name: 'Pause slideshow' }).click()
+  await page.getByRole('textbox', { name: /work email address/i }).hover()
+  await page.getByRole('textbox', { name: /work email address/i }).focus()
+  await expect(page.getByRole('button', { name: 'Play slideshow' })).toBeVisible()
+  await expect.poll(() => animations(page)).toContainEqual('hero-kb:paused')
+  await page.clock.runFor(21_000)
+  await expect(second).toBeAttached()
+
+  // Play: the slideshow goes on; then a mouse over the hero holds it on its own.
+  await page.getByRole('button', { name: 'Play slideshow' }).click()
+  await page.getByRole('textbox', { name: /work email address/i }).focus()
+  await page.getByRole('heading', { level: 1 }).hover()
+  await page.clock.runFor(21_000)
+  await expect(second).toBeAttached()
+  await page.getByRole('textbox', { name: /work email address/i }).hover()
+  const third = page.getByRole('group', { name: '3 of 9' })
+  while ((await third.count()) === 0) await page.clock.runFor(500)
   expect(await violations(page)).toEqual([])
 })
 
@@ -173,9 +220,18 @@ test.describe('colour contrast (axe, WCAG 2 AA)', () => {
     })
     await page.goto(`${APP}/`)
     await expect(page.getByRole('textbox', { name: /work email address/i })).toBeVisible()
+    // Pause the slideshow (axe needs real timers, so not Playwright's clock): axe checks a still page.
+    await page.getByRole('button', { name: 'Pause slideshow' }).click()
     await page.evaluate(() => document.fonts.ready)
-    // Check the hero's resting frame, not a frame of its opening.
-    await page.evaluate(() => Promise.all(document.getAnimations().map((a) => a.finished)))
+    // Check the hero's resting frame, not a frame of its opening (the slideshow's zoom keeps going).
+    await page.evaluate(() =>
+      Promise.all(
+        document
+          .getAnimations()
+          .filter((a) => (a as Partial<CSSAnimation>).animationName?.startsWith('cine-'))
+          .map((a) => a.finished),
+      ),
+    )
     await page.addScriptTag({ content: axe })
     const result = await page.evaluate(async () => {
       // The "BCBP SOLUTIONS" logotype is exempt (WCAG 1.4.3: text that is part of a logo); all other text is checked.
@@ -194,7 +250,10 @@ test.describe('colour contrast (axe, WCAG 2 AA)', () => {
   // brightest background pixel is held against the text colour (WCAG 2 AA: 3:1 large, 4.5:1 normal).
   test('the sign-in hero text keeps AA contrast over every photograph', async ({ page }) => {
     test.setTimeout(90_000)
-    await page.emulateMedia({ reducedMotion: 'reduce' })
+    // The slideshow's 7 s timer runs on Playwright's clock, held between slides; the crossfade and
+    // the zoom are CSS, finished by the screenshots' animations: 'disabled'.
+    const t0 = new Date('2026-01-05T09:00:00Z')
+    await page.clock.install({ time: t0 })
     await page.route(`${APP}/`, async (route) => {
       const response = await route.fetch()
       const headers = { ...response.headers() }
@@ -202,31 +261,55 @@ test.describe('colour contrast (axe, WCAG 2 AA)', () => {
       await route.fulfill({ response, headers })
     })
     await page.goto(`${APP}/`)
+    await page.clock.pauseAt(new Date(t0.getTime() + 1000))
     await page.evaluate(() => document.fonts.ready)
     const targets = [
       { name: 'headline', locator: page.getByRole('heading', { level: 1 }), fg: [255, 255, 255, 1], min: 3 },
-      { name: 'subline', locator: page.locator('[aria-live] p'), fg: [255, 255, 255, 0.8], min: 4.5 },
+      { name: 'subline', locator: page.locator('section [role="group"] p'), fg: [255, 255, 255, 0.8], min: 4.5 },
       { name: 'facts', locator: page.locator('section li'), fg: [255, 255, 255, 1], min: 4.5 },
     ] as const
     const failures: string[] = []
     for (let n = 1; n <= 9; n++) {
-      if (n > 1) await page.getByRole('button', { name: `Show slide ${n}` }).click()
-      // At rest: the slide's photograph decoded and on top, no animation or transition running.
+      // Step the clock until the next slide comes up (every 7 s), then let it load, fade in and settle.
+      const slide = page.getByRole('group', { name: `${n} of 9` })
+      while ((await slide.count()) === 0) await page.clock.runFor(500)
       await expect
         .poll(() =>
-          page.evaluate(
-            () =>
-              [...document.querySelectorAll<HTMLImageElement>('section img.opacity-100')].some(
-                (img) => img.complete && img.naturalWidth > 0,
-              ) && document.getAnimations().every((a) => a.playState !== 'running'),
-          ),
+          page.evaluate(() => {
+            const top = document.querySelector<HTMLElement>('section > div.z-\\[1\\]')
+            const img = top?.querySelector('img')
+            return !!img && img.complete && img.naturalWidth > 0 && top!.classList.contains('opacity-100')
+          }),
         )
         .toBe(true)
-      await page.waitForTimeout(1000)
+      await page.clock.runFor(1500)
+      await expect
+        .poll(
+          () =>
+            page.evaluate(() =>
+              document
+                .getAnimations()
+                .filter((a) => a instanceof CSSTransition && a.playState === 'running')
+                .map((a) => `${(a as CSSTransition).transitionProperty} on ${((a.effect as KeyframeEffect).target as Element).className.slice(0, 50)}`),
+            ),
+          { message: `slide ${n}: transitions still running` },
+        )
+        .toEqual([])
+      // Measured at both ends of the photograph's zoom: held at its start, then finished.
+      for (const phase of ['zoom start', 'zoom end'] as const) {
+        if (phase === 'zoom start')
+          await page.evaluate(() =>
+            document.getAnimations().forEach((a) => {
+              if ((a as Partial<CSSAnimation>).animationName === 'hero-kb') {
+                a.pause()
+                a.currentTime = 0
+              }
+            }),
+          )
       for (const t of targets) {
         for (const element of await t.locator.all()) {
           await element.evaluate((el: HTMLElement) => el.style.setProperty('color', 'transparent', 'important'))
-          const png = (await element.screenshot({ animations: 'disabled' })).toString('base64')
+          const png = (await element.screenshot({ animations: phase === 'zoom end' ? 'disabled' : 'allow' })).toString('base64')
           await element.evaluate((el: HTMLElement) => el.style.removeProperty('color'))
           const ratio = await page.evaluate(
             async ({ png, fg }) => {
@@ -254,8 +337,9 @@ test.describe('colour contrast (axe, WCAG 2 AA)', () => {
             },
             { png, fg: [...t.fg] },
           )
-          if (ratio < t.min) failures.push(`slide ${n} ${t.name}: ${ratio.toFixed(2)} < ${t.min}`)
+          if (ratio < t.min) failures.push(`slide ${n} ${t.name} (${phase}): ${ratio.toFixed(2)} < ${t.min}`)
         }
+      }
       }
     }
     expect(failures).toEqual([])

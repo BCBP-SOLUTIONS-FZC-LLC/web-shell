@@ -27,41 +27,42 @@
   }
 }
 
-@keyframes hero-image-in {
+/*
+ * The sign-in hero's slideshow (LoginPage): every 7 s the next photograph crossfades in over 1.4 s
+ * (a Tailwind opacity transition on its frame) while each photograph on screen zooms slowly toward
+ * its own point (the Ken Burns move); the slide's words rise in. Hover or Pause holds it.
+ */
+@keyframes hero-kb {
   from {
-    opacity: 0;
-    transform: scale(1.06) translate3d(var(--hero-shift), 0, 0);
+    transform: scale(1);
   }
   to {
-    opacity: 1;
-    transform: scale(1) translate3d(0, 0, 0);
+    transform: scale(1.12);
   }
 }
 
-@keyframes hero-copy-in {
-  from {
-    opacity: 0;
-    transform: translate3d(var(--hero-shift), 1.15rem, 0);
-  }
-  to {
-    opacity: 1;
-    transform: translate3d(0, 0, 0);
-  }
+.hero-kb {
+  animation: hero-kb 9s cubic-bezier(0.33, 0, 0.67, 1) both;
 }
 
-.hero-image-in {
-  animation: hero-image-in 0.9s ease-out both;
+/* The first photograph starts its move once the opening has settled it. */
+.hero-kb-late {
+  animation-delay: 1.6s;
 }
 
-.hero-copy-in {
-  animation: hero-copy-in 0.7s ease-out both;
+.hero-held .hero-kb {
+  animation-play-state: paused;
+}
+
+.hero-copy-late {
+  animation-delay: 0.15s;
 }
 
 /*
- * The sign-in hero's opening (LoginPage): plays once on load, over 2.4 s, then the page is still.
+ * The sign-in hero's opening (LoginPage): plays once on load, over 2.4 s; then the slideshow takes over (hero-kb, above).
  *   0–1.2 s  letterbox bars open      0–1.6 s  the photograph settles
  *   0–2.4 s  light leak and grain drift, then rest
- *   0.5 s    logo, eyebrow, headline  1.0 s    subline  1.4 s  facts and controls
+ *   0.5 s    logo, eyebrow, headline  1.0 s    subline  1.4 s  facts
  * Every layer is pointer-events: none; the form beside it never animates.
  */
 @keyframes cine-letterbox {
@@ -166,8 +167,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .hero-image-in,
-  .hero-copy-in,
+  .hero-kb,
   .cine-settle,
   .cine-leak,
   .cine-grain,

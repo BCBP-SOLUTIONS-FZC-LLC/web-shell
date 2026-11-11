@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useEmailSignIn, type LoginPageProps } from './useEmailSignIn'
 import { BrandLogo } from '../../components/BrandLogo'
+import { usePrefersReducedMotion } from '../../components/usePrefersReducedMotion'
 import logo from '../../../shared/ui/assets/images/logo.png'
 import image1 from '../../../shared/ui/assets/images/image1.jpg'
 import image2 from '../../../shared/ui/assets/images/image2.jpg'
@@ -33,8 +34,20 @@ const SLIDES = [
   { image: image9, title: 'login.slide.9.title', body: 'login.slide.9.body' },
 ] as const satisfies readonly { image: string; title: ShellKey; body: ShellKey }[]
 
-/** The hero's one-time opening (index.css, cine-*): on until the user picks another slide. */
+/** How long each slide holds before the next; the crossfade takes FADE_MS of it (index.css, hero-kb). */
+const SLIDE_MS = 7000
+const FADE_MS = 1400
+/** Wall-clock time for the slide timer (faked by the test clocks). */
+const now = () => Date.now()
+
+/** Each photograph drifts toward its own point while it slowly zooms (the Ken Burns move, hero-kb). */
+const DRIFT = ['origin-[30%_40%]', 'origin-[70%_35%]', 'origin-[50%_72%]', 'origin-[24%_66%]'] as const
+
+/** The hero's one-time opening (index.css, cine-*): on until the first slide change. */
 const rise = (opening: boolean, delay: 'cine-d1' | 'cine-d2' | 'cine-d3') => (opening ? ` cine-rise ${delay}` : '')
+/** A slide's words: the opening's timing on the first slide, then a quick rise on every change. */
+const copyRise = (opening: boolean, delay: 'cine-d1' | 'cine-d2') =>
+  opening ? ` cine-rise ${delay}` : ` cine-rise${delay === 'cine-d2' ? ' hero-copy-late' : ''}`
 
 export default function LoginPage({ onContinue, onForgotPassword, rememberedEmail, notice = null }: LoginPageProps) {
   const { email, setEmail, remember, setRemember, submitting, error, handleSubmit, handleForgotPassword } =
@@ -44,9 +57,40 @@ export default function LoginPage({ onContinue, onForgotPassword, rememberedEmai
   const [slide, setSlide] = useState(0)
   const [settledSlide, setSettledSlide] = useState(0)
   const [loadedSlides, setLoadedSlides] = useState<ReadonlySet<number>>(() => new Set())
-  // The slides change only on a click: after the opening the hero stays still.
+  const reduced = usePrefersReducedMotion()
+  // The opening plays once: never under reduced motion, and never again once it has ended.
   const [opening, setOpening] = useState(true)
-  const [slideDirection, setSlideDirection] = useState<1 | -1>(1)
+  if (reduced && opening) setOpening(false)
+  // The first photograph's zoom waits for the opening, and keeps that delay until it leaves the
+  // screen (dropping it mid-zoom would make the photograph jump).
+  const [firstLap, setFirstLap] = useState(true)
+  // The slideshow moves on its own. Pause (WCAG 2.2.2), a mouse over the hero or keyboard focus in
+  // it holds it (a touch does not: a tap fires mouseenter with no leave); reduced motion stops it.
+  const [paused, setPaused] = useState(false)
+  const [hovered, setHovered] = useState(false)
+  const [focused, setFocused] = useState(false)
+  const held = paused || hovered || focused
+  // Time left on this slide, kept across a hold: a hold delays the change, it never restarts it.
+  const remaining = useRef(SLIDE_MS)
+  // The change came due while the next photograph was not ready: it waits for that photograph,
+  // so the words never move ahead of their picture.
+  const due = useRef(false)
+  const loadedRef = useRef(loadedSlides)
+  const stillRef = useRef(held || reduced)
+  const nextIndex = (slide + 1) % SLIDES.length
+  const nextRef = useRef(nextIndex)
+  useEffect(() => {
+    loadedRef.current = loadedSlides
+    stillRef.current = held || reduced
+    nextRef.current = nextIndex
+  })
+
+  function advance() {
+    due.current = false
+    remaining.current = SLIDE_MS
+    setOpening(false)
+    setSlide((current) => (current + 1) % SLIDES.length)
+  }
 
   function markSlideLoaded(index: number) {
     setLoadedSlides((current) => {
@@ -55,66 +99,84 @@ export default function LoginPage({ onContinue, onForgotPassword, rememberedEmai
       next.add(index)
       return next
     })
+    if (due.current && index === nextRef.current && !stillRef.current) advance()
   }
 
   useEffect(() => {
+    if (reduced || held) return
+    const started = now()
+    let fired = false
+    const timer = window.setTimeout(() => {
+      fired = true
+      remaining.current = 0
+      if (loadedRef.current.has(nextRef.current)) advance()
+      else due.current = true
+    }, remaining.current)
+    return () => {
+      window.clearTimeout(timer)
+      // A hold keeps the time left. A timer that fired has nothing left to keep, and advance()
+      // has already given the new slide its full time.
+      if (!fired) remaining.current = Math.max(0, remaining.current - (now() - started))
+    }
+  }, [reduced, held, slide])
+
+  // Once the incoming photograph has faded in over the last one, it becomes the base.
+  useEffect(() => {
     if (!loadedSlides.has(slide) || slide === settledSlide) return
-    const timer = window.setTimeout(() => setSettledSlide(slide), 900)
+    const timer = window.setTimeout(() => {
+      setSettledSlide(slide)
+      setFirstLap(false)
+    }, FADE_MS)
     return () => window.clearTimeout(timer)
   }, [slide, loadedSlides, settledSlide])
 
-  function showSlide(next: number) {
-    const count = SLIDES.length
-    const normalized = ((next % count) + count) % count
-    if (normalized === slide) {
-      return
-    }
-    const forward = (normalized - slide + count) % count
-    const backward = (slide - normalized + count) % count
-    setSlideDirection(forward <= backward ? 1 : -1)
-    setOpening(false)
-    setSlide(normalized)
-  }
-
   const activeSlide = SLIDES[slide]!
-  const heroShift = slideDirection === 1 ? '4%' : '-4%'
 
   return (
     <div className="flex min-h-dvh flex-col bg-[#061018] font-sans lg:flex-row">
       <section
-        className="relative z-0 min-h-[68vh] flex-1 overflow-hidden lg:min-h-dvh"
+        className={`relative z-0 min-h-[68vh] flex-1 overflow-hidden lg:min-h-dvh${held ? ' hero-held' : ''}`}
         aria-roledescription={text('login.carousel.role')}
         aria-label={text('login.carousel')}
+        onPointerEnter={(event) => setHovered(event.pointerType === 'mouse')}
+        onPointerLeave={() => setHovered(false)}
+        onFocus={() => setFocused(true)}
+        onBlur={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setFocused(false)
+        }}
       >
         {SLIDES.map((item, index) => {
-          const isIncoming = index === slide && index !== settledSlide && loadedSlides.has(index)
-          const isBase = index === settledSlide
+          const visible = index === settledSlide || (index === slide && loadedSlides.has(index))
+          const first = index === 0 && opening
+          const late = index === 0 && firstLap
           // Fetch only the slides on screen and the next one; a loaded image keeps its src.
           const wanted =
             index === settledSlide || index === slide || index === (slide + 1) % SLIDES.length || loadedSlides.has(index)
           return (
-            <img
+            // The frame crossfades; the photograph inside zooms and drifts while it is on screen.
+            <div
               key={item.image}
-              src={wanted ? item.image : undefined}
-              alt=""
-              decoding="async"
-              draggable={false}
-              onLoad={(event) => {
-                if (event.currentTarget.naturalWidth > 0) markSlideLoaded(index)
-              }}
-              ref={(node) => {
-                if (node?.complete && node.naturalWidth > 0) markSlideLoaded(index)
-              }}
-              className={`pointer-events-none absolute inset-0 h-full w-full object-cover ${
-                isIncoming
-                  ? 'z-[1] hero-image-in'
-                  : isBase
-                    ? `z-0 opacity-100${opening ? ' cine-settle' : ''}`
-                    : 'z-0 opacity-0'
-              }`}
-              style={isIncoming ? { ['--hero-shift' as string]: heroShift } : undefined}
+              className={`pointer-events-none absolute inset-0 overflow-hidden transition-opacity duration-[1400ms] ease-in-out motion-reduce:transition-none ${
+                index === slide ? 'z-[1]' : 'z-0'
+              } ${visible ? 'opacity-100' : 'opacity-0'}${first ? ' cine-settle' : ''}`}
               aria-hidden
-            />
+            >
+              <img
+                src={wanted ? item.image : undefined}
+                alt=""
+                decoding="async"
+                draggable={false}
+                onLoad={(event) => {
+                  if (event.currentTarget.naturalWidth > 0) markSlideLoaded(index)
+                }}
+                ref={(node) => {
+                  if (node?.getAttribute('src') && node.complete && node.naturalWidth > 0) markSlideLoaded(index)
+                }}
+                className={`h-full w-full object-cover ${DRIFT[index % DRIFT.length]}${
+                  visible ? ` hero-kb${late ? ' hero-kb-late' : ''}` : ''
+                }`}
+              />
+            </div>
           )
         })}
         {/* Film grade: a teal-black wash, the light leak, grain, then the letterbox bars (all still after 2.4 s). */}
@@ -138,15 +200,16 @@ export default function LoginPage({ onContinue, onForgotPassword, rememberedEmai
               BCBP SOLUTIONS
             </p>
           </div>
-          {/* A carousel that moves only on a click announces the new slide (ARIA carousel pattern). */}
-          <div aria-live="polite">
+          {/* Each slide is a named group; the slideshow is not a live region (it changes on its own). */}
+          <div>
             <div
               key={slide}
-              className={opening ? '' : 'hero-copy-in'}
-              style={{ ['--hero-shift' as string]: slideDirection === 1 ? '1.5rem' : '-1.5rem' }}
+              role="group"
+              aria-roledescription={text('login.carousel.slideRole')}
+              aria-label={text('login.carousel.slide', { number: slide + 1, total: SLIDES.length })}
             >
               <h1
-                className={`mt-4 max-w-[24em] text-balance text-[clamp(2rem,3.1vw,3.4rem)] font-[650] leading-[1.05] tracking-[-0.02em] text-white${rise(opening, 'cine-d1')}`}
+                className={`mt-4 max-w-[24em] text-balance text-[clamp(2rem,3.1vw,3.4rem)] font-[650] leading-[1.05] tracking-[-0.02em] text-white${copyRise(opening, 'cine-d1')}`}
               >
                 {text(activeSlide.title).split('\n').map((line, index) => (
                   <span key={line}>
@@ -156,7 +219,7 @@ export default function LoginPage({ onContinue, onForgotPassword, rememberedEmai
                 ))}
               </h1>
               <p
-                className={`mt-5 max-w-[36rem] text-[clamp(1rem,1.3vw,1.2rem)] leading-relaxed text-white/80${rise(opening, 'cine-d2')}`}
+                className={`mt-5 max-w-[36rem] text-[clamp(1rem,1.3vw,1.2rem)] leading-relaxed text-white/80${copyRise(opening, 'cine-d2')}`}
               >
                 {text(activeSlide.body)}
               </p>
@@ -173,41 +236,18 @@ export default function LoginPage({ onContinue, onForgotPassword, rememberedEmai
               </li>
             ))}
           </ul>
-          {/* Not part of the rise: focusable controls are never invisible. */}
-          <div className="mt-8 flex items-center gap-3">
+          {/* The one control: the slideshow's pause. Not part of the rise, so it is never invisible. */}
+          {reduced ? null : (
             <button
               type="button"
-              className="inline-flex h-9 w-9 cursor-pointer items-center justify-center rounded-full border border-white/30 bg-black/30 text-lg text-white"
-              aria-label={text('login.carousel.previous')}
-              onClick={() => showSlide(slide - 1)}
+              // The name says what a press does (Pause / Play), so no aria-pressed as well.
+              onClick={() => setPaused((p) => !p)}
+              className="mt-8 inline-flex w-fit cursor-pointer items-center gap-2 rounded-full border border-white/25 bg-black/40 px-3.5 py-1.5 text-xs font-medium text-white transition-colors hover:bg-black/60"
             >
-              ‹
+              <span aria-hidden>{paused ? '▶' : '❚❚'}</span>
+              {text(paused ? 'login.carousel.play' : 'login.carousel.pause')}
             </button>
-            <div className="flex items-center gap-2">
-              {SLIDES.map((item, index) => (
-                <button
-                  key={item.image}
-                  type="button"
-                  aria-label={text('login.carousel.show', { number: index + 1 })}
-                  aria-current={index === slide ? 'true' : undefined}
-                  // Pointer shortcuts: the keyboard uses ‹ ›, so Tab reaches the form after two stops.
-                  tabIndex={-1}
-                  onClick={() => showSlide(index)}
-                  className={`h-2.5 cursor-pointer rounded-full transition-all ${
-                    index === slide ? 'w-7 bg-[#ff2d9a]' : 'w-2.5 bg-white/70'
-                  }`}
-                />
-              ))}
-            </div>
-            <button
-              type="button"
-              className="inline-flex h-9 w-9 cursor-pointer items-center justify-center rounded-full border border-white/30 bg-black/30 text-lg text-white"
-              aria-label={text('login.carousel.next')}
-              onClick={() => showSlide(slide + 1)}
-            >
-              ›
-            </button>
-          </div>
+          )}
         </div>
       </section>
 
