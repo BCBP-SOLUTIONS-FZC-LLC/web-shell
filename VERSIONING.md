@@ -32,7 +32,7 @@ This shell has no package for another app to import from npm. Its public contrac
 
 ### Guarantees
 
-- **Pre-`v1.0.0` (current status):** per [SemVer §4](https://semver.org/#spec-item-4), anything may change at any time while the major version is `0`. Tags exist (`v0.1.0`, `v0.2.0`, `v0.3.0`), but the major version is `0`, so the contract is not yet stable. The table above still indicates what is *more* disruptive than what within `v0.x`, but a host should not yet assume `v0.x` compatibility across a MINOR bump the way it could once `v1.0.0` ships.
+- **Pre-`v1.0.0` (current status):** per [SemVer §4](https://semver.org/#spec-item-4), anything may change at any time while the major version is `0`. Tags exist (`v0.1.0`, `v0.2.0`, `v0.3.0`, `v0.4.0`), but the major version is `0`, so the contract is not yet stable. The table above still indicates what is *more* disruptive than what within `v0.x`, but a host should not yet assume `v0.x` compatibility across a MINOR bump the way it could once `v1.0.0` ships.
 - **MAJOR (once `v1` ships):** breaking changes to the runtime contract ship as `v2.0.0` with migration notes in the CHANGELOG.
 - **MINOR:** safe to roll the image forward without rebuilding the dashboard remote or changing the environment's runtime config, unless you opt into a new capability.
 - **PATCH:** drop-in image replacement. Upgrade recommended for security fixes. Every image is CVE-scanned (see below).
@@ -41,8 +41,9 @@ This shell has no package for another app to import from npm. Its public contrac
 
 | Version | Status | Image tag | Notes |
 |---------|--------|-----------|-------|
-| `v0.3.0` | **Current** (pre-1.0) | `0.3.0`, `0.3`, `0`, `latest` | SDK `1.0.0-alpha.6`; same remote contract as `0.2.0` (remote `dashboard`): pairs with mfe-dashboard `v0.3.0` and later alpha.6 builds. Error page, catalogue words for every sign-in failure, the constitution refactor. [CHANGELOG § 0.3.0](CHANGELOG.md). No support window: pre-1.0, so a minor may break compatibility (see below) |
-| `v0.2.0` | Previous (rollback for `0.3.0`) | `0.2.0`, `0.2` | Remote renamed `dashboard` (breaking): pairs with mfe-dashboard `v0.3.0`. [CHANGELOG § 0.2.0](CHANGELOG.md). Release commit `dbcaa89` |
+| `v0.4.0` | **Current** (pre-1.0) | `0.4.0`, `0.4`, `0`, `latest` | SDK `1.0.0-alpha.6`; dashboard contract as `0.3.0`; adds remote `tenders` (mfe-tender) at `/t/<slug>/tenders/*`. [CHANGELOG § 0.4.0](CHANGELOG.md). No support window: pre-1.0, so a minor may break compatibility (see below) |
+| `v0.3.0` | Previous (rollback for `0.4.0`) | `0.3.0`, `0.3` | SDK `1.0.0-alpha.6`; same remote contract as `0.2.0` (remote `dashboard`): pairs with mfe-dashboard `v0.3.0` and later alpha.6 builds. Error page, catalogue words for every sign-in failure, the constitution refactor. [CHANGELOG § 0.3.0](CHANGELOG.md). Release commit `0b06a46` |
+| `v0.2.0` | Superseded | `0.2.0`, `0.2` | Remote renamed `dashboard` (breaking): pairs with mfe-dashboard `v0.3.0`. [CHANGELOG § 0.2.0](CHANGELOG.md). Release commit `dbcaa89` |
 | `v0.1.0` | Superseded | `0.1.0`, `0.1` | First release; SDK `1.0.0-alpha.5`; remote `app2`: pairs with mfe-dashboard `v0.1.1`–`v0.2.0` only. Release commit `861fdb5` |
 
 This shell has no formal support-window policy yet, since nothing is running in production against a tagged release. Once a `v1.0.0` ships, this section will define how long a superseded major line receives security-only fixes.
@@ -53,7 +54,7 @@ Do not add this repository as an npm dependency. Run the **shell image** (or ser
 
 ### Pull and verify the image
 
-A tag publishes the image (`release.yml`; `v0.1.0`, `v0.2.0` and `v0.3.0` are tagged):
+A tag publishes the image (`release.yml`; `v0.1.0`, `v0.2.0`, `v0.3.0` and `v0.4.0` are tagged):
 
 ```bash
 # Git tag v0.1.0 publishes the image as 0.1.0 (the v prefix is not part of the image tag)
@@ -165,9 +166,10 @@ Both match the `v[0-9]*.[0-9]*.[0-9]*-*` tag trigger and produce a signed, scann
 
 ## Compatibility matrix
 
-| web-shell | Node | React | Platform SDK | Dashboard remote |
+| web-shell | Node | React | Platform SDK | Remotes |
 |-----------|------|-------|--------------|------------------|
 | Unreleased (`main`) | 26 (image builder `node:26-bookworm`, CI `node-version: 26`) | `^19.0.0` (strict singleton, from the preset) | `@bcbp-solutions-fzc-llc/*` `1.0.0-alpha.6`, all three on one version | From `/remotes/manifest.json`. Must be built with `webpack-preset` `1.0.0-alpha.4`, `alpha.5` or `alpha.6` (container global `__platform_mfe_<name>`; a remote requires `^<its SDK>`, so never newer than this shell's); an alpha.3 build defines the old global, which this shell does not read. Not versioned in this repo |
+| `0.4.0` | 26 | `^19.0.0` | `1.0.0-alpha.6`, all three | Remote `dashboard` as `0.3.0`; remote `tenders` (container `__platform_mfe_tenders`): mfe-tender alpha.6 builds (none released; no contract run) |
 | `0.3.0` | 26 | `^19.0.0` | `1.0.0-alpha.6`, all three | Remote `dashboard` (container `__platform_mfe_dashboard`): mfe-dashboard `v0.3.0` (alpha.5; contract suite 12/12) and builds on alpha.6 such as mfe-dashboard `v0.4.0` (no contract run recorded yet) |
 | `0.2.0` | 26 | `^19.0.0` | `1.0.0-alpha.5`, all three | Remote `dashboard` (container `__platform_mfe_dashboard`): mfe-dashboard `v0.3.0` (alpha.5). A dashboard built on alpha.6 (mfe-dashboard `v0.4.0`) needs web-shell `0.3.0` or later |
 | `0.1.0` | 26 | `^19.0.0` | `1.0.0-alpha.5`, all three | Remote `app2`: mfe-dashboard `v0.1.1`–`v0.2.0` |
@@ -178,7 +180,7 @@ Keycloak itself is not a library dependency of the image. The shell talks to the
 
 | File | Purpose |
 |------|---------|
-| [CHANGELOG.md](./CHANGELOG.md) | User-facing history per version: released sections `0.1.0`, `0.2.0` and `0.3.0`; `[Unreleased]` for `main` |
+| [CHANGELOG.md](./CHANGELOG.md) | User-facing history per version: released sections `0.1.0`, `0.2.0`, `0.3.0` and `0.4.0`; `[Unreleased]` for `main` |
 | [README.md](./README.md) | What the shell is |
 | [ARCHITECTURE.md](./ARCHITECTURE.md) | Module layout, bootstrap, sign-in flow, storage, threat model |
 | [docs/lld/web-shell-lld.md](./docs/lld/web-shell-lld.md) | Low-level design; §14 compatibility |
