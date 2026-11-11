@@ -2,7 +2,7 @@
 
 This document describes the internal structure, dependency direction, browser flows, data, caching, observability, security and deployment of `web-shell`.
 
-`web-shell` is a **private Rsbuild application** (`github.com/BCBP-SOLUTIONS-FZC-LLC/web-shell`, Node.js 26, React 19.3) built on the platform SDK (`@bcbp-solutions-fzc-llc/frontend-sdk` `1.0.0-alpha.6`). The npm package name is `web-shell` and `"private": true`. Nothing installs it. What ships is a static bundle: the SDK bootstrap, the sign-in and session screens, and a Module Federation host (`shell`) that renders the dashboard remote. The production process is nginx on port **8080**, uid **101**. There is no API server, database, or message bus in this repository.
+`web-shell` is a **private Rsbuild application** (`github.com/BCBP-SOLUTIONS-FZC-LLC/web-shell`, Node.js 26, React 19.3) built on the platform SDK (`@bcbp-solutions-fzc-llc/frontend-sdk` `1.0.0-alpha.6`). The npm package name is `web-shell` and `"private": true`. Nothing installs it. What ships is a static bundle: the SDK bootstrap, the sign-in and session screens, and a Module Federation host (`shell`) that renders the `dashboard` and `tenders` remotes. The production process is nginx on port **8080**, uid **101**. There is no API server, database, or message bus in this repository.
 
 Current release: `v0.3.0` (remote `dashboard`, SDK alpha.6); `v0.2.0` is its rollback; `v0.1.0` (remote `app2`) is superseded. `package.json` `version` matches the latest tag. Image tags, the SemVer contract, and how to cut a release are in [VERSIONING.md](./VERSIONING.md).
 
@@ -10,7 +10,7 @@ Current release: `v0.3.0` (remote `dashboard`, SDK alpha.6); `v0.2.0` is its rol
 |---|---|
 | The SDK start-up sequence, the email sign-in page, the session screens | Passwords, MFA, registration, token issuance (Keycloak). PKCE, token handling, refresh and idle timeout (the SDK's `/auth`) |
 | The IAM ports: PUB-1 resolver and P-35 session context | The IAM APIs, tenant membership, authorization decisions (IAM services, the gateway) |
-| Federation host `shell` and the shared map from `@bcbp-solutions-fzc-llc/webpack-preset` | Dashboard screens (`mfe-dashboard`, loaded as `dashboard`) |
+| Federation host `shell` and the shared map from `@bcbp-solutions-fzc-llc/webpack-preset` | Dashboard screens (`mfe-dashboard`, loaded as `dashboard`); tender screens (`mfe-tender`, loaded as `tenders`) |
 | The shell value remotes read through SDK hooks (`user`, `signOut`, `workspace`, `context`) | Each environment's `/config/runtime.json` and `/remotes/manifest.json` (deploy pipeline, CloudFront) |
 | `GET /healthz` and the static files nginx serves | Cluster rollout. A tag publishes an image. It does not deploy |
 
@@ -29,7 +29,7 @@ graph TD
     subgraph app["app/ — composition root"]
         index["bootstrap/index.ts\nasync boundary, unavailable message"]
         boot["bootstrap/bootstrap.tsx\nSDK start-up, session handling, wiring, render"]
-        routes["routes/App.tsx\nsigned-in routes, dashboard RemoteBoundary"]
+        routes["routes/App.tsx\nsigned-in routes, dashboard and tenders RemoteBoundary"]
         providers["providers/ShellRoot.tsx\nPlatformProvider"]
         layouts["layouts/\nscreen host, session-screen mounting"]
     end
@@ -61,8 +61,9 @@ graph TD
         sdkmods["/core /config /auth /http /authz /flags /problem\n/tracing /logging /metrics /i18n /mfe /nav /security /react"]
     end
 
-    subgraph remote["Remote, loaded in the browser"]
+    subgraph remote["Remotes, loaded in the browser"]
         dashboard["dashboard ./App\nSDK hooks, no props"]
+        tenders["tenders ./App (mfe-tender)\nSDK hooks, no props"]
     end
 
     index -. dynamic import .-> boot
@@ -74,6 +75,7 @@ graph TD
     boot --> sdkmods
     routes --> widgets
     routes -. loads at run time .-> dashboard
+    routes -. loads at run time .-> tenders
     layouts --> features
     features --> pages
     pages --> components
@@ -163,7 +165,7 @@ graph LR
     text --> sdk
 ```
 
-`App.tsx` renders `dashboard` through `RemoteBoundary`. That edge is not a file in this repo.
+`App.tsx` renders `dashboard` and `tenders` through `RemoteBoundary`. That edge is not a file in this repo.
 
 | Module | May import |
 |---|---|
@@ -262,6 +264,7 @@ Routes inside the app:
 | Path (under the basename) | Element |
 |---|---|
 | `/dashboard/*` | `RemoteBoundary` for `dashboard` `./App` |
+| `/tenders/*` | `RemoteBoundary` for `tenders` `./App` (mfe-tender) |
 | anything else | `<Navigate to="/dashboard" replace>` |
 
 ---
@@ -351,6 +354,8 @@ sequenceDiagram
 The shell passes no props. `dashboard` reads the user with `useCurrentUser()` and signs out with `useSignOut()` (global by default: the Keycloak session ends too, and every tab follows), from the shell value `PlatformProvider` holds.
 
 `loadRemote` reads the entry from the manifest the bootstrap loaded, checks the kill switch (`remotes.killSwitch`, flag `remote.dashboard.disabled`) and the entry origin (the page's, or `remotes.allowedOrigins`), injects `remoteEntry.js` as a classic script with its `integrity`, and reads the container from `window.__platform_mfe_dashboard` (`__platform_mfe_<name>` since alpha.4). A remote must therefore be built with `@bcbp-solutions-fzc-llc/webpack-preset` (`role: 'remote'`, library type `var`; webpack, Rspack or Rsbuild). The share scope gives it this shell's React, OTel API and SDK; a remote built against a newer SDK than the shell's is refused at share negotiation, inside the boundary. "Try again" creates a new lazy import.
+
+`/t/<slug>/tenders/*` loads `tenders` (mfe-tender) the same way: container `__platform_mfe_tenders`, flag `remote.tenders.disabled`, no props. react-router-dom is not shared, so the remote runs its own router under the shell's basename (LLD §15 #18).
 
 ---
 
@@ -586,7 +591,7 @@ classDiagram
 | `SessionContext` | `tenantId`, `slug`, `roles`, `departments` (`{ id, level }[]`, drawn as `IdLevel[]`), `plan?`, `featureFlags`, `readOnly`, `mfaFreshnessSeconds?`, `locale?` | SDK `/auth`; mapped by `toSessionContext` |
 | Shell value | `user`, `workspace`, `context`, `locale`, `switchWorkspace`, `signOut` | This shell, in `PlatformProvider`; remotes read it through SDK hooks (no props) |
 | Runtime config | `/config/runtime.json`, validated strictly by the SDK (README § Configuration, LLD §9.1) | Each environment |
-| Remote manifest | `/remotes/manifest.json`: `dashboard` → entry URL and `integrity` | Each environment |
+| Remote manifest | `/remotes/manifest.json`: `dashboard`, `tenders` → entry URL and `integrity` | Each environment |
 | Storage keys | § Browser storage | SDK and `infrastructure/storage/rememberedEmail.ts` |
 
 ---
@@ -636,7 +641,7 @@ graph LR
     subgraph shell["web-shell (identity: portal / web-shell / environment from runtime.json)"]
         boot["bootstrap.tsx\ninitializeTracing · initializeLogging · initializeMetrics\ninstallGlobalErrorHandlers · startWebVitals"]
         logs["shell logs\nmanifest load failed (error)\nthe app could not start (error)\nsession context unavailable (warn: stays in the page under v1 consent)"]
-        bnd["Error boundaries (SDK)\nRemoteBoundary: dashboard\nMFEErrorBoundary: web-shell routes → AppError"]
+        bnd["Error boundaries (SDK)\nRemoteBoundary: dashboard, tenders\nMFEErrorBoundary: web-shell routes → AppError"]
     end
     subgraph sdk["SDK, for the shell and every remote"]
         api["ApiClient spans · x-request-id · traceparent · x-session-id"]
@@ -666,7 +671,7 @@ graph LR
 | Logs | SDK logger; three shell events (LLD §11) | `the app could not start` and `manifest load failed` are errors and leave the page; `session context unavailable` is a non-essential warning and stays in the page under v1 consent. `the app could not start` is reported even when the config never loaded (default `/otel`) |
 | Traces | `initializeTracing`; ApiClient and remote-load spans | `traceparent` on same-origin and allowlisted calls; `telemetry.sampleRatio` |
 | Metrics | `initializeMetrics`; SDK Tier 1 `platform_web_*` (pending ratification) | The shell creates none (`npm run metrics-check`) |
-| Errors | `installGlobalErrorHandlers`; `RemoteBoundary` (`dashboard`); `MFEErrorBoundary` (`web-shell`) | A boundary logs `remote failed to render` (error) with its `mfe`; an API, timeout or network error is a non-essential warning (`remote showed an error`) that v1 consent keeps in the page. It reloads once on a chunk-load error, then shows its fallback |
+| Errors | `installGlobalErrorHandlers`; `RemoteBoundary` (`dashboard`, `tenders`); `MFEErrorBoundary` (`web-shell`) | A boundary logs `remote failed to render` (error) with its `mfe`; an API, timeout or network error is a non-essential warning (`remote showed an error`) that v1 consent keeps in the page. It reloads once on a chunk-load error, then shows its fallback |
 | Consent | SDK default, essential only (v1) | Only error logs and essential warnings leave the page |
 | Alert | `WebShellStartupFailures` (Loki, example rule) | [runbook](docs/runbook-startup-failure.md); must be deployed to the Loki ruler (LLD §15) |
 
@@ -713,10 +718,10 @@ A browser shell has no locks, but it has races: an async start-up that a sign-ou
 | Leave for Keycloak | Browser navigation | stop | The shell is gone until Keycloak redirects back |
 | Session context | P-35 | degrade, then recover | Warning log. Deny-all permissions and platform flags until it answers; after a transient failure (a network failure while online, a timeout, 429, 502, 503 or 504 (the SDK ApiClient's own rule)) it is retried after 1 s, 2 s, 4 s, one request per attempt, and applied live (any other answer, offline included, is final) (the router moves under `/t/<slug>/` then). A notice with Reload says some actions are hidden |
 | Remote manifest | `/remotes/manifest.json` | degrade | Error log. The app renders; `RemoteBoundary` shows its error |
-| Dashboard load or render | `dashboard` remote | degrade | Boundary message with "Try again". The rest of the shell keeps running |
+| Dashboard or tenders load or render | `dashboard` / `tenders` remote | degrade | Boundary message with "Try again". The rest of the shell keeps running |
 | The shell's own screens render | `App.tsx` and its widgets | stop that tree, recover on retry | The SDK's `MFEErrorBoundary` (`mfe="web-shell"`) logs the error (and records it for the SDK's web-error metric, which counts once Tier 1 is ratified), then shows `AppError`: "Something went wrong on this page.", the trace or request reference, and Try again. Never the error's own message. Instead of a blank page |
 | Telemetry export | `/otel` | ignore | Bounded queues in the SDK. v1 exports `essential` only (errors and essential warnings), by decision |
-| `GET /healthz` | nginx only | liveness | `200` and `ok`. Keycloak, IAM and `dashboard` are not checked |
+| `GET /healthz` | nginx only | liveness | `200` and `ok`. Keycloak, IAM, `dashboard` and `tenders` are not checked |
 
 ---
 
@@ -757,7 +762,7 @@ A browser shell has no locks, but it has races: an async start-up that a sign-ou
 | Document | `GET /` | `index.html`, `id="app"`, `Cache-Control: no-cache` |
 | Runtime files | `GET /config/runtime.json`, `/remotes/manifest.json`, `/version.json` | `no-cache`, 404 when the file is absent |
 
-Build args: `BUILD_VERSION`, `SOURCE_DATE_EPOCH`, `PLATFORM_ENVIRONMENT` (default `prod`; only a fallback now: each environment's `runtime.json` names its own `environment`). The image ships `public/config/runtime.json` (SDK defaults: `https://auth.bcbpsolutions.com`, client `tender-web`) and an empty manifest `{}`. An environment serves its own files over those paths, from CloudFront or a mount. The image sends no CSP or HSTS: CloudFront does, and until it exists (next month) each environment mounts `nginx/security.d/csp.conf` and `hsts.conf` and routes `/api`, `/otel`, `/csp-report` and `/remotes/dashboard/` on the same origin at its ingress ([docs/hosting-without-cloudfront.md](docs/hosting-without-cloudfront.md)).
+Build args: `BUILD_VERSION`, `SOURCE_DATE_EPOCH`, `PLATFORM_ENVIRONMENT` (default `prod`; only a fallback now: each environment's `runtime.json` names its own `environment`). The image ships `public/config/runtime.json` (SDK defaults: `https://auth.bcbpsolutions.com`, client `tender-web`) and an empty manifest `{}`. An environment serves its own files over those paths, from CloudFront or a mount. The image sends no CSP or HSTS: CloudFront does, and until it exists (next month) each environment mounts `nginx/security.d/csp.conf` and `hsts.conf` and routes `/api`, `/otel`, `/csp-report` and `/remotes/dashboard/` (and `/remotes/tenders/` once mfe-tender is released) on the same origin at its ingress ([docs/hosting-without-cloudfront.md](docs/hosting-without-cloudfront.md)).
 
 CI on `main` pushes `ghcr.io/bcbp-solutions-fzc-llc/web-shell` with the branch tag and `sha-<short>`, then Cosign-signs the digest. A Git tag `vX.Y.Z` publishes image tags `X.Y.Z`, `X.Y`, `X`, and `latest` when the tag has no pre-release suffix. The Git tag keeps the `v`. The static tarball on the GitHub Release is `web-shell_<tag>_dist.tar.gz`, without source maps (the release keeps them as the workflow artifact `sourcemaps-<tag>`). `BUILD_VERSION` is the version without the `v`. The tarball does not include the nginx `/healthz` location. Releases so far: `v0.1.0`, `v0.2.0`, `v0.3.0`.
 
@@ -771,6 +776,7 @@ There is no Helm chart and no deploy job.
 | Static preview of `dist/` | 5001 | `npm run preview` |
 | Keycloak `start-dev` | 8080 | `npm run keycloak:setup` |
 | Dashboard remote | 5002 | Separate repo, entry in `config/remotes.local.json` |
+| Tenders remote | 5003 | Separate repo (mfe-tender), entry in `config/remotes.local.json` |
 
 The dev server serves `config/runtime.local.json` and `config/remotes.local.json`, stubs PUB-1 and P-35 (realm `tenant-bcbp`, slug `bcbp`), and drops `/otel` posts (`config/dev-platform.mjs`). `DEV_API_URL` proxies `/api` to a real API instead. The preview and the image have none of that; they serve the files in `dist/`.
 
@@ -780,7 +786,7 @@ CloudFront arrives next month. Until then every environment serves the image beh
 
 | Concern | Until CloudFront | With CloudFront |
 |---|---|---|
-| `/api`, `/otel`, `/csp-report`, `/remotes/dashboard/` | Ingress routes | CloudFront behaviours |
+| `/api`, `/otel`, `/csp-report`, `/remotes/dashboard/`, `/remotes/tenders/` | Ingress routes | CloudFront behaviours |
 | CSP, HSTS | Mounted at `/etc/nginx/security.d/` (`csp.conf.example`, `hsts.conf.example`) | CloudFront response headers; remove the mounts (two CSPs are both enforced) |
 | Runtime config, manifest | Mounted or baked per environment | S3 objects per environment |
 | Deploy check | `SMOKE_BASE_URL=https://<host> SMOKE_MODE=live ENVIRONMENT=<target> npm run test-smoke` | Same |
@@ -825,7 +831,7 @@ Use this before serving this image in an environment, or before changing `dashbo
 
 - [ ] Serve `index.html` for extension-less client-side routes only, as `platform-reactcommon` `examples/cloudfront/spa-rewrite.js` does (this image's nginx config follows it). Missing config, remote, asset and API files must stay 404.
 - [ ] Serve this environment's `/config/runtime.json` and `/remotes/manifest.json`, revalidated. Cache `/assets/` as immutable.
-- [ ] Route `/api` to the platform API (PUB-1 and P-35 must exist), `/otel` and `/csp-report` to the collector, and `/remotes/dashboard/` to the dashboard's files, all on the shell's origin.
+- [ ] Route `/api` to the platform API (PUB-1 and P-35 must exist), `/otel` and `/csp-report` to the collector, `/remotes/dashboard/` to the dashboard's files and `/remotes/tenders/` to mfe-tender's (once it is released), all on the shell's origin.
 - [ ] Send the platform's CSP with the Trusted Types policies (`platform-reactcommon/examples/cloudfront`), with the IdP origin in `form-action` (the global sign-out POSTs to Keycloak), and HSTS. From CloudFront, or until it exists by mounting `nginx/security.d/csp.conf` and `hsts.conf`; never both.
 - [ ] Run `SMOKE_MODE=live npm run test-smoke` against the environment.
 - [ ] Keep `GET /healthz` if the orchestrator probes the image. The tarball alone does not include that location.
@@ -855,8 +861,8 @@ What the shell promises to others, and how each promise changes (VERSIONING.md h
 |---|---|---|
 | Platform SDK version | All three packages together, exact pins; shell first, unless the release changes the shell–remote contract (then deploy together); `/sdk-upgrade` | `check-sdk-pins.mjs` (hook), `SdkVersionPlugin` (build), `test-contract` |
 | `runtime.json` schema | The SDK's schema (strict; unknown keys refused). New keys arrive with an SDK release (alpha.6: `environment`) | The SDK at start-up; smoke `image` and `live` |
-| Remote contract | Remote name `dashboard`, container `__platform_mfe_dashboard`, no props, the `PlatformProvider` shell value. A rename is a MAJOR change and deploys with the dashboard | `npm run test-contract` against a real mfe-dashboard build; CI `Dashboard contract` |
-| Routes and storage keys | `/t/<slug>/dashboard/*`; `bcbp.*` keys. A change updates README, ARCHITECTURE, the LLD and CHANGELOG together | e2e and browser suites |
+| Remote contract | Remote name `dashboard`, container `__platform_mfe_dashboard`, no props, the `PlatformProvider` shell value. A rename is a MAJOR change and deploys with the dashboard. Remote `tenders` (mfe-tender): container `__platform_mfe_tenders`, no props, `ownerDomain` `tender_management`; same rules, deploys with mfe-tender | `npm run test-contract` against a real mfe-dashboard build; CI `Dashboard contract`. `tenders`: integration and e2e stubs only (LLD §15 #18) |
+| Routes and storage keys | `/t/<slug>/dashboard/*`, `/t/<slug>/tenders/*`; `bcbp.*` keys. A change updates README, ARCHITECTURE, the LLD and CHANGELOG together | e2e and browser suites (`/tenders/*`: integration and e2e only) |
 | IAM ports (PUB-1, P-35) | IAM's swagger; the SDK's contract cases | `test/unit/iam.test.ts` against the SDK's contract cases |
 | The shell's text | Keys of `src/shared/i18n/en.json`; a new locale adds a catalogue | `test/unit/shell-text.test.ts` |
 

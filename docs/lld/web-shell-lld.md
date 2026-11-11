@@ -14,6 +14,7 @@
 
 | Date | Change |
 |---|---|
+| 2026-11-11 | Route `/tenders/*` for remote `tenders` (mfe-tender): §2, §4, §6, §11, §12, §13 and §15 #18 |
 | 2026-11-11 | §15 #6 closed: IAM confirmed PUB-1 and P-35 behind `/api` in dev, staging and prod (reply of 2026-11-10), and IAM added `Cache-Control: no-store` to P-35's 200 |
 | 2026-11-06 | Released `v0.3.0` (#62): SDK alpha.6, the constitution refactor, the error page; same remote contract as `v0.2.0`. Status, pairs and open items updated |
 | 2026-11-06 | Claude Code tooling hardened (#60): the edit guard compares canonical paths and blocks `.env` / `docker.local.env` at any depth; `sync.sh` and `bump.sh` validate their arguments |
@@ -104,7 +105,7 @@ Removed as duplicates of the SDK (2026-11-05): `platform/consent.ts` (the runtim
 |---|---|
 | Async boundary and the fatal "unavailable" message | `src/app/bootstrap/index.ts` |
 | The SDK start-up sequence and session handling | `src/app/bootstrap/bootstrap.tsx` |
-| Signed-in routes and the dashboard `RemoteBoundary` | `src/app/routes/App.tsx` |
+| Signed-in routes and the `dashboard` and `tenders` `RemoteBoundary`s | `src/app/routes/App.tsx` |
 | IAM ports: PUB-1 → `Workspace`, P-35 → `SessionContext` | `src/infrastructure/api/iam.ts` |
 | Session screens: email sign-in, signed out, session ended, device clock, wrong workspace, workspace not found | `src/presentation/features/session-screens/` (components), `src/app/layouts/sessionScreens.tsx` (mounting), `src/app/layouts/screen.tsx` (host) |
 | Login page, email form, remember-email, help and legal links | `src/presentation/pages/login/`, `src/presentation/components/PageLinks.tsx`, `src/shared/constants/links.ts` |
@@ -126,6 +127,7 @@ Removed as duplicates of the SDK (2026-11-05): `platform/consent.ts` (the runtim
 | PKCE, token handling, refresh, idle timeout, cross-tab sign-out, workspace cache | SDK `/auth` |
 | Tenant resolution, session context, roles, authorization decisions | IAM services, the gateway (AuthZ Enrichment) |
 | Dashboard screens, user management | `mfe-dashboard` (remote `dashboard`) |
+| Tender screens | `mfe-tender` (remote `tenders`) |
 | Each environment's `/config/runtime.json`, `/remotes/manifest.json`, CSP and security headers | Deploy pipeline, CloudFront |
 | Cluster rollout | Operators. A tag publishes an image; nothing deploys it |
 
@@ -151,7 +153,8 @@ src/
     bootstrap/index.ts          Rsbuild entry: async boundary → bootstrap(); showUnavailable on a throw
     bootstrap/bootstrap.tsx     the only module that wires infrastructure/ and renders #app
     providers/ShellRoot.tsx     PlatformProvider with the live context and locale
-    routes/App.tsx              BrowserRouter (basename /t/<slug>), /dashboard/* → RemoteBoundary dashboard ./App
+    routes/App.tsx              BrowserRouter (basename /t/<slug>), /dashboard/* → RemoteBoundary dashboard ./App,
+                                /tenders/* → RemoteBoundary tenders ./App
     layouts/screen.tsx          #shell-screen host (fixed overlay outside #app)
     layouts/sessionScreens.tsx  askForWorkspace and the show* functions: mount the session screens
   presentation/
@@ -274,9 +277,10 @@ Keys are IAM's closed role set: `member`, `tenant_owner`, `tenant_admin`, `tende
 | Remote | `dashboard`, module `./App`, default export a component |
 | Container global | `window.__platform_mfe_dashboard` (preset `containerName`, SDK alpha.4); a remote built with an older preset defines `dashboard` and fails as `incompatible` |
 | Props | None |
-| Entry | `/remotes/manifest.json` `{ "dashboard": { entry, version, ownerDomain, integrity? } }`; `integrity` required outside `local`, `dev`, `test` |
+| Entry | `/remotes/manifest.json` `{ "dashboard": { entry, version, ownerDomain, integrity? }, "tenders": { … } }`; `integrity` required outside `local`, `dev`, `test` |
 | Build | `@bcbp-solutions-fzc-llc/webpack-preset` remote (`pluginPlatform({ role: 'remote', name: 'dashboard', exposes: { './App': … } })` or the webpack/Rspack equivalents), SDK `import: false` |
 | Route template | `/t/:slug/dashboard` (`useRouteTemplate` in `App.tsx`) |
+| Second remote | `tenders` (mfe-tender), module `./App`, container `window.__platform_mfe_tenders`, no props (its optional `userLabel`, `onLogout` default to SDK hooks), build `name: 'tenders'`, `ownerDomain` `tender_management`, route template `/t/:slug/tenders`. react-router-dom is not shared, so it runs its own `BrowserRouter` under the shell's basename (§15 #18). A rename or a required prop is a MAJOR change |
 
 ---
 
@@ -359,6 +363,8 @@ Here (a remote's `useSignOut()`) or in another tab (`BroadcastChannel('platform-
 
 `/dashboard/*` → `useRouteTemplate('/t/:slug/dashboard')`, `<RemoteBoundary remote="dashboard" module="./App" fallback="Loading dashboard…">`. The SDK's `loadRemote`: kill switch (`remotes.killSwitch`, flag `remote.dashboard.disabled`), entry origin (page or `remotes.allowedOrigins`), classic `<script>` with `integrity`, timeout `remotes.loadTimeoutMs`, `retries`, container from `window.__platform_mfe_dashboard`, share-scope init. Any failure stays inside the boundary ("Something went wrong." / "Try again"); "Try again" asks the container again without a reload.
 
+`/tenders/*` → `useRouteTemplate('/t/:slug/tenders')`, `<RemoteBoundary remote="tenders" module="./App" fallback="Loading tenders…">`, loaded the same way from `window.__platform_mfe_tenders` (flag `remote.tenders.disabled`). mfe-tender renders its own routes below `/tenders` and registers each page's template. Its props (`userLabel`, `onLogout`) are optional and default to `useCurrentUser` and `useSignOut`, so the shell passes none. Its manifest entry needs `ownerDomain: tender_management`.
+
 ---
 
 ## 7. Failure handling
@@ -373,7 +379,7 @@ Here (a remote's `useSignOut()`) or in another tab (`BroadcastChannel('platform-
 | Remote load or render | degrade | Boundary message, "Try again" |
 | Shell render (routes, widgets) | stop that tree | SDK `MFEErrorBoundary` `mfe="web-shell"` around `App`'s router: `error` log (the SDK's text `remote failed to render`, attribute `mfe: web-shell`), the SDK's web-error record (Tier 1, once ratified), then `AppError` (catalogue words, reference, Try again) |
 | Telemetry export | ignore | SDK queues; nothing beyond `essential` without consent |
-| `/healthz` | liveness only | Constant `ok`; does not check Keycloak, IAM or `dashboard` |
+| `/healthz` | liveness only | Constant `ok`; does not check Keycloak, IAM, `dashboard` or `tenders` |
 
 ---
 
@@ -414,7 +420,7 @@ Validated strictly by the SDK (unknown keys rejected). Schema: SDK LLD §12.1.
 | `auth.idpOrigin` · `clientId` | `https://auth.bcbpsolutions.com` · `tender-web` | `http://localhost:8080` · `app1` |
 | `auth.trialRealm` · `paidRealmPrefix` · `workspacePathPrefix` | `trial` · `tenant-` · `/t/` | same |
 | `auth.scopes` · `idleTimeoutMs` · `redirectPath` | `["openid"]` · 1800000 · `/auth/callback` | same |
-| `remotes` | `killSwitch` `[]`, 10000 ms, `retries` 2, `allowedOrigins` `[]` | `retries` 1, `allowedOrigins` `["http://localhost:5002"]` |
+| `remotes` | `killSwitch` `[]`, 10000 ms, `retries` 2, `allowedOrigins` `[]` | `retries` 1, `allowedOrigins` `["http://localhost:5002", "http://localhost:5003"]` |
 | `i18n` · `appUpdate` | `en` · 300000 ms | same |
 | `flags` | `{}` (platform flags; tenant flags come from P-35) | same |
 
@@ -479,7 +485,7 @@ Identity: `service.name` `web-shell`, domain `portal`, environment from `runtime
 | `manifest load failed` | `error` | `loadManifest` rejected (§5 step 15) |
 | `the app could not start` | `console.error` only | Fatal start-up error (telemetry may not exist yet) |
 
-Everything else (API spans, remote load logs and metrics, web vitals, global errors) is emitted by the SDK. Metrics follow the Enterprise Platform Observability Standard ([observability.md](../observability.md)): the shell creates none of its own today; the SDK injects `domain` `portal`, `service` `web-shell` and `environment`; Tier 1 `platform_web_*` is SDK-bound and pending ratification; a shell metric would be Tier 3 `portal_web_shell_*`, checked in CI by `metrics-check`. Route grouping: `useRouteTemplate('/t/:slug/dashboard')`.
+Everything else (API spans, remote load logs and metrics, web vitals, global errors) is emitted by the SDK. Metrics follow the Enterprise Platform Observability Standard ([observability.md](../observability.md)): the shell creates none of its own today; the SDK injects `domain` `portal`, `service` `web-shell` and `environment`; Tier 1 `platform_web_*` is SDK-bound and pending ratification; a shell metric would be Tier 3 `portal_web_shell_*`, checked in CI by `metrics-check`. Route grouping: `useRouteTemplate('/t/:slug/dashboard')` and `useRouteTemplate('/t/:slug/tenders')` (mfe-tender's pages register finer templates, such as `/t/:slug/tenders/:tenderId/risk`).
 
 ---
 
@@ -491,12 +497,12 @@ Vitest 5, happy-dom at `http://localhost:5001/`, Testing Library. `vitest.config
 |---|---|---|---|
 | Unit | `test/unit/` | partly (`createTestPlatform`, `mockApi`, `roleMapAuthorizer`) | The layer rules firing (`layer-rules.test.ts`); the `shell` catalogue, its fallback for a default locale without one, and no hard-coded user-facing text in presentation (`shell-text.test.ts`, on the TypeScript syntax tree); PUB-1/P-35 mappings against the SDK's contract cases, the entry point, remember-email, the role map, the screen host, `BrandLogo`, the dev middleware (node env, real HTTP) |
 | Integration | `test/integration/` | no (`vi.mock` recording fakes) | The bootstrap's exact order and every branch, the login page and carousel (only current and next photo fetched), session screens (alerts, dialog focus), `App` routes and the missing-context notice, axe-core over every shell screen (`accessibility.test.tsx`, colour contrast excluded) |
-| End to end | `test/e2e/shell.test.tsx` | yes | Email → PUB-1 → PKCE → callback → `dashboard` under `/t/acme/dashboard`; tokens never stored; deep link; role map reaching the remote; deny-all; failing remote and Try again; global sign-out (form POST to Keycloak) with no silent sign-in after; device clock; unknown email; a 503 outage retried in the background; the environment from `runtime.json`; Forgot password → the realm's reset page |
+| End to end | `test/e2e/shell.test.tsx` | yes | Email → PUB-1 → PKCE → callback → `dashboard` under `/t/acme/dashboard`; tokens never stored; deep link; a deep link to `/t/acme/tenders/…` loading only the tenders entry; role map reaching the remote; deny-all; failing remote and Try again; global sign-out (form POST to Keycloak) with no silent sign-in after; device clock; unknown email; a 503 outage retried in the background; the environment from `runtime.json`; Forgot password → the realm's reset page |
 | Smoke | `test/smoke/deployment.test.ts` | yes (config and manifest validation) | Against `SMOKE_BASE_URL`: the SPA rule, Cache-Control, entry integrity, no maps, 404s, `/healthz`; `image` mode adds nginx's baseline headers, gzip, no version, dotfile 404s; `live` mode adds CloudFront's CSP (including `form-action` allowing the IdP), HSTS and nosniff |
 | Browser | `test/browser/shell.spec.ts` (Playwright) | the production build | Chromium, Firefox, WebKit over HTTPS with the production CSP and Trusted Types (`server.ts`), a fake Keycloak on a second origin, a remote stub on the shared SDK: fonts and hashed images with no third-party request, PKCE sign-in and the remote with integrity, `navigate()` without a reload, the sign-out form POST under `form-action`, the start-up failure at `/otel`, axe colour contrast (the logotype is exempt, WCAG 1.4.3). Any CSP report fails the test |
 | Dashboard contract | `test/browser/dashboard.spec.ts` (`REMOTE_DIST`) | the production build | A real mfe-dashboard build served as `dashboard` with its own `remote-manifest-entry.json` integrity: it loads with its CSS and no CSP violation, every image it shows loads, the role map reaches it, its `NavLink` stays in the page, its Logout POSTs to Keycloak through the shell. A wrong integrity fails it |
 
-E2E seams (`test/fixtures/`): `FakeKeycloak` (authorize via `approve()`, token endpoint with PKCE check and refresh rotation), `FakeNetwork` (route table on the page origin; `/otel` → 204), `FakeBroadcastChannel`. Among the shell and SDK code only the remote's entry `<script>` is stubbed (browser seams are recorded: `location.assign`/`replace`, form `submit`, `createRoot`): it defines `window.__platform_mfe_dashboard` exposing a dashboard built on SDK hooks. A page load clears `globalThis[Symbol.for('@bcbp-solutions-fzc-llc/frontend-sdk')]`, resets modules, and imports the bootstrap again; storage is kept.
+E2E seams (`test/fixtures/`): `FakeKeycloak` (authorize via `approve()`, token endpoint with PKCE check and refresh rotation), `FakeNetwork` (route table on the page origin; `/otel` → 204), `FakeBroadcastChannel`. Among the shell and SDK code only the remote's entry `<script>` is stubbed (browser seams are recorded: `location.assign`/`replace`, form `submit`, `createRoot`): it defines `window.__platform_mfe_dashboard` exposing a dashboard built on SDK hooks (or `__platform_mfe_tenders` for the tenders entry). A page load clears `globalThis[Symbol.for('@bcbp-solutions-fzc-llc/frontend-sdk')]`, resets modules, and imports the bootstrap again; storage is kept.
 
 ---
 
@@ -527,6 +533,7 @@ Every `npm ci` reads `@bcbp-solutions-fzc-llc/*` from GitHub Packages with `GITH
 | Remotes | A remote built with the preset requires `^<its SDK version>`: it must not be newer than the shell's. **Upgrade the shell first**, then remotes. A release that changes the shell–remote contract is the exception (alpha.4 changed the container global): the shell and every remote deploy together. `npm run test-contract` checks a pairing |
 | React | Strict singleton `^19.0.0` from the preset; the shell ships 19.3 |
 | `mfe-dashboard` (remote `dashboard`) | Rsbuild remote with `pluginPlatform({ role: 'remote', name: 'dashboard' })`, async-only chunk splitting, reads the user and sign-out through SDK hooks, takes no props. Released pairs: web-shell `v0.3.0` (alpha.6) + mfe-dashboard `v0.3.0` (remote `dashboard`, alpha.5); the rollback web-shell `v0.2.0` with the same dashboard; mfe-dashboard `v0.4.0` (alpha.6) needs web-shell `v0.3.0` or later and has no recorded contract run against it yet; and the superseded web-shell `v0.1.0` + mfe-dashboard `v0.2.0` (remote `app2`). `v0.3.0` passes the contract suite (`dashboard.spec.ts`, 12/12 in three engines) against mfe-dashboard `v0.3.0`. An alpha.3 build does not load in this shell |
+| `mfe-tender` (remote `tenders`) | Rsbuild remote with `pluginPlatform({ role: 'remote', name: 'tenders' })` on SDK alpha.6 (peer `^1.0.0-alpha.6`), so it needs a shell on alpha.6 with the `/tenders/*` route (after `v0.3.0`). Not released yet; no contract run (`npm run test-contract` serves only the dashboard) (§15 #18) |
 | Keycloak | Each workspace realm registers `{origin}/auth/callback` and the origin as post-logout redirect for the client |
 
 Details: [VERSIONING.md](../../VERSIONING.md).
@@ -544,7 +551,7 @@ Numbers are stable; closed items are removed (2, 4; 6 when IAM confirmed PUB-1 a
 | 5 | Deploy web-shell `0.3.0` with mfe-dashboard `0.3.0` (manifest key `dashboard`, `/remotes/dashboard/0.3.0/`); rollback web-shell `0.2.0` with the same dashboard (`0.1.0` + `0.2.0` used `app2`). mfe-dashboard `0.4.0` (alpha.6) needs web-shell `0.3.0` or later: with it, rolling the shell back to `0.2.0` also rolls the dashboard back to `0.3.0`. After a pair is deployed, environments may set `auth.signInUrl` (older SDKs refuse the key), then `SMOKE_MODE=live` | operators |
 | 7 | No cluster deploy; each environment serves its own runtime config and manifest (with the remote's integrity) and registers its redirect URIs in each realm | operators |
 | 8 | Tender permissions in the role map are provisional | Tender Service |
-| 9 | No CloudFront until next month: environments route `/api`, `/otel`, `/csp-report`, `/remotes/dashboard/` at the ingress and mount the CSP (IdP in `form-action`) and HSTS ([hosting-without-cloudfront.md](../hosting-without-cloudfront.md)); remove the mounts when CloudFront arrives | operators |
+| 9 | No CloudFront until next month: environments route `/api`, `/otel`, `/csp-report`, `/remotes/dashboard/` (and `/remotes/tenders/`, §15 #18) at the ingress and mount the CSP (IdP in `form-action`) and HSTS ([hosting-without-cloudfront.md](../hosting-without-cloudfront.md)); remove the mounts when CloudFront arrives | operators |
 | 10 | Keycloak realms need SMTP and "Forgot password" enabled for the reset flow (§6.1a); unconfirmed | Keycloak ops |
 | 11 | The `WebShellStartupFailures` alert ([runbook](../runbook-startup-failure.md)) is an example; it must be deployed to the Loki ruler | operators |
 | 12 | One build for every environment (SDK alpha.6): each deployed `runtime.json` must name its `environment` (checked by `SMOKE_MODE=live ENVIRONMENT=<target> npm run test-smoke`); then the shell drops `__ENVIRONMENT__` / `PLATFORM_ENVIRONMENT`, and a file without the key stops at the unavailable page | operators, then this repo |
@@ -552,3 +559,4 @@ Numbers are stable; closed items are removed (2, 4; 6 when IAM confirmed PUB-1 a
 | 15 | The constitution exceptions in ADRs 0002, 0005–0008 (no TanStack Query or Zustand, the SDK's i18n, shell-local UI, the nginx image, tests in `test/`) await Architecture Review | architecture review |
 | 16 | Copies of unpublished platform code wait for SDK exports (§1.2): `isTransient` (a test fails if it diverges from the `ApiClient`), `retrySessionContext`, `createStore`, `ShellRoot`, the realm URL in `passwordReset.ts` | platform-reactcommon |
 | 17 | Adopt `platform-design-system` when the platform publishes it (ADR 0006; constitution roadmap step 7) | platform |
+| 18 | `tenders` (mfe-tender) has a route but no release: when mfe-tender is tagged, environments add its manifest entry (`ownerDomain: tender_management`) and route `/remotes/tenders/`; `npm run test-contract` serves only the dashboard, so no browser run loads the real `remoteEntry.js` here yet. Because the remote runs its own router, a shell-router navigation into `/tenders/…` (the SDK's `navigate` through `shellNavigator`, e.g. from the dashboard while tenders is mounted) changes the URL without re-rendering the remote's routes; the fix is a shared react-router-dom singleton in the preset (platform-reactcommon) or SDK `navigate`-only routing in mfe-tender. Theme and CSS ownership when embedded is open (mfe-tender LLD §15 #7) | mfe-tender, operators, this repo |

@@ -20,7 +20,7 @@ vi.mock('@bcbp-solutions-fzc-llc/frontend-sdk/react', async (original) => ({
   },
 }))
 
-const { default: App, DASHBOARD_REMOTE } = await import('../../src/app/routes/App')
+const { default: App, DASHBOARD_REMOTE, TENDERS_REMOTE } = await import('../../src/app/routes/App')
 
 describe('App', () => {
   it('renders the dashboard remote under the workspace basename, with no props', () => {
@@ -33,6 +33,20 @@ describe('App', () => {
     expect(routeTemplate).toHaveBeenCalledWith('/t/:slug/dashboard')
     // The dashboard remote reads the user and sign-out from the SDK (useCurrentUser, useSignOut).
     expect(boundaryProps).toHaveBeenLastCalledWith(undefined)
+  })
+
+  it('renders the tenders remote under /tenders/*, with no props', () => {
+    window.history.replaceState({}, '', '/t/acme/tenders/T-1/documents')
+    render(<App basename="/t/acme" />)
+    const remote = screen.getByTestId('remote')
+    expect(remote).toHaveAttribute('data-remote', TENDERS_REMOTE)
+    expect(TENDERS_REMOTE).toBe('tenders') // mfe-tender's container name and manifest key
+    expect(remote).toHaveAttribute('data-module', './App')
+    expect(screen.getByTestId('fallback')).toHaveTextContent('Loading tenders…')
+    expect(routeTemplate).toHaveBeenCalledWith('/t/:slug/tenders')
+    // mfe-tender's userLabel and onLogout are optional and default to the SDK's useCurrentUser and useSignOut.
+    expect(boundaryProps).toHaveBeenLastCalledWith(undefined)
+    expect(window.location.pathname).toBe('/t/acme/tenders/T-1/documents')
   })
 
   it('redirects any other path to the dashboard', () => {

@@ -35,9 +35,9 @@ npm run build             # tsc and the production bundle
 
 The dev server serves `/config/runtime.json` and `/remotes/manifest.json` from `config/`, and stubs PUB-1 and P-35 so sign-in works with only Keycloak running (`config/dev-platform.mjs`). `DEV_API_URL=https://… npm run dev` proxies `/api` to a real API instead.
 
-The dashboard remote is a separate repo. Start `mfe-dashboard` so `http://localhost:5002/remoteEntry.js` is served (it builds as remote `dashboard` with the preset's Rsbuild plugin); otherwise `/t/bcbp/dashboard` shows the remote boundary's error. Tests never fetch that port: the integration tests replace `RemoteBoundary`, and the e2e suite stubs the remote's entry script.
+The dashboard remote is a separate repo. Start `mfe-dashboard` so `http://localhost:5002/remoteEntry.js` is served (it builds as remote `dashboard` with the preset's Rsbuild plugin); otherwise `/t/bcbp/dashboard` shows the remote boundary's error. `mfe-tender` (`npm run dev` there) serves remote `tenders` at `http://localhost:5003/remoteEntry.js` for `/t/bcbp/tenders`. Tests never fetch those ports: the integration tests replace `RemoteBoundary`, and the e2e suite stubs the remote's entry script.
 
-Local ports: shell **5001**, Keycloak **8080**, dashboard **5002**. The production image also listens on **8080**. Map it to another host port when Keycloak is already running (`docker run -p 18080:8080`).
+Local ports: shell **5001**, Keycloak **8080**, dashboard **5002**, tenders **5003**. The production image also listens on **8080**. Map it to another host port when Keycloak is already running (`docker run -p 18080:8080`).
 
 `npm run hooks:install` copies `.githooks/pre-commit` into `.git/hooks/pre-commit`. Run it again after that file changes. On each commit the hook refuses a staged `.env` or `docker.local.env`, then runs the same workflow, line-ending, and Dockerfile pin checks as `validate-quality`, then `tsc --noEmit`. ESLint, the Vitest suite, the 95% gate, Hadolint, Trivy, and the image smoke script stay in CI. Run `npm run lint`, `npm run test:ci` and `npm run build` before you open a pull request. Git for Windows runs the hook with its Bash.
 
@@ -219,7 +219,7 @@ These tests pin behavior other repos and the login flow depend on. Change them o
 - **`test/integration/bootstrap.test.tsx`** — the exact SDK initialisation order, no automatic login after a logout or a device-clock refusal, the app never renders for a wrong-workspace login, deny-all without a session context, and the app unmounts on sign-out.
 - **`test/unit/iam.test.ts`** — the PUB-1 → `Workspace` and P-35 → `SessionContext` ports, through the real `ApiClient` (`createTestPlatform`, `mockApi`), against the SDK's contract cases in `@bcbp-solutions-fzc-llc/frontend-sdk/contracts`; PUB-1 is called without a token.
 - **`test/integration/session-screens.test.tsx`** — "not found" and "unreachable" show the same message.
-- **`test/integration/app.test.tsx`** — `/dashboard/*` renders `dashboard` `./App` with no props, under the workspace basename.
+- **`test/integration/app.test.tsx`** — `/dashboard/*` renders `dashboard` `./App` and `/tenders/*` renders `tenders` `./App`, each with no props, under the workspace basename.
 - **`test/e2e/shell.test.tsx`** — the whole sign-in with the real SDK: PKCE to the realm PUB-1 names, tokens never stored, the URL under `/t/<slug>/`, the remote reading the user and permissions through SDK hooks, and no silent sign-in after a global sign-out.
 - **`test/smoke/deployment.test.ts`** — what nginx (and CloudFront, live) must serve: only extension-less paths get `index.html`, the runtime files are uncached and pass the SDK's validation, hashed assets are immutable and match their integrity.
 

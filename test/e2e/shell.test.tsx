@@ -7,8 +7,9 @@
 //
 // Stubbed seams, and why:
 // - the remote's entry <script>: happy-dom does not run remoteEntry.js. The stub defines the
-//   `__platform_mfe_dashboard` container global the way the entry does (the preset's containerName since
-//   alpha.4), exposing a dashboard built only on the SDK's hooks, as mfe-dashboard's is.
+//   `__platform_mfe_<name>` container global the way the entry does (the preset's containerName since
+//   alpha.4), exposing a dashboard (or the tenders remote) built only on the SDK's hooks, as
+//   mfe-dashboard's (mfe-tender's) is.
 // - location.assign/replace: a redirect is recorded instead of leaving the page.
 // - HTMLFormElement#submit: the global sign-out's form POST to Keycloak is recorded (URL and fields)
 //   instead of leaving the page.
@@ -43,6 +44,9 @@ const RUNTIME_KEY = Symbol.for('@bcbp-solutions-fzc-llc/frontend-sdk')
 const ENTRY = '/remotes/dashboard/1.0.0/remoteEntry.js'
 /** The global the dashboard's remoteEntry.js defines: `__platform_mfe_<name>` (SDK alpha.4). */
 const CONTAINER = '__platform_mfe_dashboard'
+const TENDERS_ENTRY = '/remotes/tenders/1.0.0/remoteEntry.js'
+/** The global mfe-tender's remoteEntry.js defines. */
+const TENDERS_CONTAINER = '__platform_mfe_tenders'
 const TENANT = '7d3c1f9e-2b4a-4c6d-8e0f-1a2b3c4d5e6f'
 const EMAIL = 'ada@acme.test'
 
@@ -86,6 +90,17 @@ async function dashboardModule(): Promise<{ default: ComponentType }> {
   return { default: Dashboard }
 }
 
+/** The tenders remote (mfe-tender): its optional props unset, it reads the user from the shell's SDK. */
+async function tendersModule(): Promise<{ default: ComponentType }> {
+  const { useCurrentUser, useWorkspace } = await import('@bcbp-solutions-fzc-llc/frontend-sdk/react')
+  function Tenders() {
+    const user = useCurrentUser()
+    const workspace = useWorkspace()
+    return createElement('h1', null, `Tenders for ${user?.name ?? 'nobody'} in ${workspace?.slug ?? '?'}`)
+  }
+  return { default: Tenders }
+}
+
 /** The document goes: every root unmounted, the body emptied. */
 async function unload(): Promise<void> {
   await act(async () => {
@@ -99,6 +114,7 @@ async function load(path?: string): Promise<void> {
   await unload()
   delete (globalThis as Record<symbol, unknown>)[RUNTIME_KEY]
   delete (globalThis as Record<string, unknown>)[CONTAINER]
+  delete (globalThis as Record<string, unknown>)[TENDERS_CONTAINER]
   vi.resetModules()
   if (path) window.history.replaceState(null, '', path)
   const app = document.createElement('div')
@@ -161,7 +177,10 @@ beforeEach(() => {
   net
     .on('GET /config/runtime.json', RUNTIME_CONFIG)
     .on('GET /version.json', { version: 'test' })
-    .on('GET /remotes/manifest.json', { dashboard: { entry: ENTRY, version: '1.0.0', ownerDomain: 'portal' } })
+    .on('GET /remotes/manifest.json', {
+      dashboard: { entry: ENTRY, version: '1.0.0', ownerDomain: 'portal' },
+      tenders: { entry: TENDERS_ENTRY, version: '1.0.0', ownerDomain: 'tender_management' },
+    })
     .on('GET /api/v1/public/tenants/resolve', (req) => {
       const id = new URL(req.url).searchParams.get('identifier')
       return Response.json(
@@ -188,7 +207,18 @@ beforeEach(() => {
     if (!(node instanceof HTMLScriptElement)) return append(node)
     const src = new URL(node.src, ORIGIN)
     injected.push(src.pathname)
-    ;(globalThis as Record<string, unknown>)[CONTAINER] = { init: () => {}, get: (m: string) => exposeModule(m) }
+    if (src.pathname === TENDERS_ENTRY) {
+      ;(globalThis as Record<string, unknown>)[TENDERS_CONTAINER] = {
+        init: () => {},
+        get: async (m: string) => {
+          if (m !== './App') throw new Error(`Module "${m}" does not exist in container.`)
+          const t = await tendersModule()
+          return () => t
+        },
+      }
+    } else {
+      ;(globalThis as Record<string, unknown>)[CONTAINER] = { init: () => {}, get: (m: string) => exposeModule(m) }
+    }
     setTimeout(() => node.onload?.(new Event('load')))
     return node
   })
@@ -198,6 +228,7 @@ afterEach(async () => {
   await unload()
   delete (globalThis as Record<symbol, unknown>)[RUNTIME_KEY]
   delete (globalThis as Record<string, unknown>)[CONTAINER]
+  delete (globalThis as Record<string, unknown>)[TENDERS_CONTAINER]
   FakeBroadcastChannel.reset()
 })
 
@@ -243,6 +274,16 @@ describe('the shell, end to end', () => {
     await approveLogin()
     await screen.findByRole('heading', { name: /Dashboard for Ada Lovelace/ }, { timeout: 5_000 })
     expect(window.location.pathname).toBe('/t/acme/dashboard')
+  })
+
+  it('a deep link to /t/<slug>/tenders/… loads only the tenders remote, there, after sign-in', async () => {
+    await load('/t/acme/tenders/T-1/documents')
+    await until(() => assigned.length > 0, 'the redirect to Keycloak')
+    await approveLogin()
+    await screen.findByRole('heading', { name: 'Tenders for Ada Lovelace in acme' }, { timeout: 5_000 })
+    expect(window.location.pathname).toBe('/t/acme/tenders/T-1/documents')
+    expect(injected).toEqual([TENDERS_ENTRY])
+    expect(screen.queryByRole('heading', { name: /Dashboard/ })).toBeNull()
   })
 
   it("gives the remote the role map's permissions: an owner may invite, a member may only view", async () => {
