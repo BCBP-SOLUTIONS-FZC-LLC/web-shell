@@ -17,6 +17,9 @@ import { UpdateAvailable } from '../../presentation/widgets/UpdateAvailable'
 /** The remote that renders the dashboard, as named in /remotes/manifest.json. */
 export const DASHBOARD_REMOTE = 'dashboard'
 
+/** The remote that renders the tender workspace (mfe-tender), as named in /remotes/manifest.json. */
+export const TENDERS_REMOTE = 'tenders'
+
 /** The shell's own name in error logs and web-error metrics (the dashboard reports as `dashboard`). */
 export const SHELL_MFE = 'web-shell'
 
@@ -36,6 +39,17 @@ function Dashboard() {
   useRouteTemplate('/t/:slug/dashboard')
   const text = useShellText()
   return <RemoteBoundary remote={DASHBOARD_REMOTE} module="./App" fallback={<Loading>{text('app.loadingDashboard')}</Loading>} />
+}
+
+/**
+ * The tenders remote (mfe-tender), under /t/<slug>/tenders/*. react-router-dom is not shared, so it
+ * runs its own router under the same basename; it reads the user and sign-out from the SDK (its
+ * props are optional), so it gets no props either.
+ */
+function Tenders() {
+  useRouteTemplate('/t/:slug/tenders')
+  const text = useShellText()
+  return <RemoteBoundary remote={TENDERS_REMOTE} module="./App" fallback={<Loading>{text('app.loadingTenders')}</Loading>} />
 }
 
 /** The update notice, with the SDK's update state (presentation takes it as props). */
@@ -65,7 +79,7 @@ export default function App({
   const context = useSessionContext()
   // The shell's own screens in an error boundary (the SDK's): a render error is logged and counted
   // under `web-shell` and replaced by AppError instead of a blank page. The remote has its own
-  // (RemoteBoundary), so a dashboard error never reaches this one.
+  // (RemoteBoundary), so a remote's error never reaches this one.
   return (
     <MFEErrorBoundary mfe={SHELL_MFE} fallback={(e) => <AppError reference={e.traceId ?? e.requestId} onRetry={e.retry} />}>
       <BrowserRouter {...(basename ? { basename } : {})}>
@@ -74,6 +88,7 @@ export default function App({
         {context ? null : <ContextUnavailable onReload={() => window.location.reload()} />}
         <Routes>
           <Route path="/dashboard/*" element={<Dashboard />} />
+          <Route path="/tenders/*" element={<Tenders />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
       </BrowserRouter>

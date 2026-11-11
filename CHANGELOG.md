@@ -10,6 +10,10 @@ Pull requests that change the shell, its dependencies, or the image add an entry
 
 ## [Unreleased]
 
+### Added (2026-11-11 — the tenders remote)
+
+- **`/t/<slug>/tenders/*` renders the `tenders` remote (mfe-tender).** `src/app/routes/App.tsx` adds `TENDERS_REMOTE = 'tenders'` and a `/tenders/*` route: `useRouteTemplate('/t/:slug/tenders')` and `RemoteBoundary remote="tenders" module="./App"` with "Loading tenders…" (`app.loadingTenders`). Like the dashboard it gets no props: mfe-tender's `userLabel` and `onLogout` are optional and default to the SDK's `useCurrentUser` and `useSignOut`. Each environment's manifest needs `"tenders": { …, "ownerDomain": "tender_management" }` and, until CloudFront, an ingress route for `/remotes/tenders/`; without the entry the route shows the boundary's error. For dev, `config/remotes.local.json` has `tenders` at `http://localhost:5003/remoteEntry.js` and `config/runtime.local.json` allows that origin. Tests: `test/integration/app.test.tsx` (route, module, no props, template) and `test/e2e/shell.test.tsx` (a deep link to `/t/acme/tenders/T-1/documents` signs in and loads only the tenders entry). mfe-tender is not released and has no contract run against this shell (LLD §15 #18). Delivers the shell's part of mfe-tender LLD §15 #2, which stays open until a web-shell release and each environment's manifest entry. *(Previously: only `/dashboard/*`; any other path, `/tenders` included, redirected to the dashboard.)*
+
 ### Removed (2026-11-11 — a known gap: the IAM endpoints)
 
 - **PUB-1 and P-35 are confirmed behind `/api` in every environment.** IAM (iam-org-membership) replied on 2026-11-10 that `GET /api/v1/public/tenants/resolve` and `GET /api/v1/me/session-context` reach IAM in dev, staging and prod, as the shell's request of 2026-11-05 asked. IAM's own 4xx and 5xx answers on both are `application/problem+json` (RFC 9457); the reply does not give the format of the gateway's own answers, such as PUB-1's 429. Neither needs CORS or redirects. PUB-1 is unauthenticated and rate-limited per IP at the gateway. P-35 accepts tokens from every `tenant-*` realm and `trial`, and the gateway strips inbound `x-user-id`, `x-tenant-id` and `x-tenant-roles`. IAM added the missing `Cache-Control: no-store` to P-35's 200. LLD §15 #6 is closed. Recorded from IAM's reply; not yet checked from a deployed shell host (the shell is not deployed). *(Previously: unconfirmed outside dev, where `npm run dev` stubs them; listed in `[0.3.0]` Known gaps and LLD §15 #6.)*
@@ -17,7 +21,8 @@ Pull requests that change the shell, its dependencies, or the image add an entry
 ### Known gaps
 
 - **Each deployed `runtime.json` must name its `environment`** (LLD §15 #12). Until every one does, the shell keeps the build-time fallback (`__ENVIRONMENT__`), the constitution's open violation V5.
-- **No CloudFront until next month** (LLD §15 #9). Each environment routes `/api`, `/otel`, `/csp-report`, `/remotes/dashboard/` at its ingress and mounts the CSP (with the IdP in `form-action`) and HSTS ([docs/hosting-without-cloudfront.md](docs/hosting-without-cloudfront.md)).
+- **No CloudFront until next month** (LLD §15 #9). Each environment routes `/api`, `/otel`, `/csp-report`, `/remotes/dashboard/` (and `/remotes/tenders/` once mfe-tender is released) at its ingress and mounts the CSP (with the IdP in `form-action`) and HSTS ([docs/hosting-without-cloudfront.md](docs/hosting-without-cloudfront.md)).
+- **`tenders` has a route but no release or contract run** (LLD §15 #18): `npm run test-contract` serves only the dashboard; mfe-tender runs its own router (react-router-dom is not shared), so a shell-router navigation into `/tenders/…` does not re-render it; theme and CSS ownership when embedded is open.
 - **Dependabot's npm job fails** until the organisation Dependabot secret `PACKAGES_READ_TOKEN` exists (LLD §15 #13; needs an org admin).
 - **Official Privacy, Terms, Trust & Security and Help URLs** are not published (LLD §15 #1); the links stay hidden until they are set in `src/shared/constants/links.ts`.
 - **`tender_admin`'s tender permissions are provisional** in the role map (`src/domain/rules/permissions.ts`) until Tender Service confirms them (LLD §15 #8).
@@ -35,7 +40,7 @@ Pull requests that change the shell, its dependencies, or the image add an entry
 - Only `PLATFORM_ENVIRONMENT` (a fallback now) and `BUILD_VERSION` are compiled in. Everything else is `/config/runtime.json`, validated strictly by the SDK.
 - Every user-facing word is a key of the SDK `/i18n` `shell` namespace (`src/shared/i18n/en.json`), loaded before the first screen.
 - The access token goes only to the page's own origin, by the SDK's `ApiClient`; the browser never sends identity headers. Tokens are never stored.
-- Error boundaries: `RemoteBoundary` for `dashboard`, `MFEErrorBoundary` (`web-shell`) for the shell's own routes.
+- Error boundaries: `RemoteBoundary` for `dashboard` and `tenders`, `MFEErrorBoundary` (`web-shell`) for the shell's own routes.
 - Coverage is gated at 95% (100% today). `COVERAGE_THRESHOLD` can override the gate locally; no workflow sets it.
 - Claude Code: `.claude/settings.json` hooks, the `invariant-reviewer` and `doc-sync-reviewer` subagents, the `/sdk-upgrade` and `/stack-sync` skills.
 
