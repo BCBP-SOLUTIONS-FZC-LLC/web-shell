@@ -10,6 +10,20 @@ Pull requests that change the shell, its dependencies, or the image add an entry
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.4.0] - 2026-11-11
+
+**Not breaking: the dashboard contract is unchanged from `0.3.0`, and a second remote is added.** The remote `dashboard` is the same (container `__platform_mfe_dashboard`, no props, the same `PlatformProvider` shell value), still on SDK **`1.0.0-alpha.6`**, so mfe-dashboard `v0.3.0` and its alpha.6 builds load as before. New: **`/t/<slug>/tenders/*` loads the remote `tenders` (mfe-tender)**, container `__platform_mfe_tenders`, no props.
+
+**What users see.** In an environment whose manifest has a `tenders` entry, `/t/<slug>/tenders` and its deep links open the tender workspace instead of redirecting to the dashboard. Without the entry, that path shows the remote boundary's error and the rest of the shell keeps working. Nothing else changes.
+
+**Deploying it.** It replaces `0.3.0` with no other change. To turn on tenders, once mfe-tender is released: add its `remote-manifest-entry.json` object to `/remotes/manifest.json` as `tenders` (`ownerDomain: tender_management`, entry made absolute or `/remotes/tenders/<version>/remoteEntry.js`) and, until CloudFront, route `/remotes/tenders/` at the ingress. Rollback: `0.3.0`, with the same dashboard (`/tenders` then redirects to the dashboard again).
+
+**Not yet checked.** mfe-tender has no release, and no browser or contract run loads its real `remoteEntry.js` in this shell. Inside the shell it runs its own router, so a shell-router navigation into `/tenders/…` while it is mounted does not re-render it (LLD §15 #18).
+
+Details below.
+
 ### Added (2026-11-11 — the tenders remote)
 
 - **`/t/<slug>/tenders/*` renders the `tenders` remote (mfe-tender).** `src/app/routes/App.tsx` adds `TENDERS_REMOTE = 'tenders'` and a `/tenders/*` route: `useRouteTemplate('/t/:slug/tenders')` and `RemoteBoundary remote="tenders" module="./App"` with "Loading tenders…" (`app.loadingTenders`). Like the dashboard it gets no props: mfe-tender's `userLabel` and `onLogout` are optional and default to the SDK's `useCurrentUser` and `useSignOut`. Each environment's manifest needs `"tenders": { …, "ownerDomain": "tender_management" }` and, until CloudFront, an ingress route for `/remotes/tenders/`; without the entry the route shows the boundary's error. For dev, `config/remotes.local.json` has `tenders` at `http://localhost:5003/remoteEntry.js` and `config/runtime.local.json` allows that origin. Tests: `test/integration/app.test.tsx` (route, module, no props, template) and `test/e2e/shell.test.tsx` (a deep link to `/t/acme/tenders/T-1/documents` signs in and loads only the tenders entry). mfe-tender is not released and has no contract run against this shell (LLD §15 #18). Delivers the shell's part of mfe-tender LLD §15 #2, which stays open until a web-shell release and each environment's manifest entry. *(Previously: only `/dashboard/*`; any other path, `/tenders` included, redirected to the dashboard.)*
