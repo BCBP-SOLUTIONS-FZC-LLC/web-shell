@@ -1,4 +1,5 @@
 {
   "dashboard": { "entry": "http://localhost:5002/remoteEntry.js", "version": "local", "ownerDomain": "portal" },
-  "tenders": { "entry": "http://localhost:5003/remoteEntry.js", "version": "local", "ownerDomain": "tender_management" }
+  "tenders": { "entry": "http://localhost:5003/remoteEntry.js", "version": "local", "ownerDomain": "tender_management" },
+  "drafting": { "entry": "http://localhost:5004/remoteEntry.js", "version": "local", "ownerDomain": "portal" }
 }

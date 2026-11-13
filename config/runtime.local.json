@@ -13,7 +13,7 @@
     "redirectPath": "/auth/callback"
   },
   "flags": {},
-  "remotes": { "killSwitch": [], "loadTimeoutMs": 10000, "retries": 1, "allowedOrigins": ["http://localhost:5002", "http://localhost:5003"] },
+  "remotes": { "killSwitch": [], "loadTimeoutMs": 10000, "retries": 1, "allowedOrigins": ["http://localhost:5002", "http://localhost:5003", "http://localhost:5004"] },
   "i18n": { "defaultLocale": "en", "supportedLocales": ["en"] },
   "appUpdate": { "pollIntervalMs": 300000 }
 }

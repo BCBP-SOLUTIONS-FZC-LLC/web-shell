@@ -293,14 +293,14 @@ The dev server stands in for what CloudFront and the platform APIs provide (`con
 | Path | Dev server answer |
 |---|---|
 | `/config/runtime.json` | `config/runtime.local.json` (Keycloak `http://localhost:8080`, client `app1`, environment `local`) |
-| `/remotes/manifest.json` | `config/remotes.local.json` (`dashboard` at `http://localhost:5002/remoteEntry.js`, `tenders` at `http://localhost:5003/remoteEntry.js`) |
+| `/remotes/manifest.json` | `config/remotes.local.json` (`dashboard` at `http://localhost:5002/remoteEntry.js`, `tenders` at `http://localhost:5003/remoteEntry.js`, `drafting` at `http://localhost:5004/remoteEntry.js`) |
 | `GET /api/v1/public/tenants/resolve` | Any identifier → realm `tenant-bcbp` |
 | `GET /api/v1/me/session-context` | Slug `bcbp`, roles `member`, `tenant_owner` (the signup owner; `DEV_ROLES=member,tenant_admin` overrides), 401 without a bearer token |
 | `POST /otel/*` | `204`, dropped |
 
 Set `DEV_API_URL` to proxy `/api` to a real API instead of the stubs, or `DEV_REALM` to stub a different realm.
 
-The dashboard is a second process. Start `mfe-dashboard` (`npm run dev` there) so it serves `remoteEntry.js` at `http://localhost:5002`. While it is not running, `/t/bcbp/dashboard` shows the remote boundary's error and the rest of the shell keeps working. The same holds for `mfe-tender` at `http://localhost:5003` and `/t/bcbp/tenders`.
+The dashboard is a second process. Start `mfe-dashboard` (`npm run dev` there) so it serves `remoteEntry.js` at `http://localhost:5002`. While it is not running, `/t/bcbp/dashboard` shows the remote boundary's error and the rest of the shell keeps working. The same holds for `mfe-tender` at `http://localhost:5003` and `/t/bcbp/tenders`, and for `mfe-drafting` at `http://localhost:5004` and `/t/bcbp/drafting`.
 
 ### Trying the flows locally
 
@@ -454,7 +454,7 @@ The SDK reads no environment variables in the browser. It loads `/config/runtime
 | `auth.trialRealm` · `paidRealmPrefix` · `workspacePathPrefix` | `trial` · `tenant-` · `/t/` | same |
 | `auth.idleTimeoutMs` | `1800000` | `1800000` |
 | `telemetry` | `/otel`, sample `0.1`, `info` | `/otel`, sample `1`, `debug` |
-| `remotes.allowedOrigins` | `[]` | `["http://localhost:5002", "http://localhost:5003"]` |
+| `remotes.allowedOrigins` | `[]` | `["http://localhost:5002", "http://localhost:5003", "http://localhost:5004"]` |
 | `i18n` | `en` | `en` |
 | `flags` | `{}` (platform flags; tenant flags come from P-35) | `{}` |
 

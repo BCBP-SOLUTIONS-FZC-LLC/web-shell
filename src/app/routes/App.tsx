@@ -20,6 +20,9 @@ export const DASHBOARD_REMOTE = 'dashboard'
 /** The remote that renders the tender workspace (mfe-tender), as named in /remotes/manifest.json. */
 export const TENDERS_REMOTE = 'tenders'
 
+/** The remote that renders drafting (mfe-drafting), as named in /remotes/manifest.json. */
+export const DRAFTING_REMOTE = 'drafting'
+
 /** The shell's own name in error logs and web-error metrics (the dashboard reports as `dashboard`). */
 export const SHELL_MFE = 'web-shell'
 
@@ -50,6 +53,17 @@ function Tenders() {
   useRouteTemplate('/t/:slug/tenders')
   const text = useShellText()
   return <RemoteBoundary remote={TENDERS_REMOTE} module="./App" fallback={<Loading>{text('app.loadingTenders')}</Loading>} />
+}
+
+/**
+ * The drafting remote (mfe-drafting), under /t/<slug>/drafting/*. react-router-dom is not shared, so it
+ * runs its own router under the same basename; it reads the user and sign-out from the SDK, so it gets
+ * no props either.
+ */
+function Drafting() {
+  useRouteTemplate('/t/:slug/drafting')
+  const text = useShellText()
+  return <RemoteBoundary remote={DRAFTING_REMOTE} module="./App" fallback={<Loading>{text('app.loadingDrafting')}</Loading>} />
 }
 
 /** The update notice, with the SDK's update state (presentation takes it as props). */
@@ -89,6 +103,7 @@ export default function App({
         <Routes>
           <Route path="/dashboard/*" element={<Dashboard />} />
           <Route path="/tenders/*" element={<Tenders />} />
+          <Route path="/drafting/*" element={<Drafting />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
       </BrowserRouter>
