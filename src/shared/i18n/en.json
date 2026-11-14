@@ -3,6 +3,7 @@
   "app.loadingDashboard": "Loading dashboard…",
   "app.loadingTenders": "Loading tenders…",
   "app.loadingDrafting": "Loading drafting…",
+  "app.loadingWorkflows": "Loading workflows…",
   "app.contextUnavailable": "We couldn't load your permissions, so some actions are hidden.",
   "app.updateAvailable": "A new version is available.",
   "app.error": "Something went wrong on this page.",

@@ -20,7 +20,7 @@ vi.mock('@bcbp-solutions-fzc-llc/frontend-sdk/react', async (original) => ({
   },
 }))
 
-const { default: App, DASHBOARD_REMOTE, TENDERS_REMOTE, DRAFTING_REMOTE } = await import('../../src/app/routes/App')
+const { default: App, DASHBOARD_REMOTE, TENDERS_REMOTE, DRAFTING_REMOTE, WORKFLOWS_REMOTE } = await import('../../src/app/routes/App')
 
 describe('App', () => {
   it('renders the dashboard remote under the workspace basename, with no props', () => {
@@ -58,6 +58,19 @@ describe('App', () => {
     expect(screen.getByTestId('fallback')).toHaveTextContent('Loading drafting…')
     expect(routeTemplate).toHaveBeenCalledWith('/t/:slug/drafting')
     expect(boundaryProps).toHaveBeenLastCalledWith(undefined)
+  })
+
+  it('renders the workflow studio under the workspace basename, with no props', () => {
+    window.history.replaceState({}, '', '/t/acme/workflows/wf-intake')
+    render(<App basename="/t/acme" />)
+    const remote = screen.getByTestId('remote')
+    expect(remote).toHaveAttribute('data-remote', WORKFLOWS_REMOTE)
+    expect(WORKFLOWS_REMOTE).toBe('workflows')
+    expect(remote).toHaveAttribute('data-module', './App')
+    expect(screen.getByTestId('fallback')).toHaveTextContent('Loading workflows…')
+    expect(routeTemplate).toHaveBeenCalledWith('/t/:slug/workflows')
+    expect(boundaryProps).toHaveBeenLastCalledWith(undefined)
+    expect(window.location.pathname).toBe('/t/acme/workflows/wf-intake')
   })
 
   it('redirects any other path to the dashboard', () => {
