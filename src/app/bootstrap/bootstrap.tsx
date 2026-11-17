@@ -16,14 +16,12 @@ import {
   setFlagProvider,
 } from '@bcbp-solutions-fzc-llc/frontend-sdk/flags'
 import {
-  chooseWorkspace,
   createOidcProvider,
   initializeAuth,
   isWrongWorkspace,
   rememberWorkspace,
   signInAgain,
   slugFromPath,
-  type Workspace,
 } from '@bcbp-solutions-fzc-llc/frontend-sdk/auth'
 import { setTokenSource } from '@bcbp-solutions-fzc-llc/frontend-sdk/http'
 import { roleMapAuthorizer, setAuthorizer, setAuthzSubject } from '@bcbp-solutions-fzc-llc/frontend-sdk/authz'
@@ -137,24 +135,20 @@ async function start(cfg: RuntimeConfig, report: { otlpBaseUrl: string }): Promi
 
   const idp = createOidcProvider(cfg.auth, workspaceResolver)
   setTokenSource(initializeAuth(idp))
+  // The shell's email page, then Keycloak. A cached workspace must not skip the page.
+  // returnUrl defaults to the current page in the SDK.
+  const signIn = async () => {
+    const choice = await askForWorkspace(signInUseCases)
+    await idp.login({ workspace: choice.workspace, ...(choice.loginHint ? { loginHint: choice.loginHint } : {}) })
+  }
   // May redirect once with prompt=none on a reload or a new tab, and then never settles.
   const session = await idp.init()
 
   if (session.status === 'anonymous') {
     // init() has already moved the URL off the callback path to the page the user opened.
-    const signIn = async () => {
-      // A failed silent attempt names its workspace; otherwise /t/<slug> → cached or resolved
-      // workspace, else the most recent cached one, else ask for the email.
-      const known: Workspace | undefined =
-        (session.reason === 'login-required' ? session.workspace : undefined) ??
-        (await chooseWorkspace({ pathname: window.location.pathname, resolver: workspaceResolver, cfg: cfg.auth }))
-      const choice = known ? { workspace: known, loginHint: signInUseCases.rememberedEmail.get() } : await askForWorkspace(signInUseCases)
-      // returnUrl defaults to the current page in the SDK.
-      await idp.login({ workspace: choice.workspace, ...(choice.loginHint ? { loginHint: choice.loginHint } : {}) })
-    }
-    // After a logout, wait for the user: an automatic login would ride the live SSO session.
-    if (session.reason === 'signed-out') showSignedOut(signIn)
-    else if (session.reason === 'device-clock') showDeviceClock(signIn)
+    // A clock refusal waits for a click; every other anonymous start is the email page.
+    // Neither calls Keycloak until the user submits that page, so a logout cannot ride the SSO session.
+    if (session.reason === 'device-clock') showDeviceClock(signIn)
     else await signIn()
     return
   }
@@ -189,7 +183,7 @@ async function start(cfg: RuntimeConfig, report: { otlpBaseUrl: string }): Promi
       signedOutDuringBoot.abort()
       app?.unmount()
       app = undefined
-      showSignedOut(() => idp.login({ workspace: s.workspace ?? session.workspace }))
+      showSignedOut(signIn)
     }
   })
 

@@ -16,9 +16,8 @@ After render: `registerNavigator` (router under the basename; other paths load i
 
 | Signed-out reason | Shell |
 |---|---|
-| `signed-out` | "You are signed out", waits for a click |
-| `device-clock` | "Check your device's clock", waits for a click |
-| `none`, `login-required` | Workspace: failed attempt's → `chooseWorkspace` (URL slug, cache) → email screen (PUB-1, no token). Then `idp.login({ workspace, loginHint? })` |
+| `device-clock` | "Check your device's clock", waits for a click, then the email screen |
+| `signed-out`, `none`, `login-required` | The email screen (PUB-1, no token). A cached workspace does not skip it. Then `idp.login({ workspace, loginHint })` |
 
 The SDK builds the authorize URL (`{idpOrigin}/realms/{realm}/protocol/openid-connect/auth`, S256, `state`, `nonce`, `login_hint`), adds `prompt=login` after a sign-out, and defaults `returnUrl` to the current page. The shell passes neither.
 

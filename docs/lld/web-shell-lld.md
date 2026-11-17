@@ -320,17 +320,12 @@ Keys are IAM's closed role set: `member`, `tenant_owner`, `tenant_admin`, `tende
 
 | `session.reason` | Action |
 |---|---|
-| `signed-out` | `showSignedOut(signIn)`: waits for a click. An automatic login would ride the live SSO session and undo the logout |
-| `device-clock` | `showDeviceClock(signIn)`: waits for a click |
-| `none`, `login-required` | `signIn()` now |
+| `device-clock` | `showDeviceClock(signIn)`: waits for a click, then the email page |
+| `signed-out`, `none`, `login-required` | `signIn()`: the email page. An automatic login would ride the live SSO session and undo a logout |
 
-`signIn()` picks the workspace in this order:
+`signIn()` is `askForWorkspace(signInUseCases)`, the email screen. PUB-1 resolves the email; "not found", 429 and unreachable all show "We could not find a workspace for that email." A cached workspace does not skip this page.
 
-1. The workspace a failed silent attempt named (`reason: 'login-required'`).
-2. `chooseWorkspace({ pathname, resolver, cfg })`: the `/t/<slug>` in the URL (cached or resolved through PUB-1), else the most recently cached workspace.
-3. `askForWorkspace(signInUseCases)`: the email screen. PUB-1 resolves the email; "not found", 429 and unreachable all show "We could not find a workspace for that email."
-
-Then `idp.login({ workspace, loginHint? })`. The hint is the typed email, or the remembered email for a known workspace. `returnUrl` defaults to the current page in the SDK, and after a sign-out the SDK adds `prompt=login` itself; the shell passes neither.
+Then `idp.login({ workspace, loginHint })`. The hint is the typed email. `returnUrl` defaults to the current page in the SDK, and after a sign-out the SDK adds `prompt=login` itself; the shell passes neither.
 
 ### 6.1a Forgot password
 

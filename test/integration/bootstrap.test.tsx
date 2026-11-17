@@ -352,17 +352,26 @@ describe('bootstrap, signed in', () => {
     await waitFor(() => expect(signInAgain).toHaveBeenCalledOnce())
   })
 
-  it('unmounts the app on sign-out and signs back in on click', async () => {
+  it('unmounts the app on sign-out and signs back in through the login page', async () => {
     await act(() => bootstrap())
     act(() => subscriber!({ status: 'anonymous', reason: 'signed-out' }))
     expect(screen.queryByRole('main')).not.toBeInTheDocument()
+    resolve.mockResolvedValue(acme)
     await userEvent.setup().click(screen.getByRole('button', { name: 'Sign in' }))
-    expect(idp.login).toHaveBeenCalledWith({ workspace: acme })
+    expect(idp.login).not.toHaveBeenCalled()
+    await typeEmail('ada@acme.com')
+    await waitFor(() =>
+      expect(idp.login).toHaveBeenCalledWith({ workspace: acme, loginHint: 'ada@acme.com' }),
+    )
 
     const other: Workspace = { realm: 'tenant-other', trial: false }
+    resolve.mockResolvedValue(other)
     act(() => subscriber!({ status: 'anonymous', reason: 'signed-out', workspace: other }))
     await userEvent.setup().click(screen.getByRole('button', { name: 'Sign in' }))
-    expect(idp.login).toHaveBeenLastCalledWith(expect.objectContaining({ workspace: other }))
+    await typeEmail('ada@other.com')
+    await waitFor(() =>
+      expect(idp.login).toHaveBeenLastCalledWith({ workspace: other, loginHint: 'ada@other.com' }),
+    )
   })
 
   it('ignores other session changes', async () => {
@@ -449,37 +458,52 @@ describe('bootstrap, signed out', () => {
     )
   })
 
-  it('goes straight to Keycloak for a known workspace, with the remembered email', async () => {
+  it('shows the login page even when a workspace is already cached', async () => {
     initResult = { status: 'anonymous', reason: 'none' }
     chooseWorkspace.mockResolvedValue(acme)
-    localStorage.setItem('bcbp.rememberEmail', 'true')
-    localStorage.setItem('bcbp.loginEmail', 'ada@acme.com')
-    await bootstrap()
-    expect(idp.login).toHaveBeenCalledWith({ workspace: acme, loginHint: 'ada@acme.com' })
+    resolve.mockResolvedValue(acme)
+    void bootstrap()
+    expect(idp.login).not.toHaveBeenCalled()
+    await typeEmail('ada@acme.com')
+    await waitFor(() =>
+      expect(idp.login).toHaveBeenCalledWith({ workspace: acme, loginHint: 'ada@acme.com' }),
+    )
   })
 
-  it('retries the workspace a failed silent sign-in named, without a hint', async () => {
+  it('shows the login page after a failed silent sign-in, instead of opening Keycloak', async () => {
     initResult = { status: 'anonymous', reason: 'login-required', workspace: acme }
     window.history.replaceState({}, '', '/t/acme/dashboard?x=1')
-    await bootstrap()
-    expect(chooseWorkspace).not.toHaveBeenCalled()
-    expect(idp.login).toHaveBeenCalledWith({ workspace: acme })
+    resolve.mockResolvedValue(acme)
+    void bootstrap()
+    expect(idp.login).not.toHaveBeenCalled()
+    await typeEmail('ada@acme.com')
+    await waitFor(() =>
+      expect(idp.login).toHaveBeenCalledWith({ workspace: acme, loginHint: 'ada@acme.com' }),
+    )
   })
 
-  it('waits for a click after a logout', async () => {
+  it('starts on the login page after a logout, and does not open Keycloak until the email is submitted', async () => {
     initResult = { status: 'anonymous', reason: 'signed-out' }
     chooseWorkspace.mockResolvedValue(acme)
-    await act(() => bootstrap())
+    resolve.mockResolvedValue(acme)
+    void bootstrap()
     expect(idp.login).not.toHaveBeenCalled()
-    await userEvent.setup().click(screen.getByRole('button', { name: 'Sign in' }))
-    await waitFor(() => expect(idp.login).toHaveBeenCalledOnce())
+    await typeEmail('ada@acme.com')
+    await waitFor(() =>
+      expect(idp.login).toHaveBeenCalledWith({ workspace: acme, loginHint: 'ada@acme.com' }),
+    )
   })
 
-  it('asks the user to fix the device clock', async () => {
+  it('asks the user to fix the device clock, then the login page', async () => {
     initResult = { status: 'anonymous', reason: 'device-clock' }
     chooseWorkspace.mockResolvedValue(acme)
+    resolve.mockResolvedValue(acme)
     await act(() => bootstrap())
+    expect(idp.login).not.toHaveBeenCalled()
     await userEvent.setup().click(screen.getByRole('button', { name: 'Try again' }))
-    await waitFor(() => expect(idp.login).toHaveBeenCalledOnce())
+    await typeEmail('ada@acme.com')
+    await waitFor(() =>
+      expect(idp.login).toHaveBeenCalledWith({ workspace: acme, loginHint: 'ada@acme.com' }),
+    )
   })
 })

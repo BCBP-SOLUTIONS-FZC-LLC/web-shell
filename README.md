@@ -63,8 +63,8 @@ After sign-in the SDK moves the URL under `/t/<slug>/` (`rememberWorkspace`), an
 
 1. `src/app/bootstrap/index.ts` imports `src/app/bootstrap/bootstrap.tsx` behind the async boundary Module Federation needs.
 2. The bootstrap loads `/config/runtime.json` and calls the SDK's `idp.init()`. A reload with a live Keycloak session is restored silently (`prompt=none`).
-3. Signed out with a known workspace (the `/t/<slug>` in the URL, or the SDK's workspace cache): straight to that realm's authorize endpoint, with the remembered email as `login_hint`.
-4. Otherwise the login page asks for the work email. `GET /api/v1/public/tenants/resolve?identifier=<email>` (PUB-1) returns the realm. "Not found" and "unreachable" show the same generic message.
+3. The shell login page asks for the work email. A cached workspace or a `/t/<slug>` in the URL does not skip this page. `GET /api/v1/public/tenants/resolve?identifier=<email>` (PUB-1) returns the realm. "Not found" and "unreachable" show the same generic message.
+4. Submitting the email redirects to that realm's authorize endpoint, with the email as `login_hint`.
 5. Keycloak redirects to `{origin}/auth/callback`. The SDK checks `state`, exchanges the code with the PKCE verifier, and keeps the tokens in memory.
 6. The bootstrap loads the session context (`GET /api/v1/me/session-context`, P-35), sets permissions and flags, caches the workspace, loads `/remotes/manifest.json`, and renders.
 

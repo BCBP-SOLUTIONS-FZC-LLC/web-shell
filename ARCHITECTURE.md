@@ -216,17 +216,13 @@ sequenceDiagram
     Boot->>SDK: createOidcProvider, initializeAuth, setTokenSource
     Boot->>SDK: idp.init()
     alt anonymous
-        alt signed-out
-            Boot->>Screens: showSignedOut (wait for a click)
-        else device-clock
+        alt device-clock
             Boot->>Screens: showDeviceClock (wait for a click)
-        else none or login-required
-            Boot->>SDK: workspace from the failed attempt, or chooseWorkspace
-            opt no known workspace
-                Boot->>Screens: askForWorkspace (email → PUB-1)
-            end
-            Boot->>SDK: idp.login(workspace, loginHint)
+        else signed-out, none, or login-required
+            Note over Boot,Screens: the email page; Keycloak waits for submit
         end
+        Boot->>Screens: askForWorkspace (email → PUB-1)
+        Boot->>SDK: idp.login(workspace, loginHint)
     else authenticated, wrong workspace
         Boot->>Screens: showWrongWorkspace (app never renders)
     else authenticated
@@ -308,13 +304,7 @@ sequenceDiagram
     end
 ```
 
-Which workspace a signed-out visit uses, in order:
-
-1. The workspace a failed silent attempt named (`reason: 'login-required'`).
-2. `chooseWorkspace`: the `/t/<slug>` in the URL (cached or resolved), otherwise the most recently cached workspace.
-3. The email screen (`askForWorkspace`). It resolves the email through PUB-1 and returns the workspace with the email as `loginHint`.
-
-A known workspace goes straight to Keycloak, with the remembered email as `login_hint` when there is one. After `reason: 'signed-out'` or `'device-clock'` the bootstrap shows a dialog and waits for a click: an automatic login after a logout would ride the live SSO session and undo it.
+A signed-out visit starts on the shell login page. The email screen (`askForWorkspace`) resolves the address through PUB-1 and returns the workspace with that email as `loginHint`. Keycloak opens only after the user submits the page. A device clock that is too far off shows its dialog first; Try again then opens the same login page. An automatic redirect to Keycloak would ride a live SSO session, so a logout never does that.
 
 PUB-1 → `Workspace`: strategy `shared` is the trial realm, with `tenant_id` as `tenantIdHint` and a slug only when the identifier was one. A dedicated realm's slug is the realm after `auth.paidRealmPrefix` (`tenant-`). The SDK refuses to cache a workspace whose slug and realm disagree, so a paid realm must be named `tenant-<slug>`; the local realm is `tenant-bcbp` for that reason.
 
@@ -414,50 +404,38 @@ sequenceDiagram
 
 Before sign-in the browser has no token and no realm. PUB-1 answers one question for it: which Keycloak realm the sign-in redirect goes to.
 
-- **Only when needed.** The bootstrap first asks the SDK's `chooseWorkspace`. A cached workspace (`localStorage` `…:workspaces`: the URL's `/t/<slug>/`, or with no slug the most recent) skips PUB-1 and the email screen; an uncached slug in the URL is resolved through PUB-1 without the email screen. A failed silent sign-in names its own workspace.
+- **The email page first.** Bootstrap shows the shell login page and resolves the typed email through PUB-1. A cached workspace (`localStorage` `…:workspaces`) or a `/t/<slug>/` in the URL does not skip that page. A reload with a cached workspace can still restore the session once via `prompt=none` (`idp.init()`) before the page is shown.
 - **No token.** `GET /api/v1/public/tenants/resolve?identifier=<email or slug>` with `auth: false`; PUB-1 is public and rate-limited per IP.
 - **Mapping (`toWorkspace`).** `strategy: "shared"` is the trial realm, and the slug is known only when the identifier was the slug. `tenant_id` becomes `tenantIdHint`. `"dedicated"` is a paid realm: the slug is the realm without `auth.paidRealmPrefix` (`tenant-`). `found: false`, or a missing realm, is no workspace.
 - **One message for every failure.** `resolveWorkspaceUseCase` turns not found, 429, unreachable and malformed alike into `WorkspaceNotFoundError`; the screen shows "We could not find a workspace for that email." It never says whether the email or the workspace was wrong.
-- **No shell cache, no retry loop.** One request per submit; the ApiClient's own retries apply to 429 and 502–504. An email resolved on the email screen is cached only after a successful sign-in (`rememberWorkspace`, with the slug from P-35). A slug from the URL that PUB-1 resolves is cached by `chooseWorkspace` at once, after the SDK checks that realm and slug match.
+- **No shell cache, no retry loop.** One request per submit; the ApiClient's own retries apply to 429 and 502–504. An email resolved on the email screen is cached only after a successful sign-in (`rememberWorkspace`, with the slug from P-35). The login page is shown even when that cache already has a workspace.
 
 > Source: [`docs/architecture/mermaid/pub1-resolution-flow.mmd`](docs/architecture/mermaid/pub1-resolution-flow.mmd)
 
 ```mermaid
 sequenceDiagram
     participant Boot as bootstrap.tsx
-    participant SDK as SDK /auth (chooseWorkspace)
-    participant Cache as localStorage workspaces (SDK)
+    participant SDK as frontend-sdk /auth
     participant Screen as Sign-in screen
     participant UC as resolveWorkspace (use case)
     participant Port as workspaceResolver (infrastructure/api/iam.ts)
     participant PUB as /api PUB-1
 
-    Boot->>SDK: chooseWorkspace(pathname, resolver)
-    alt URL has a workspace slug that is cached, or no slug and any workspace is cached
-        SDK->>Cache: the slug's workspace, or the most recent one
-        Cache-->>Boot: Workspace (no PUB-1 call)
-    else URL has a workspace slug that is not cached
-        SDK->>PUB: resolve(slug) through workspaceResolver
-        PUB-->>SDK: realm
-        SDK->>Cache: write it at once (realm and slug must match)
-        SDK-->>Boot: Workspace (or none: ask for the email)
-    else no slug and nothing cached
-        Boot->>Screen: askForWorkspace(signInUseCases)
-        loop until a workspace is found
-            Screen->>UC: resolveWorkspace(email)
-            UC->>Port: resolve(email)
-            Port->>PUB: GET /api/v1/public/tenants/resolve?identifier= (auth false, no token)
-            PUB-->>Port: 200 found, realm, strategy, tenant_id
-            Port->>Port: toWorkspace (shared is the trial realm, dedicated is realm minus paidRealmPrefix)
-            alt found
-                UC-->>Screen: Workspace
-            else not found, 429, unreachable, malformed
-                UC-->>Screen: WorkspaceNotFoundError
-                Screen->>Screen: "We could not find a workspace for that email." (the user can try again)
-            end
+    Boot->>Screen: askForWorkspace(signInUseCases)
+    loop until a workspace is found
+        Screen->>UC: resolveWorkspace(email)
+        UC->>Port: resolve(email)
+        Port->>PUB: GET /api/v1/public/tenants/resolve?identifier= (auth false, no token)
+        PUB-->>Port: 200 found, realm, strategy, tenant_id
+        Port->>Port: toWorkspace (shared is the trial realm, dedicated is realm minus paidRealmPrefix)
+        alt found
+            UC-->>Screen: Workspace
+        else not found, 429, unreachable, malformed
+            UC-->>Screen: WorkspaceNotFoundError
+            Screen->>Screen: "We could not find a workspace for that email." (the user can try again)
         end
-        Screen-->>Boot: Workspace and the email (onChosen)
     end
+    Screen-->>Boot: Workspace and the email (onChosen)
     Boot->>SDK: idp.login(workspace, loginHint)
     Note over SDK: after sign-in rememberWorkspace caches it with the slug from P-35
 ```
@@ -522,7 +500,7 @@ Tokens are never written to storage. A reload restores the session from Keycloak
 
 | Key | Store | Written by | Purpose |
 |---|---|---|---|
-| `@bcbp-solutions-fzc-llc/frontend-sdk:workspaces` | `localStorage` | SDK, `rememberWorkspace` | Cached workspaces (realm, slug), so a return visit skips the email screen |
+| `@bcbp-solutions-fzc-llc/frontend-sdk:workspaces` | `localStorage` | SDK, `rememberWorkspace` | Cached workspaces (realm, slug). A return visit still starts on the login page |
 | `@bcbp-solutions-fzc-llc/frontend-sdk:session-id`, `:auth:last-activity`, `:auth:last-user` | `localStorage` | SDK | Telemetry session id, idle timeout across tabs, user change detection |
 | `bcbp.rememberEmail`, `bcbp.loginEmail` | `localStorage` | `infrastructure/storage/rememberedEmail.ts` (behind the domain's `RememberedEmailRepository`) | "Remember Email" only. Needed before a workspace is known, so it does not use the SDK's per-workspace `storage()`. Every access is wrapped in `try`; blocked storage just forgets |
 
@@ -610,7 +588,7 @@ flowchart TD
         h3["/api, /otel, /csp-report: never served by the image (404); routed to their services"]
     end
     subgraph browser["In the browser"]
-        b1["SDK workspace cache: localStorage @bcbp-solutions-fzc-llc/frontend-sdk:workspaces\nrealm + slug, up to 20; skips the email screen on return\nwritten by chooseWorkspace (URL slug) and rememberWorkspace (after sign-in)"]
+        b1["SDK workspace cache: localStorage @bcbp-solutions-fzc-llc/frontend-sdk:workspaces\nrealm + slug, up to 20; the login page is still shown on return\nwritten by rememberWorkspace after sign-in"]
         b2["Remembered email: localStorage bcbp.rememberEmail / bcbp.loginEmail\nonly when the box is checked"]
         b3["Session context (P-35): in memory only (createStore), per page load\nreplaced live when the background retry succeeds"]
         b4["Tokens: SDK memory only, never storage; reload restores from Keycloak SSO (prompt=none)"]

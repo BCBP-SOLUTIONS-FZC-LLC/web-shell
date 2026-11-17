@@ -16,17 +16,13 @@ sequenceDiagram
     Boot->>SDK: createOidcProvider, initializeAuth, setTokenSource
     Boot->>SDK: idp.init()
     alt anonymous
-        alt signed-out
-            Boot->>Screens: showSignedOut (wait for a click)
-        else device-clock
+        alt device-clock
             Boot->>Screens: showDeviceClock (wait for a click)
-        else none or login-required
-            Boot->>SDK: workspace from the failed attempt, or chooseWorkspace
-            opt no known workspace
-                Boot->>Screens: askForWorkspace (email → PUB-1)
-            end
-            Boot->>SDK: idp.login(workspace, loginHint)
+        else signed-out, none, or login-required
+            Note over Boot,Screens: the email page; Keycloak waits for submit
         end
+        Boot->>Screens: askForWorkspace (email → PUB-1)
+        Boot->>SDK: idp.login(workspace, loginHint)
     else authenticated, wrong workspace
         Boot->>Screens: showWrongWorkspace (app never renders)
     else authenticated

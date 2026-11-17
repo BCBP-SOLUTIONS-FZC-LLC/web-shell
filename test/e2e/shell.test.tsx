@@ -151,11 +151,16 @@ const bearerOf = (r: Request) => r.headers.get('authorization')
 const storedValues = () =>
   [localStorage, sessionStorage].flatMap((s) => Object.keys(s).map((k) => `${k}=${s.getItem(k)}`)).join('\n')
 
+/** The shell login page, then the redirect to Keycloak. A cached workspace does not skip this page. */
+async function submitWorkEmail(): Promise<void> {
+  await userEvent.type(await emailBox(), EMAIL)
+  await userEvent.click(continueButton())
+}
+
 /** Signs in through the email screen and waits for the dashboard. */
 async function signInByEmail(): Promise<void> {
   await load('/')
-  await userEvent.type(await emailBox(), EMAIL)
-  await userEvent.click(continueButton())
+  await submitWorkEmail()
   await until(() => assigned.length > 0, 'the redirect to Keycloak')
   await approveLogin()
   await screen.findByRole('heading', { name: /Dashboard for Ada Lovelace/ }, { timeout: 5_000 })
@@ -265,11 +270,12 @@ describe('the shell, end to end', () => {
     expect(storedValues()).not.toMatch(/at-[0-9a-f]|eyJ|refresh/)
   })
 
-  it('a deep link to /t/<slug>/ skips the email screen and returns to the page after sign-in', async () => {
+  it('a deep link to /t/<slug>/ starts on the login page and returns to the page after sign-in', async () => {
     await load('/t/acme/dashboard')
+    expect(assigned).toEqual([])
+    await submitWorkEmail()
     await until(() => assigned.length > 0, 'the redirect to Keycloak')
-    expect(screen.queryByRole('textbox', { name: /work email address/i })).toBeNull()
-    expect(new URL(net.sent('/api/v1/public/tenants/resolve')[0]!.url).searchParams.get('identifier')).toBe('acme')
+    expect(new URL(net.sent('/api/v1/public/tenants/resolve')[0]!.url).searchParams.get('identifier')).toBe(EMAIL)
 
     await approveLogin()
     await screen.findByRole('heading', { name: /Dashboard for Ada Lovelace/ }, { timeout: 5_000 })
@@ -278,6 +284,7 @@ describe('the shell, end to end', () => {
 
   it('a deep link to /t/<slug>/tenders/… loads only the tenders remote, there, after sign-in', async () => {
     await load('/t/acme/tenders/T-1/documents')
+    await submitWorkEmail()
     await until(() => assigned.length > 0, 'the redirect to Keycloak')
     await approveLogin()
     await screen.findByRole('heading', { name: 'Tenders for Ada Lovelace in acme' }, { timeout: 5_000 })
@@ -292,25 +299,27 @@ describe('the shell, end to end', () => {
     expect(screen.getByRole('button', { name: 'Invite' })).toBeInTheDocument()
 
     roles = ['member']
+    // A reload of a known workspace restores through Keycloak (prompt=none), not the email page.
     await load('/t/acme/dashboard')
     await until(() => assigned.length > 0, 'the silent re-sign-in redirect')
     await approveLogin()
     await screen.findByRole('heading', { name: /Dashboard for Ada Lovelace/ }, { timeout: 5_000 })
     expect(screen.getByRole('link', { name: 'User management' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Invite' })).toBeNull()
-  })
+  }, 10_000)
 
   it('renders with deny-all permissions when the session context is unavailable, and says so', async () => {
     // A final answer (IAM's endpoint missing in this environment): no retry.
     net.on('GET /api/v1/me/session-context', () => mockProblem(PlatformProblemTypes.NotFound))
     await load('/t/acme/dashboard')
+    await submitWorkEmail()
     await until(() => assigned.length > 0, 'the redirect to Keycloak')
     await approveLogin()
     await screen.findByRole('heading', { name: /Dashboard for Ada Lovelace/ }, { timeout: 5_000 })
     expect(screen.queryByRole('link', { name: 'User management' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Invite' })).toBeNull()
     expect(screen.getByRole('status')).toHaveTextContent("We couldn't load your permissions")
-  })
+  }, 10_000)
 
   it('a session context outage (503) is retried in the background, and the permissions appear when IAM is back', async () => {
     let iamDown = true
@@ -322,6 +331,7 @@ describe('the shell, end to end', () => {
           : mockProblem(PlatformProblemTypes.Unauthorized),
     )
     await load('/t/acme/dashboard')
+    await submitWorkEmail()
     await until(() => assigned.length > 0, 'the redirect to Keycloak')
     await approveLogin()
     await screen.findByRole('heading', { name: /Dashboard for Ada Lovelace/ }, { timeout: 5_000 })
@@ -341,6 +351,7 @@ describe('the shell, end to end', () => {
       throw new Error('the remote deploy is broken')
     }
     await load('/t/acme/dashboard')
+    await submitWorkEmail()
     await until(() => assigned.length > 0, 'the redirect to Keycloak')
     await approveLogin()
     const alert = await screen.findByRole('alert', {}, { timeout: 5_000 })
@@ -379,11 +390,11 @@ describe('the shell, end to end', () => {
     expect(fields.id_token_hint).toBeTruthy()
     expect(fields.post_logout_redirect_uri).toBe(`${ORIGIN}/`)
     await load(new URL(fields.post_logout_redirect_uri!).pathname)
-    await screen.findByRole('heading', { name: 'You are signed out' }, { timeout: 5_000 })
+    await emailBox()
     expect(assigned).toEqual([]) // no silent sign-in on the live SSO session
 
-    // Signing in again asks for credentials (a shared device).
-    await userEvent.click(screen.getByRole('button', { name: 'Sign in' }))
+    // Signing in again starts on the shell login page, then Keycloak asks for credentials (prompt=login).
+    await submitWorkEmail()
     await until(() => assigned.length > 0, 'the redirect to Keycloak')
     const again = new URL(assigned[0]!)
     expect(again.pathname).toBe('/realms/tenant-acme/protocol/openid-connect/auth')
@@ -393,6 +404,7 @@ describe('the shell, end to end', () => {
   it("a device clock 20 minutes off: the shell asks to check the clock and doesn't retry on its own", async () => {
     kc.now = () => Date.now() - 20 * 60_000
     await load('/t/acme/dashboard')
+    await submitWorkEmail()
     await until(() => assigned.length > 0, 'the redirect to Keycloak')
     await approveLogin()
     await screen.findByRole('alertdialog', { name: "Check your device's clock" }, { timeout: 5_000 })
@@ -402,6 +414,7 @@ describe('the shell, end to end', () => {
   it("takes the page's environment from the deployed runtime.json (one build, SDK alpha.6), not the build", async () => {
     net.on('GET /config/runtime.json', { ...RUNTIME_CONFIG, environment: 'dev' })
     await load('/t/acme/dashboard')
+    await submitWorkEmail()
     await until(() => assigned.length > 0, 'the redirect to Keycloak')
     const { getIdentity } = await import('@bcbp-solutions-fzc-llc/frontend-sdk/core')
     expect(getIdentity()).toMatchObject({ serviceName: 'web-shell', domain: 'portal', environment: 'dev' })
