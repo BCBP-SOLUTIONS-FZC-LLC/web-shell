@@ -187,7 +187,7 @@ graph LR
 | `shared/i18n` | SDK `/i18n` (`t`, `formatDate`) and `/react` (`useT`), no shell layer: `en.json`, `catalogues.ts`, `useShellText`, `shellText`, `shellDate`, `ShellKey`. Text lookup and date formatting only: presentation reaches the SDK's i18n runtime through it and nothing else |
 | `shared/constants` | `shared/i18n` (link labels are keys) |
 | `shared/ui`, `shared/types` | Nothing (assets, styles, ambient types) |
-| `app/layouts/` | `screen.tsx`: `react-dom/client`. `sessionScreens.tsx`: the session-screen components, the screen host, `application/` and SDK `/auth` types |
+| `app/layouts/` | `screen.tsx`: `react-dom/client`. `sessionScreens.tsx`: the session-screen components, the screen host, `shared/i18n` types (`ShellKey`), `application/` and SDK `/auth` types |
 | `app/providers/ShellRoot.tsx` | React, SDK `/react`, the session-context store (`application/`) |
 | `app/routes/App.tsx` | `react-router-dom`, `shared/i18n`, the widgets, SDK `/react` (`RemoteBoundary`, `MFEErrorBoundary`, `useRouteTemplate`, `useSessionContext`, `useAppUpdate`, `useReadOnly`). It hands the router's `navigate` to the bootstrap through `onRouter` instead of importing `/nav`. The `notices` prop is the bootstrap's store of banners and the read-only date |
 | `app/bootstrap/bootstrap.tsx` | Every layer except presentation and `shared/constants`, which it reaches through `layouts`, `providers` and `routes` (the composition root; the only module that imports `infrastructure/`: builds the use cases from infrastructure), every SDK subpath it initialises, `shared/ui/index.css` |
@@ -250,7 +250,8 @@ sequenceDiagram
             Boot->>SDK: initializeI18n (detect: P-35 locale), loadManifest, startVersionPolling
             Boot->>Browser: render App inside ShellRoot (PlatformProvider), registerNavigator
             Boot->>IAM: once the context is known, in the background: GET /v1/tenants/:id (P-1), and /seat-usage (P-27) for owners and admins
-            Boot->>Browser: banners and the read-only grace date into App; A5 welcome once after a recent upgrade
+            Boot->>Browser: banners and the read-only grace date into App
+            Boot->>Screens: showUpgradeWelcome (A5) once after a recent upgrade, never after expiry or over another screen
             opt no session context
                 Boot->>IAM: retry after 1 s, 2 s, 4 s (online network error, timeout, 429, 502-504)
                 Boot->>SDK: subject, flags, rememberWorkspace, and the provider updates live

@@ -14,7 +14,7 @@
 
 | Date | Change |
 |---|---|
-| 2026-11-24 | Workspace banners, the read-only grace date and A5 from IAM P-1 and P-27 (`workspaceBanners`, `loadWorkspaceStatus`, `WorkspaceBanners`, `UpgradeWelcomeDialog`): §2, §3, §4.2a, §5 steps 17a and 18, §6.6b, §6.6c, §7, §9.3, §10.3, §11, §12, §15 #20 |
+| 2026-11-24 | Workspace banners, the read-only grace date and A5 from IAM P-1 and P-27 (`workspaceBanners`, `loadWorkspaceStatus`, `WorkspaceBanners`, `UpgradeWelcomeDialog`): §1.1, §1.2, §2, §3, §4.2a, §5 steps 17a and 18, §6.6b, §6.6c, §7, §9.3, §10.3, §11, §12, §15 #20 |
 | 2026-11-24 | A6/A8 from P-35's refusal codes (`workspaceBlock`, `blockedWorkspace`, `settleRefusal`, `WorkspaceUnavailableDialog`): §2, §3, §4.2, §5, §7, §7.1, §8, §12, §15 #19 |
 | 2026-11-24 | Read-only notice from `useReadOnly()` (IAM spec §7.10): §2, §3, §6.6b, §12 |
 | 2026-11-24 | IAM screen UI permissions in the role map (§4.3); sign-in takes an email, workspace name or pasted URL (`toIdentifier`), remember-email never stores a URL (§1, §2, §3, §6.1, §8, §9, §12) |

@@ -51,11 +51,11 @@ src/
     bootstrap/index.ts   ← Async boundary (Rsbuild's entry); "unavailable" message on a fatal start-up error
     bootstrap/bootstrap.tsx ← Composition root: SDK start-up sequence, session handling, wiring, render
     providers/ShellRoot.tsx ← PlatformProvider with the live session context
-    routes/App.tsx       ← Signed-in routes, dashboard RemoteBoundary, widgets with the SDK's state
+    routes/App.tsx       ← Signed-in routes, dashboard and tenders RemoteBoundary, widgets with the SDK's state and the bootstrap's notices
     layouts/             ← screen.tsx (full-screen host), sessionScreens.tsx (mounts the session screens)
   presentation/
     pages/login/         ← LoginPage, useEmailSignIn (the remembered-email repository is passed in)
-    features/session-screens/ ← Sign-in, signed out, session ended, device clock, wrong workspace, workspace not found, workspace unavailable (A6/A8) (components)
+    features/session-screens/ ← Sign-in, signed out, session ended, device clock, wrong workspace, workspace not found, workspace unavailable (A6/A8), workspace upgraded (A5) (components)
     components/          ← BrandLogo, PageLinks
     widgets/             ← Update notice, workspace banners, read-only notice, missing-permissions notice (state passed in, or mounted only while it holds)
   application/           ← Use cases (no React, no browser APIs): resolveWorkspace, requestPasswordReset, loadSessionContext, loadWorkspaceStatus; signIn.ts

@@ -119,7 +119,7 @@ export default tseslint.config(
       'no-restricted-imports': 'off',
       '@typescript-eslint/no-restricted-imports': ['error', { patterns: [
         { group: LAYERS.filter((l) => l !== '**/shared/**'), message: 'shared/ depends on no shell layer.' },
-        { regex: '^@bcbp-solutions-fzc-llc/frontend-sdk(?!/(i18n|react)$)(/.*)?$', message: 'shared/ uses the SDK only for text (/i18n, /react).' },
+        { regex: '^@bcbp-solutions-fzc-llc/frontend-sdk(?!/(i18n|react)$)(/.*)?$', message: 'shared/ uses the SDK only for text and dates (/i18n, /react).' },
       ] }],
       'no-restricted-globals': ['error', ...PRESENTATION_GLOBALS.map((name) => ({ name, message: 'shared/ does not reach the network, storage or navigation.' }))],
     },

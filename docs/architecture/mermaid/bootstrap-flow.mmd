@@ -42,7 +42,8 @@ sequenceDiagram
             Boot->>SDK: initializeI18n (detect: P-35 locale), loadManifest, startVersionPolling
             Boot->>Browser: render App inside ShellRoot (PlatformProvider), registerNavigator
             Boot->>IAM: once the context is known, in the background: GET /v1/tenants/:id (P-1), and /seat-usage (P-27) for owners and admins
-            Boot->>Browser: banners and the read-only grace date into App; A5 welcome once after a recent upgrade
+            Boot->>Browser: banners and the read-only grace date into App
+            Boot->>Screens: showUpgradeWelcome (A5) once after a recent upgrade, never after expiry or over another screen
             opt no session context
                 Boot->>IAM: retry after 1 s, 2 s, 4 s (online network error, timeout, 429, 502-504)
                 Boot->>SDK: subject, flags, rememberWorkspace, and the provider updates live

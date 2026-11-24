@@ -146,7 +146,7 @@ web-shell/
 │   ├── presentation/            # pages/login, features/session-screens, components, widgets
 │   ├── application/             # Use cases: resolve workspace, password reset, session context retry and refusal mapping, workspace status
 │   ├── domain/                  # Contracts, errors, the role map, the identifier, workspace-access and banner rules
-│   ├── infrastructure/          # api (PUB-1, P-35, P-1, P-27), auth (password reset), storage (remember email), federation (navigator), i18n
+│   ├── infrastructure/          # api (PUB-1, P-35, P-1, P-27), auth (password reset), storage (remember email, the A5 seen flag), federation (navigator), i18n
 │   └── shared/                  # i18n (the shell's text), constants (links), ui (images, theme, CSS), types
 ├── .dependency-cruiser.cjs      # Architecture lint: components and their allowed dependencies
 ├── rsbuild.config.ts           # Platform plugin, React, Tailwind, dev server
