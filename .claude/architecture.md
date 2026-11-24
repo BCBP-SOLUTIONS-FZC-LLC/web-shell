@@ -19,7 +19,7 @@ Condensed from [ARCHITECTURE.md](../ARCHITECTURE.md) and the [LLD](../docs/lld/w
 | `src/presentation/components/` | `BrandLogo`, `PageLinks` (help/legal links shown only with a URL, Forgot password button) |
 | `src/presentation/widgets/` | `UpdateAvailable`, `ContextUnavailable` (state and reload passed in as props), `AppError` (the shell's error page: catalogue words, reference, Try again) |
 | `src/application/` | `signIn.ts` (`SignInUseCases`), `use-cases/resolveWorkspace.ts`, `use-cases/requestPasswordReset.ts` (ports injected), `use-cases/loadSessionContext.ts` (`isTransient`, `retrySessionContext` 1 s, 2 s, 4 s, abortable; `createStore`) |
-| `src/domain/` | `repositories/rememberedEmail.ts` (contract), `errors.ts` (`WorkspaceNotFoundError`), `rules/permissions.ts` (`IAM_ROLES`, `permissions`: role → `action:resource`) |
+| `src/domain/` | `repositories/rememberedEmail.ts` (contract), `errors.ts` (`WorkspaceNotFoundError`), `rules/permissions.ts` (`IAM_ROLES`, `permissions`: role → `action:resource`), `rules/identifier.ts` (what the sign-in box accepts and may remember) |
 | `src/infrastructure/api/iam.ts` | `toWorkspace` (PUB-1), `toSessionContext` (P-35), `workspaceResolver`, `sessionContextSource`, `loadSessionContextOnce` over a lazy `createApiClient()` |
 | `src/infrastructure/auth/passwordReset.ts` | `passwordResetUrl(workspace)`: Keycloak `login-actions/reset-credentials` from `getConfig().auth` |
 | `src/infrastructure/storage/rememberedEmail.ts` | `localStorageRememberedEmail` (the one raw-storage file) |

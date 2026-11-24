@@ -14,6 +14,7 @@
 
 | Date | Change |
 |---|---|
+| 2026-11-24 | IAM screen UI permissions in the role map (§4.3); sign-in takes an email, workspace name or pasted URL (`toIdentifier`), remember-email never stores a URL (§1, §2, §3, §6.1, §8, §9, §12) |
 | 2026-11-11 | Released `v0.4.0` (#68): remote `tenders` added, dashboard contract as `v0.3.0`. Status, pairs and open items updated |
 | 2026-11-11 | Route `/tenders/*` for remote `tenders` (mfe-tender): §2, §4, §6, §11, §12, §13 and §15 #18 |
 | 2026-11-11 | §15 #6 closed: IAM confirmed PUB-1 and P-35 behind `/api` in dev, staging and prod (reply of 2026-11-10), and IAM added `Cache-Control: no-store` to P-35's 200 |
@@ -76,6 +77,7 @@ This LLD is the contract for the shell: what it owns, what the SDK owns for it, 
 | `platform-reactcommon` `docs/lld/platform-reactcommon-lld.md` | §5.4 behaviour of `ApiClient`, `IdentityProvider`, `loadRemote`, boundaries; §6.2 initialisation order; §12.1 `runtime.json` schema; §12.3 reserved storage keys |
 | `platform-reactcommon` `examples/shell` | The reference shell. `src/infrastructure/api/iam.ts` and the bootstrap follow it; differences are listed in §2.3 |
 | `iam-org-membership` LLD rev 2.47 | PUB-1 `GET /api/v1/public/tenants/resolve`, P-35 `GET /api/v1/me/session-context`, the closed role set (§5.4) and member-management grants (§10.4) |
+| IAM product and screen spec v0.1 (2026-11-19) | The IAM screens' UI permissions (§2.2, §4.3) and the identifier-first sign-in (§6 A2) |
 
 ### 1.2 Rule: no copies of SDK behaviour
 
@@ -108,8 +110,8 @@ Removed as duplicates of the SDK (2026-11-05): `platform/consent.ts` (the runtim
 | The SDK start-up sequence and session handling | `src/app/bootstrap/bootstrap.tsx` |
 | Signed-in routes and the `dashboard` and `tenders` `RemoteBoundary`s | `src/app/routes/App.tsx` |
 | IAM ports: PUB-1 → `Workspace`, P-35 → `SessionContext` | `src/infrastructure/api/iam.ts` |
-| Session screens: email sign-in, signed out, session ended, device clock, wrong workspace, workspace not found | `src/presentation/features/session-screens/` (components), `src/app/layouts/sessionScreens.tsx` (mounting), `src/app/layouts/screen.tsx` (host) |
-| Login page, email form, remember-email, help and legal links | `src/presentation/pages/login/`, `src/presentation/components/PageLinks.tsx`, `src/shared/constants/links.ts` |
+| Session screens: sign-in, signed out, session ended, device clock, wrong workspace, workspace not found | `src/presentation/features/session-screens/` (components), `src/app/layouts/sessionScreens.tsx` (mounting), `src/app/layouts/screen.tsx` (host) |
+| Login page, identifier form (email, workspace name or URL), remember-email, help and legal links | `src/presentation/pages/login/`, `src/presentation/components/PageLinks.tsx`, `src/shared/constants/links.ts` |
 | Password reset hand-off to Keycloak | `src/infrastructure/auth/passwordReset.ts` |
 | Update and missing-permissions notices | `src/presentation/widgets/`, mounted by `src/app/routes/App.tsx` with `useAppUpdate`, `useSessionContext` |
 | The shell's text: the `shell` namespace of the SDK's `/i18n`, English catalogue, registration before any screen | `src/shared/i18n/` (`en.json`, `catalogues.ts`, `useShellText`, `shellText`), `src/infrastructure/i18n/shellMessages.ts` |
@@ -136,8 +138,8 @@ Removed as duplicates of the SDK (2026-11-05): `platform/consent.ts` (the runtim
 
 | Reference shell (`examples/shell`) | This shell | Why |
 |---|---|---|
-| Slug-or-email identifier form | Email-only form on the login page (`LoginPage`) | Product layout; the email doubles as `login_hint` |
-| Example role map | `IAM_ROLES` closed set with §10.4 grants (§4.3) | IAM's roles |
+| Slug-or-email identifier form | The login page (`LoginPage`) takes an email, a workspace name or a pasted workspace URL (IAM spec §6 A2) | Product layout; only an email becomes `login_hint` |
+| Example role map | `IAM_ROLES` closed set with §10.4 and IAM screen spec §4.3 grants (§4.3) | IAM's roles |
 | No remember-email | `bcbp.rememberEmail`, `bcbp.loginEmail` in `localStorage` | Needed before a workspace exists, when the SDK's `storage()` ignores writes |
 | Text written in the components | Every word a key of the `shell` namespace; `registerShellMessages` loads it with `setLocale(defaultLocale)` before the first screen, then `initializeI18n` after sign-in as in the reference | The sign-in screens show before `initializeI18n`; the SDK's `t` gives back the key until a catalogue is loaded |
 | Webpack | Rsbuild 2 with `pluginPlatform({ role: 'shell' })` | Same Module Federation v1 protocol; remotes built with any of the three load |
@@ -166,7 +168,8 @@ src/
   application/                  signIn.ts (SignInUseCases); use-cases/ resolveWorkspace, requestPasswordReset,
                                 loadSessionContext (isTransient, retrySessionContext, createStore)
   domain/                       repositories/rememberedEmail.ts (contract), errors.ts (WorkspaceNotFoundError),
-                                rules/permissions.ts (IAM_ROLES, permissions: role → action:resource)
+                                rules/permissions.ts (IAM_ROLES, permissions: role → action:resource),
+                                 rules/identifier.ts (toIdentifier, isEmailIdentifier, isRememberableIdentifier)
   infrastructure/
     api/iam.ts                  toWorkspace, toSessionContext, workspaceResolver, sessionContextSource,
                                 loadSessionContextOnce
@@ -254,11 +257,13 @@ Keys are IAM's closed role set: `member`, `tenant_owner`, `tenant_admin`, `tende
 | Role | Grants |
 |---|---|
 | `member` | `read:tender`, `read:members` |
-| `tender_admin` | member + `update:tender`, `delete:tender` |
-| `tenant_admin` | tender_admin + `manage:members` |
-| `tenant_owner` | same as `tenant_admin` (the signup owner usually holds `tenant_owner` without `tenant_admin`) |
+| `tender_admin` | member + `update:tender`, `delete:tender`, `manage:tender-access` |
+| `tenant_admin` | tender_admin + `manage:members`, `manage:sso`, `manage:delegation-policy`, `read:audit` |
+| `tenant_owner` | tenant_admin + `manage:admin-roles`, `manage:tenant-settings` (the signup owner usually holds `tenant_owner` without `tenant_admin`) |
 
 `setAuthorizer(roleMapAuthorizer(permissions))`; the subject is `{ roles, tenantId }` from P-35, or none (deny all). These are UI hints; the gateway and services authorise every request. Tender grants are provisional until Tender Service confirms them.
+
+The IAM grants follow the IAM screen spec v0.1 §2.2 and §4.3. Two differences from §4.3: granting or removing `tenant_owner` / `tenant_admin` is `manage:admin-roles`, because the spec's `manage:roles:admin` has two colons and the SDK's `roleMapAuthorizer` throws on it; and it is owner only, following the HLD (§6.4) until IAM-FE-Q14 is answered. `manage:sso` also needs the plan's feature flag, which the screens check.
 
 ### 4.4 Shell value (`PlatformProvider shell`)
 
@@ -328,13 +333,13 @@ Keys are IAM's closed role set: `member`, `tenant_owner`, `tenant_admin`, `tende
 
 1. The workspace a failed silent attempt named (`reason: 'login-required'`).
 2. `chooseWorkspace({ pathname, resolver, cfg })`: the `/t/<slug>` in the URL (cached or resolved through PUB-1), else the most recently cached workspace.
-3. `askForWorkspace(signInUseCases)`: the email screen. PUB-1 resolves the email; "not found", 429 and unreachable all show "We could not find a workspace for that email."
+3. `askForWorkspace(signInUseCases)`: the sign-in screen. It takes a work email, a workspace name or a pasted workspace URL (`toIdentifier`, `domain/rules/identifier.ts`): an email is sent as typed (trimmed), a name lower-cased, a URL as the slug the SDK's `slugFromPath` reads from its path. Up to 254 characters (`maxLength` and the use case). PUB-1 resolves it; "not found", 429, unreachable and an identifier that names no workspace (a URL without `/t/<slug>`) all show "We couldn't find a workspace for that. Try your workspace name — it's the part after /t/ in your workspace link — or ask your administrator."
 
-Then `idp.login({ workspace, loginHint? })`. The hint is the typed email, or the remembered email for a known workspace. `returnUrl` defaults to the current page in the SDK, and after a sign-out the SDK adds `prompt=login` itself; the shell passes neither.
+Then `idp.login({ workspace, loginHint? })`. The hint is the typed email, or the remembered value for a known workspace, and only when it is an email (`isEmailIdentifier`): a workspace name is never a `login_hint`. `returnUrl` defaults to the current page in the SDK, and after a sign-out the SDK adds `prompt=login` itself; the shell passes neither.
 
 ### 6.1a Forgot password
 
-"Forgot your password?" needs the typed email (an empty field shows "Enter your work email first…"). PUB-1 resolves it (failures show `WORKSPACE_NOT_FOUND`), then `location.assign(passwordResetUrl(workspace))`: `{auth.idpOrigin}/realms/{realm}/login-actions/reset-credentials?client_id={auth.clientId}`. Keycloak e-mails the reset link; the realm must have `resetPasswordAllowed`. No sign-in is started.
+"Forgot your password?" needs the typed email or workspace name; a pasted URL works too (an empty field shows "Enter your work email or workspace name first…"). PUB-1 resolves it through `toIdentifier` (failures show `WORKSPACE_NOT_FOUND`), then `location.assign(passwordResetUrl(workspace))`: `{auth.idpOrigin}/realms/{realm}/login-actions/reset-credentials?client_id={auth.clientId}`. Keycloak e-mails the reset link; the realm must have `resetPasswordAllowed`. No sign-in is started.
 
 ### 6.2 Callback
 
@@ -346,7 +351,7 @@ A reload or a new tab: `idp.init()` may redirect once with `prompt=none`. A live
 
 ### 6.4 Expiry during use
 
-`expired` → `showSessionEnded(s, …)` over the running app, text by cause (`serverEnded`: the workspace may have moved to its own plan; `idle`; other). "Sign in" calls `signInAgain({ idp, state, resolver, cfg, ask })`, which re-resolves the workspace when the server ended the session and reuses the cache otherwise; `ask` is the email screen.
+`expired` → `showSessionEnded(s, …)` over the running app, text by cause (`serverEnded`: the workspace may have moved to its own plan; `idle`; other). "Sign in" calls `signInAgain({ idp, state, resolver, cfg, ask })`, which re-resolves the workspace when the server ended the session and reuses the cache otherwise; `ask` is the sign-in screen.
 
 ### 6.5 Sign-out
 
@@ -400,7 +405,7 @@ Here (a remote's `useSignOut()`) or in another tab (`BroadcastChannel('platform-
 | CSP | Bundle is `script-src 'self'` and Trusted Types safe; fonts and styles are same-origin (`font-src 'self'`, `style-src 'self'`); headers come from CloudFront; without CloudFront, from a mounted `/etc/nginx/security.d/csp.conf` | Preset output, `inlineScripts: false`, self-hosted fonts; smoke `live` mode checks headers; the smoke job checks the image sends none by default and the mounted file adds it |
 | Sign-out POST | CSP `form-action 'self' <idpOrigin>`: the SDK's global sign-out is a form POST to Keycloak | CloudFront; smoke `live` mode checks `form-action` contains the runtime config's `auth.idpOrigin` |
 | Outbound links | Help and legal links open in a new tab with `rel="noopener noreferrer"`; unset links are not rendered | `PageLinks.tsx` |
-| Generic errors | The email screen never says which input failed | `WORKSPACE_NOT_FOUND` |
+| Generic errors | The sign-in screen never says which input failed (email, workspace name or URL) | `WORKSPACE_NOT_FOUND` |
 | Image | uid 101, digest-pinned bases, registry token as BuildKit secret, no source maps | `Dockerfile`; smoke checks `.map` |
 
 The full STRIDE table is in [ARCHITECTURE.md § Threat model](../../ARCHITECTURE.md#threat-model).
@@ -435,7 +440,7 @@ Validated strictly by the SDK (unknown keys rejected). Schema: SDK LLD §12.1.
 |---|---|---|
 | `@bcbp-solutions-fzc-llc/frontend-sdk:*` (workspace cache, session id, last activity, last user, signed-out mark) | `localStorage` | SDK. No tokens |
 | `@bcbp-solutions-fzc-llc/frontend-sdk:storage:<namespace>:<appId>:<key>` | `localStorage` | Remotes through `storage(appId)`; cleared on sign-out. Values under the pre-alpha.4 keys are not read |
-| `bcbp.rememberEmail`, `bcbp.loginEmail` | `localStorage` | `infrastructure/storage/rememberedEmail.ts` (the domain's `RememberedEmailRepository`), only when "Remember Email" is checked; every access in `try`. The one file exempt from `no-raw-storage` (`eslint.config.js`) |
+| `bcbp.rememberEmail`, `bcbp.loginEmail` | `localStorage` | `infrastructure/storage/rememberedEmail.ts` (the domain's `RememberedEmailRepository`), only when "Remember Email" is checked, and only an email or a bare workspace name, never a URL (a pasted link may carry a token or code; `isRememberableIdentifier`); every access in `try`. The one file exempt from `no-raw-storage` (`eslint.config.js`) |
 
 ---
 
@@ -498,7 +503,7 @@ Vitest 5, happy-dom at `http://localhost:5001/`, Testing Library. `vitest.config
 |---|---|---|---|
 | Unit | `test/unit/` | partly (`createTestPlatform`, `mockApi`, `roleMapAuthorizer`) | The layer rules firing (`layer-rules.test.ts`); the `shell` catalogue, its fallback for a default locale without one, and no hard-coded user-facing text in presentation (`shell-text.test.ts`, on the TypeScript syntax tree); PUB-1/P-35 mappings against the SDK's contract cases, the entry point, remember-email, the role map, the screen host, `BrandLogo`, the dev middleware (node env, real HTTP) |
 | Integration | `test/integration/` | no (`vi.mock` recording fakes) | The bootstrap's exact order and every branch, the login page and carousel (only current and next photo fetched), session screens (alerts, dialog focus), `App` routes and the missing-context notice, axe-core over every shell screen (`accessibility.test.tsx`, colour contrast excluded) |
-| End to end | `test/e2e/shell.test.tsx` | yes | Email → PUB-1 → PKCE → callback → `dashboard` under `/t/acme/dashboard`; tokens never stored; deep link; a deep link to `/t/acme/tenders/…` loading only the tenders entry; role map reaching the remote; deny-all; failing remote and Try again; global sign-out (form POST to Keycloak) with no silent sign-in after; device clock; unknown email; a 503 outage retried in the background; the environment from `runtime.json`; Forgot password → the realm's reset page |
+| End to end | `test/e2e/shell.test.tsx` | yes | Email → PUB-1 → PKCE → callback → `dashboard` under `/t/acme/dashboard`; tokens never stored; deep link; a deep link to `/t/acme/tenders/…` loading only the tenders entry; role map reaching the remote; deny-all; failing remote and Try again; global sign-out (form POST to Keycloak) with no silent sign-in after; device clock; unknown email; a 503 outage retried in the background; the environment from `runtime.json`; Forgot password → the realm's reset page; a workspace name and pasted URLs (one with `@`) reaching PUB-1 as the slug without `login_hint`; a URL with no workspace asking PUB-1 nothing |
 | Smoke | `test/smoke/deployment.test.ts` | yes (config and manifest validation) | Against `SMOKE_BASE_URL`: the SPA rule, Cache-Control, entry integrity, no maps, 404s, `/healthz`; `image` mode adds nginx's baseline headers, gzip, no version, dotfile 404s; `live` mode adds CloudFront's CSP (including `form-action` allowing the IdP), HSTS and nosniff |
 | Browser | `test/browser/shell.spec.ts` (Playwright) | the production build | Chromium, Firefox, WebKit over HTTPS with the production CSP and Trusted Types (`server.ts`), a fake Keycloak on a second origin, a remote stub on the shared SDK: fonts and hashed images with no third-party request, PKCE sign-in and the remote with integrity, `navigate()` without a reload, the sign-out form POST under `form-action`, the start-up failure at `/otel`, axe colour contrast (the logotype is exempt, WCAG 1.4.3). Any CSP report fails the test |
 | Dashboard contract | `test/browser/dashboard.spec.ts` (`REMOTE_DIST`) | the production build | A real mfe-dashboard build served as `dashboard` with its own `remote-manifest-entry.json` integrity: it loads with its CSS and no CSP violation, every image it shows loads, the role map reaches it, its `NavLink` stays in the page, its Logout POSTs to Keycloak through the shell. A wrong integrity fails it |

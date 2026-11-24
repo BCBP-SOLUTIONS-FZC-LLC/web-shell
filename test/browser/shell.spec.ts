@@ -28,8 +28,8 @@ const violations = (page: Page) => page.evaluate(() => (window as unknown as { _
 
 async function signIn(page: Page): Promise<void> {
   await page.goto(`${APP}/`)
-  await page.getByRole('textbox', { name: /work email address/i }).fill(EMAIL)
-  await page.getByRole('button', { name: /continue with email/i }).click()
+  await page.getByRole('textbox', { name: /work email or workspace name/i }).fill(EMAIL)
+  await page.getByRole('button', { name: /^continue$/i }).click()
   await expect(page.getByRole('heading', { name: 'Dashboard for Ada Lovelace in acme' })).toBeVisible()
 }
 
@@ -49,7 +49,7 @@ test('the login page renders under the production CSP with its self-hosted fonts
     if (origin !== APP && origin !== IDP && !r.url().startsWith('data:')) thirdParty.push(r.url())
   })
   await page.goto(`${APP}/`)
-  await expect(page.getByRole('textbox', { name: /work email address/i })).toBeVisible()
+  await expect(page.getByRole('textbox', { name: /work email or workspace name/i })).toBeVisible()
   await page.evaluate(() => document.fonts.ready)
   expect(await page.evaluate(() => document.fonts.check('16px "Geist Variable"'))).toBe(true)
   const slide = page.locator('img.object-cover').first()
@@ -128,7 +128,7 @@ test.describe('colour contrast (axe, WCAG 2 AA)', () => {
       await route.fulfill({ response, headers })
     })
     await page.goto(`${APP}/`)
-    await expect(page.getByRole('textbox', { name: /work email address/i })).toBeVisible()
+    await expect(page.getByRole('textbox', { name: /work email or workspace name/i })).toBeVisible()
     await page.evaluate(() => document.fonts.ready)
     await page.addScriptTag({ content: axe })
     const result = await page.evaluate(async () => {

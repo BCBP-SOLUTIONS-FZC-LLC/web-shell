@@ -23,7 +23,7 @@ sequenceDiagram
         else none or login-required
             Boot->>SDK: workspace from the failed attempt, or chooseWorkspace
             opt no known workspace
-                Boot->>Screens: askForWorkspace (email → PUB-1)
+                Boot->>Screens: askForWorkspace (email, name or URL → PUB-1)
             end
             Boot->>SDK: idp.login(workspace, loginHint)
         end

@@ -9,18 +9,19 @@ sequenceDiagram
     participant KC as Keycloak
 
     Boot->>Screens: askForWorkspace(signInUseCases)
-    User->>Login: submit work email
+    User->>Login: submit work email, workspace name or /t/<slug> URL
     Login->>Login: rememberedEmail.save (injected repository)
-    Login->>Screens: onContinue(email)
-    Screens->>UC: resolveWorkspace(email)
-    UC->>IAM: GET /v1/public/tenants/resolve?identifier=email (no token)
-    alt not found, rate-limited or unreachable
+    Login->>Screens: onContinue(identifier)
+    Screens->>UC: resolveWorkspace(identifier)
+    Note over UC: toIdentifier: email as typed,<br/>name lower-cased, URL to its slug
+    UC->>IAM: GET /v1/public/tenants/resolve?identifier=email or slug (no token)
+    alt not found, rate-limited, unreachable or no workspace in the URL
         UC-->>Screens: WorkspaceNotFoundError
         Screens-->>Login: generic "could not find a workspace" message
     else realm resolved
         IAM-->>UC: realm, strategy
         UC-->>Screens: workspace
-        Screens-->>Boot: onChosen(workspace, loginHint=email)
+        Screens-->>Boot: onChosen(workspace, loginHint only for an email)
         Boot->>SDK: idp.login(workspace, loginHint)
         Note over SDK: verifier, S256 challenge, state<br/>location to the realm's authorize URL
         SDK->>KC: GET /realms/{realm}/.../auth?code_challenge_method=S256&login_hint

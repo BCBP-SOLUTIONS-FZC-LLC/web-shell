@@ -8,9 +8,9 @@ import en from '../../src/shared/i18n/en.json'
 
 const pages = [['latest', LoginLatest]] as const
 
-const emailBox = () => screen.getByRole('textbox', { name: /work email address/i })
+const emailBox = () => screen.getByRole('textbox', { name: /work email or workspace name/i })
 const rememberBox = () => screen.getByRole('checkbox', { name: /remember email/i })
-const submit = () => screen.getByRole('button', { name: /continue with email|redirecting/i })
+const submit = () => screen.getByRole('button', { name: /^continue$|redirecting/i })
 
 describe.each(pages)('login page %s', (_name, LoginPage) => {
   it('shows the brand and feature list', () => {

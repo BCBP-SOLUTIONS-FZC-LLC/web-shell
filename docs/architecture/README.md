@@ -7,7 +7,7 @@ Standalone Mermaid source. [ARCHITECTURE.md](../../ARCHITECTURE.md) embeds each 
 | [`layer-model.mmd`](mermaid/layer-model.mmd) | The constitution's layers: `app/`, `presentation/`, `application/`, `domain/`, `infrastructure/`, `shared/`, the SDK and the remote | ARCHITECTURE.md § Layer model |
 | [`package-dependencies.mmd`](mermaid/package-dependencies.mmd) | TypeScript import direction | ARCHITECTURE.md § Module dependency graph |
 | [`bootstrap-flow.mmd`](mermaid/bootstrap-flow.mmd) | The SDK start-up sequence and the session branches | ARCHITECTURE.md § Bootstrap flow |
-| [`sign-in-flow.mmd`](mermaid/sign-in-flow.mmd) | Email → PUB-1 → Keycloak realm, PKCE through the SDK | ARCHITECTURE.md § Sign-in flow |
+| [`sign-in-flow.mmd`](mermaid/sign-in-flow.mmd) | Email, workspace name or URL → PUB-1 → Keycloak realm, PKCE through the SDK | ARCHITECTURE.md § Sign-in flow |
 | [`dashboard-load.mmd`](mermaid/dashboard-load.mmd) | `RemoteBoundary`, `loadRemote` from the manifest, and the boundary error | ARCHITECTURE.md § Dashboard load |
 | [`api-request-flow.mmd`](mermaid/api-request-flow.mmd) | A call through the SDK `ApiClient` to `/api`: token, correlation, timeout, retries, problems | ARCHITECTURE.md § API request flow |
 | [`pub1-resolution-flow.mmd`](mermaid/pub1-resolution-flow.mmd) | Workspace from the URL, the cache or PUB-1 before sign-in | ARCHITECTURE.md § Pre-login workspace resolution (PUB-1) |

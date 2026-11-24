@@ -148,8 +148,8 @@ const { resetScreen } = await import('../../src/app/layouts/screen')
 
 async function typeEmail(email: string) {
   const u = userEvent.setup()
-  await u.type(await screen.findByRole('textbox', { name: /work email address/i }), email)
-  await u.click(screen.getByRole('button', { name: /continue with email/i }))
+  await u.type(await screen.findByRole('textbox', { name: /work email or workspace name/i }), email)
+  await u.click(screen.getByRole('button', { name: /^continue$/i }))
 }
 
 beforeEach(() => {
@@ -456,6 +456,15 @@ describe('bootstrap, signed out', () => {
     localStorage.setItem('bcbp.loginEmail', 'ada@acme.com')
     await bootstrap()
     expect(idp.login).toHaveBeenCalledWith({ workspace: acme, loginHint: 'ada@acme.com' })
+  })
+
+  it('never sends a remembered workspace name as the login hint (only an email is one)', async () => {
+    initResult = { status: 'anonymous', reason: 'none' }
+    chooseWorkspace.mockResolvedValue(acme)
+    localStorage.setItem('bcbp.rememberEmail', 'true')
+    localStorage.setItem('bcbp.loginEmail', 'acme')
+    await bootstrap()
+    expect(idp.login).toHaveBeenCalledWith({ workspace: acme })
   })
 
   it('retries the workspace a failed silent sign-in named, without a hint', async () => {

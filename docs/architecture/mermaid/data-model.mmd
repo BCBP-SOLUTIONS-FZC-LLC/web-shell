@@ -29,8 +29,8 @@ classDiagram
         permissions: Record~Role, Permission[]~
     }
     class SignInUseCases {
-        resolveWorkspace(email): Workspace
-        requestPasswordReset(email)
+        resolveWorkspace(identifier): Workspace
+        requestPasswordReset(identifier)
         rememberedEmail: RememberedEmailRepository
     }
     class RememberedEmailRepository {

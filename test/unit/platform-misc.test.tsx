@@ -15,6 +15,23 @@ describe('localStorageRememberedEmail (the RememberedEmailRepository)', () => {
     expect(remembered.get()).toBe('')
   })
 
+  it('remembers a bare workspace name', () => {
+    remembered.save(' acme ', true)
+    expect(remembered.get()).toBe('acme')
+  })
+
+  it.each([
+    'https://app.example.com/t/acme/invite?token=secret',
+    'app.example.com/t/acme#code=abc',
+    '/auth/callback?code=abc&state=xyz',
+    'x'.repeat(255),
+  ])('never stores a URL or an over-long value (a link can carry a token), and forgets what it held: %s', (typed) => {
+    remembered.save('ada@bcbp.com', true)
+    remembered.save(typed, true)
+    expect(remembered.get()).toBe('')
+    expect(localStorage.getItem('bcbp.loginEmail')).toBeNull()
+  })
+
   it('returns an empty email when the flag is set without one', () => {
     localStorage.setItem('bcbp.rememberEmail', 'true')
     expect(remembered.get()).toBe('')
@@ -61,8 +78,30 @@ describe('permissions (IAM P-35 roles, §10.4 grants)', () => {
     expect(can(['member'], 'read', 'members')).toBe(true)
   })
 
-  it('gives tenant owners exactly what tenant admins get', () => {
-    expect(permissions.tenant_owner).toEqual(permissions.tenant_admin)
+  it('gives tenant owners everything tenant admins get, plus the owner-only rights', () => {
+    expect(permissions.tenant_owner).toEqual(expect.arrayContaining([...permissions.tenant_admin]))
+    expect(permissions.tenant_owner.filter((p) => !permissions.tenant_admin.includes(p)).sort()).toEqual([
+      'manage:admin-roles',
+      'manage:tenant-settings',
+    ])
+  })
+
+  // IAM screen spec v0.1 §4.3 (the UI may grant less than IAM, never more).
+  it.each([
+    ['manage', 'admin-roles', ['tenant_owner']],
+    ['manage', 'tenant-settings', ['tenant_owner']],
+    ['manage', 'sso', ['tenant_admin', 'tenant_owner']],
+    ['manage', 'delegation-policy', ['tenant_admin', 'tenant_owner']],
+    ['read', 'audit', ['tenant_admin', 'tenant_owner']],
+    ['manage', 'tender-access', ['tender_admin', 'tenant_admin', 'tenant_owner']],
+  ] as const)('grants %s:%s to %j only', (action, resource, allowed) => {
+    for (const role of IAM_ROLES) {
+      expect(can(['member', role], action, resource), role).toBe(role !== 'member' && (allowed as readonly string[]).includes(role))
+    }
+  })
+
+  it("names every permission as the SDK's action:resource (one colon), or the authorizer throws at boot", () => {
+    expect(() => roleMapAuthorizer(permissions)).not.toThrow()
   })
 
   it('grants nothing for a department level, which is never a role', () => {
