@@ -5,7 +5,7 @@ import { createApiClient } from '@bcbp-solutions-fzc-llc/frontend-sdk/http'
 import { createTestPlatform, mockApi, mockProblem } from '@bcbp-solutions-fzc-llc/frontend-sdk/testing'
 import type { SessionContext } from '@bcbp-solutions-fzc-llc/frontend-sdk/auth'
 import { workspaceBlock } from '../../src/domain/rules/workspaceAccess'
-import { blockedWorkspace, createStore, isTransient, retrySessionContext } from '../../src/application/use-cases/loadSessionContext'
+import { blockedWorkspace, createStore, isTransient, retrySessionContext, settleRefusal } from '../../src/application/use-cases/loadSessionContext'
 
 const ctx = { tenantId: 't-1', slug: 'acme', roles: ['member'] } as unknown as SessionContext
 /**
@@ -178,5 +178,46 @@ describe('blockedWorkspace (P-35 refusals that are workspace states)', () => {
     expect(blockedWorkspace(new Error('403'))).toBeUndefined()
     // A problem with no errorCode at all.
     expect(workspaceBlock(403, undefined)).toBeUndefined()
+  })
+})
+
+describe('settleRefusal (a membership refusal is asked once more)', () => {
+  const forbidden = (errorCode: string) => parseProblemResponse(mockProblem(PlatformProblemTypes.Forbidden, { errorCode }))
+
+  it('takes a tenant state as final at once, without asking again', async () => {
+    const load = vi.fn<() => Promise<SessionContext>>()
+    expect(await settleRefusal(await forbidden('TENANT_TRIAL_EXPIRED'), load)).toEqual({ block: 'trial-expired' })
+    expect(load).not.toHaveBeenCalled()
+  })
+
+  it('returns any other failure as it is', async () => {
+    const error = new Error('bug')
+    expect(await settleRefusal(error, vi.fn())).toEqual({ error })
+  })
+
+  it('asks once more after 5 s: a member reactivated in the meantime gets the context', async () => {
+    vi.useFakeTimers()
+    const load = vi.fn(async () => ctx)
+    const settled = settleRefusal(await forbidden('DENY_MEMBER_SUSPENDED'), load)
+    await vi.advanceTimersByTimeAsync(4_999)
+    expect(load).not.toHaveBeenCalled()
+    await vi.advanceTimersByTimeAsync(1)
+    expect(await settled).toEqual({ context: ctx })
+  })
+
+  it('takes the second answer: still refused, now another state, or another failure', async () => {
+    const again = async (e: unknown) => settleRefusal(await forbidden('DENY_UNRESOLVABLE_SUBJECT'), () => Promise.reject(e), { delayMs: 0 })
+    expect(await again(await forbidden('MEMBER_SUSPENDED'))).toEqual({ block: 'member-paused' })
+    const outage = await problem(503)
+    expect(await again(outage)).toEqual({ error: outage })
+  })
+
+  it('stops on a sign-out without asking again', async () => {
+    const stop = new AbortController()
+    stop.abort()
+    const first = await forbidden('MEMBER_SUSPENDED')
+    const load = vi.fn<() => Promise<SessionContext>>()
+    expect(await settleRefusal(first, load, { signal: stop.signal })).toEqual({ error: first })
+    expect(load).not.toHaveBeenCalled()
   })
 })

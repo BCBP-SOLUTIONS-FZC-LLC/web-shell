@@ -317,17 +317,17 @@ describe('the shell, end to end', () => {
     ['MEMBER_SUSPENDED', 'Your access is paused'],
     ['DENY_MEMBER_SUSPENDED', 'Your access is paused'],
     ['DENY_UNRESOLVABLE_SUBJECT', "You don't have access to this workspace"],
-  ])('P-35 %s shows "%s" instead of the app, and Sign out ends the SSO session', async (errorCode, title) => {
+  ])('P-35 %s shows "%s" instead of the app, and Sign out ends the SSO session', { timeout: 15_000 }, async (errorCode, title) => {
     net.on('GET /api/v1/me/session-context', (req) =>
       bearerOf(req) ? mockProblem(PlatformProblemTypes.Forbidden, { errorCode }) : mockProblem(PlatformProblemTypes.Unauthorized),
     )
     await load('/t/acme/dashboard')
     await until(() => assigned.length > 0, 'the redirect to Keycloak')
     await approveLogin()
-    await screen.findByRole('alertdialog', { name: title }, { timeout: 5_000 })
-    // The remote never loads, and IAM is not asked again.
+    // A membership refusal is asked once more after 5 s (IAM's caches may lag a change); a tenant state is final at once.
+    await screen.findByRole('alertdialog', { name: title }, { timeout: 10_000 })
     expect(injected).toEqual([])
-    expect(net.sent('/api/v1/me/session-context')).toHaveLength(1)
+    expect(net.sent('/api/v1/me/session-context')).toHaveLength(errorCode === 'TENANT_TRIAL_EXPIRED' ? 1 : 2)
     await userEvent.click(screen.getByRole('button', { name: 'Sign out' }))
     await until(() => posted.length > 0, 'the logout form POST')
     expect(posted[0]!.url).toBe(`POST ${IDP}/realms/tenant-acme/protocol/openid-connect/logout`)

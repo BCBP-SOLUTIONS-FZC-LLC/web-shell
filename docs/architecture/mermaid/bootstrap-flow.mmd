@@ -30,16 +30,21 @@ sequenceDiagram
     else authenticated, wrong workspace
         Boot->>Screens: showWrongWorkspace (app never renders)
     else authenticated
-        Boot->>SDK: idp.subscribe (expired, signed out)
+        Boot->>SDK: idp.subscribe (expired, signed out), authorizer (role map)
         Boot->>IAM: GET /v1/me/session-context
-        Boot->>SDK: authorizer, subject, flags, rememberWorkspace (/t/slug/)
-        opt P-35 refuses the workspace (trial ended, suspended, access paused, not a member)
-            Boot->>Screens: showWorkspaceUnavailable (A6/A8; app never renders, nothing cached)
+        opt membership refused (access paused, not a member)
+            Boot->>IAM: ask once more after 5 s (IAM's caches may lag a change)
         end
-        Boot->>SDK: initializeI18n (detect: P-35 locale), loadManifest, startVersionPolling
-        Boot->>Browser: render App inside ShellRoot (PlatformProvider), registerNavigator
-        opt no session context
-            Boot->>IAM: retry after 1 s, 2 s, 4 s (online network error, timeout, 429, 502-504)
-            Boot->>SDK: subject, flags, rememberWorkspace, and the provider updates live
+        alt P-35 refuses the workspace (trial ended, suspended, access paused, not a member)
+            Boot->>Screens: showWorkspaceUnavailable (A6/A8; app never renders, the shell remembers nothing)
+        else
+            Boot->>SDK: subject, flags, rememberWorkspace (/t/slug/)
+            Boot->>SDK: initializeI18n (detect: P-35 locale), loadManifest, startVersionPolling
+            Boot->>Browser: render App inside ShellRoot (PlatformProvider), registerNavigator
+            opt no session context
+                Boot->>IAM: retry after 1 s, 2 s, 4 s (online network error, timeout, 429, 502-504)
+                Boot->>SDK: subject, flags, rememberWorkspace, and the provider updates live
+                Boot->>Screens: a retry answering with a workspace state: unmount App, showWorkspaceUnavailable
+            end
         end
     end

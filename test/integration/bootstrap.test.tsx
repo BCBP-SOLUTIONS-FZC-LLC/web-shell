@@ -384,6 +384,52 @@ describe('bootstrap, signed in', () => {
     expect(idp.logout).toHaveBeenCalledOnce()
   })
 
+  it('asks once more after a membership refusal, and renders the app when the second answer is a context', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout'] })
+    loadContext.mockRejectedValueOnce(await parseProblemResponse(mockProblem(PlatformProblemTypes.Forbidden, { errorCode: 'DENY_MEMBER_SUSPENDED' })))
+    const booted = bootstrap()
+    await act(() => vi.advanceTimersByTimeAsync(5_000))
+    await act(() => booted)
+    expect(loadContext).toHaveBeenCalledTimes(2)
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    expect(screen.getByRole('main')).toHaveTextContent('app at /t/acme')
+  })
+
+  it('shows the screen when a membership refusal holds on the second ask', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout'] })
+    loadContext.mockRejectedValue(await parseProblemResponse(mockProblem(PlatformProblemTypes.Forbidden, { errorCode: 'MEMBER_SUSPENDED' })))
+    const booted = bootstrap()
+    await act(() => vi.advanceTimersByTimeAsync(5_000))
+    await act(() => booted)
+    expect(screen.getByRole('alertdialog', { name: 'Your access is paused' })).toBeInTheDocument()
+    expect(screen.queryByRole('main')).not.toBeInTheDocument()
+  })
+
+  it('stops when the user signs out during the second ask', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout'] })
+    loadContext.mockRejectedValue(await parseProblemResponse(mockProblem(PlatformProblemTypes.Forbidden, { errorCode: 'MEMBER_SUSPENDED' })))
+    const booted = bootstrap()
+    await act(() => vi.advanceTimersByTimeAsync(0))
+    act(() => subscriber?.({ status: 'anonymous', reason: 'signed-out' } as SessionState))
+    await act(() => booted)
+    expect(screen.queryByRole('alertdialog', { name: 'Your access is paused' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('main')).not.toBeInTheDocument()
+  })
+
+  it('replaces the deny-all app with the screen when a background retry answers with a workspace state', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout'] })
+    loadContext
+      .mockRejectedValueOnce(new NetworkError(false, 'req-1'))
+      .mockRejectedValueOnce(await parseProblemResponse(mockProblem(PlatformProblemTypes.Forbidden, { errorCode: 'TENANT_TRIAL_EXPIRED' })))
+    const started = bootstrap()
+    await act(() => vi.advanceTimersByTimeAsync(0))
+    expect(screen.getByRole('main')).toHaveTextContent('app at (root)')
+    await act(() => vi.advanceTimersByTimeAsync(1_000))
+    await act(() => started)
+    expect(screen.getByRole('alertdialog', { name: 'Your trial has ended' })).toBeInTheDocument()
+    expect(screen.queryByRole('main')).not.toBeInTheDocument()
+  })
+
   it('keeps the permissions notice for a refusal that is not a workspace state', async () => {
     loadContext.mockRejectedValue(await parseProblemResponse(mockProblem(PlatformProblemTypes.Forbidden, { errorCode: 'INSUFFICIENT_ROLE' })))
     await act(() => bootstrap())
