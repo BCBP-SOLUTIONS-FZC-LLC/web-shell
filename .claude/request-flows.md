@@ -36,6 +36,7 @@ Typed email, workspace name or URL (`toIdentifier`) → PUB-1 (generic message o
 |---|---|
 | `expired` | "Session ended" over the app (text: `serverEnded`, `idle`, other); Sign in → `signInAgain` with the sign-in screen as `ask` |
 | `anonymous` / `signed-out` (here or another tab) | Unmount `#app`, then "You are signed out"; Sign in → `idp.login({ workspace })` |
+| P-35 `read_only`, or a `DENY_TENANT_READ_ONLY` answer seen on the page | "Workspace is read-only (subscription ended)" at the bottom (`useReadOnly`), no action |
 | New `/version.json` | "A new version is available." with Reload (`useAppUpdate`); never forced |
 | `switchWorkspace(id)` | PUB-1 → not found: "Workspace not found"; else `idp.switchWorkspace` |
 | Remote `useSignOut()` | `idp.logout()`; global by default: form POST to the realm's end-session endpoint (ID token out of URLs; CSP `form-action` must allow the IdP), then `/` shows the signed-out dialog |

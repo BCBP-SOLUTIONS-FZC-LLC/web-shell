@@ -6,12 +6,14 @@ import {
   MFEErrorBoundary,
   RemoteBoundary,
   useAppUpdate,
+  useReadOnly,
   useRouteTemplate,
   useSessionContext,
 } from '@bcbp-solutions-fzc-llc/frontend-sdk/react'
 import { useShellText } from '../../shared/i18n'
 import { AppError } from '../../presentation/widgets/AppError'
 import { ContextUnavailable } from '../../presentation/widgets/ContextUnavailable'
+import { ReadOnlyNotice } from '../../presentation/widgets/ReadOnlyNotice'
 import { UpdateAvailable } from '../../presentation/widgets/UpdateAvailable'
 
 /** The remote that renders the dashboard, as named in /remotes/manifest.json. */
@@ -58,6 +60,11 @@ function Update() {
   return <UpdateAvailable available={update.available} onReload={() => update.reload()} />
 }
 
+/** The read-only notice, while P-35 says so or the page has seen a DENY_TENANT_READ_ONLY answer. */
+function ReadOnly() {
+  return useReadOnly() ? <ReadOnlyNotice /> : null
+}
+
 /** Hands the router's navigate to the bootstrap, which registers it as the SDK's navigator. */
 function RouterBridge({ onRouter }: { onRouter: (navigate: NavigateFunction) => void }) {
   const navigate = useNavigate()
@@ -85,7 +92,11 @@ export default function App({
       <BrowserRouter {...(basename ? { basename } : {})}>
         {onRouter ? <RouterBridge onRouter={onRouter} /> : null}
         <Update />
-        {context ? null : <ContextUnavailable onReload={() => window.location.reload()} />}
+        {/* The page's notices, stacked at the bottom so two never cover each other. */}
+        <div className="fixed inset-x-0 bottom-0 z-40 flex flex-col">
+          <ReadOnly />
+          {context ? null : <ContextUnavailable onReload={() => window.location.reload()} />}
+        </div>
         <Routes>
           <Route path="/dashboard/*" element={<Dashboard />} />
           <Route path="/tenders/*" element={<Tenders />} />

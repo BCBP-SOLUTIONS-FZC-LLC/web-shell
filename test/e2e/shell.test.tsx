@@ -312,6 +312,21 @@ describe('the shell, end to end', () => {
     expect(screen.getByRole('status')).toHaveTextContent("We couldn't load your permissions")
   })
 
+  it('a read-only workspace (P-35 read_only) loads with the read-only notice over the remote', async () => {
+    net.on('GET /api/v1/me/session-context', (req) =>
+      bearerOf(req)
+        ? Response.json({ tenant_id: TENANT, slug: 'acme', roles, feature_flags: [], read_only: true, locale: 'en' })
+        : mockProblem(PlatformProblemTypes.Unauthorized),
+    )
+    await signInByEmail()
+    expect(screen.getByRole('status')).toHaveTextContent('Workspace is read-only (subscription ended)')
+  })
+
+  it('a writable workspace shows no read-only notice', async () => {
+    await signInByEmail()
+    expect(screen.queryByText('Workspace is read-only (subscription ended)')).toBeNull()
+  })
+
   it('a session context outage (503) is retried in the background, and the permissions appear when IAM is back', async () => {
     let iamDown = true
     net.on('GET /api/v1/me/session-context', (req) =>
