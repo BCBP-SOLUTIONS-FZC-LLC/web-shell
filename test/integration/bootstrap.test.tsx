@@ -643,12 +643,38 @@ describe('bootstrap, workspace banners (IAM P-1, P-27) and the upgrade welcome (
     expect(loadTenant).toHaveBeenCalledOnce()
   })
 
-  it('sets nothing when the user signs out while P-1 loads', async () => {
+  it('sets nothing, and logs nothing, when the user signs out while P-1 loads', async () => {
+    let reject: (e: unknown) => void = () => {}
+    loadTenant.mockReturnValue(new Promise((_r, j) => (reject = j)))
+    await act(() => bootstrap())
+    act(() => subscriber?.({ status: 'anonymous', reason: 'signed-out' } as SessionState))
+    // The ApiClient rejects an aborted request: not a failure worth a warning.
+    await act(async () => reject(new Error('aborted')))
+    expect(notices()).toEqual({ banners: [] })
+    expect(logger.warn).not.toHaveBeenCalledWith('workspace status unavailable', expect.anything())
+  })
+
+  const upgraded = () => ({ name: 'Acme', status: 'active', trialEndsAt: '2026-01-01T00:00:00Z', subscriptionStartedAt: new Date(Date.now() - DAY).toISOString() })
+
+  it('never covers "Session ended" with the welcome when the session expires while P-1 loads', async () => {
     let answer: (t: unknown) => void = () => {}
     loadTenant.mockReturnValue(new Promise((r) => (answer = r)))
     await act(() => bootstrap())
-    act(() => subscriber?.({ status: 'anonymous', reason: 'signed-out' } as SessionState))
-    await act(async () => answer({ name: 'Acme', status: 'past_due' }))
-    expect(notices()).toEqual({ banners: [] })
+    act(() => subscriber?.({ status: 'expired', idle: true } as SessionState))
+    await act(async () => answer(upgraded()))
+    expect(screen.getByRole('alertdialog', { name: 'Session ended' })).toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: 'Welcome to your upgraded workspace' })).not.toBeInTheDocument()
+    expect(welcomeSeen.value).toBe(false)
+  })
+
+  it('never covers another screen with the welcome', async () => {
+    let answer: (t: unknown) => void = () => {}
+    loadTenant.mockReturnValue(new Promise((r) => (answer = r)))
+    resolve.mockResolvedValue(undefined)
+    await act(() => bootstrap())
+    await act(() => (shellProps.switchWorkspace as (id: string) => Promise<void>)('nowhere'))
+    await act(async () => answer(upgraded()))
+    expect(screen.getByRole('alertdialog', { name: 'Workspace not found' })).toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: 'Welcome to your upgraded workspace' })).not.toBeInTheDocument()
   })
 })

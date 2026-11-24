@@ -55,7 +55,7 @@ import {
   showWorkspaceUnavailable,
   showWrongWorkspace,
 } from '../layouts/sessionScreens'
-import { hideScreen } from '../layouts/screen'
+import { hideScreen, isScreenShown } from '../layouts/screen'
 import { blockedWorkspace, createStore, isTransient, retrySessionContext, settleRefusal } from '../../application/use-cases/loadSessionContext'
 import { ShellRoot } from '../providers/ShellRoot'
 import { registerShellMessages } from '../../infrastructure/i18n/shellMessages'
@@ -180,9 +180,12 @@ async function start(cfg: RuntimeConfig, report: { otlpBaseUrl: string }): Promi
   // mounting the app for a user who is gone (checked after every await).
   const signedOutDuringBoot = new AbortController()
   const signedOut = () => signedOutDuringBoot.signal.aborted
+  // Set once the session expired during use: "Session ended" is up and nothing may replace it.
+  let expired = false
   idp.subscribe((s) => {
     // Expiry happens only during use. Never redirect on our own; the user clicks "Sign in".
     if (s.status === 'expired') {
+      expired = true
       showSessionEnded(s, () =>
         signInAgain({
           idp,
@@ -284,7 +287,9 @@ async function start(cfg: RuntimeConfig, report: { otlpBaseUrl: string }): Promi
     const until = readOnlyUntil(status.tenant)
     notices.set({ banners: workspaceBanners(status.tenant, status.seats, who, now), ...(until ? { readOnlyUntil: until } : {}) })
     // A trial that just converted (A5): welcome the user once on this device.
-    if (status.tenant && recentlyUpgraded(status.tenant, now) && !upgradeWelcomeStorage.seen()) {
+    // Never over another screen (session ended, workspace not found) or after the session expired:
+    // the welcome's Continue would hide that screen and leave the user without its action.
+    if (status.tenant && recentlyUpgraded(status.tenant, now) && !expired && !isScreenShown() && !upgradeWelcomeStorage.seen()) {
       showUpgradeWelcome(status.tenant.name, () => upgradeWelcomeStorage.markSeen())
     }
   }

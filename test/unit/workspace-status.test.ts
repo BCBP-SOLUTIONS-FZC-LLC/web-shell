@@ -143,6 +143,15 @@ describe('loadWorkspaceStatus', () => {
     expect(onError).toHaveBeenCalledWith(new Error('down'), 'seats')
     expect(await loadWorkspaceStatus(s, 't-1', { seats: true })).toEqual({})
   })
+
+  it('reports nothing once aborted (a sign-out)', async () => {
+    const onError = vi.fn()
+    const stop = new AbortController()
+    stop.abort()
+    const s = source({ tenant: () => Promise.reject(new Error('aborted')), seats: () => Promise.reject(new Error('aborted')) })
+    expect(await loadWorkspaceStatus(s, 't-1', { seats: true, signal: stop.signal, onError })).toEqual({})
+    expect(onError).not.toHaveBeenCalled()
+  })
 })
 
 describe('upgradeWelcomeStorage (A5 once per device and workspace)', () => {

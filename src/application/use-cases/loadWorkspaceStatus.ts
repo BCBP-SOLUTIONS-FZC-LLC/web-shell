@@ -14,7 +14,8 @@ export async function loadWorkspaceStatus(
 ): Promise<WorkspaceStatus> {
   const settle = <T>(p: Promise<T>, what: 'tenant' | 'seats') =>
     p.catch((e: unknown) => {
-      o.onError?.(e, what)
+      // Aborted by a sign-out: not a failure worth reporting.
+      if (!o.signal?.aborted) o.onError?.(e, what)
       return undefined
     })
   const [tenant, seats] = await Promise.all([
