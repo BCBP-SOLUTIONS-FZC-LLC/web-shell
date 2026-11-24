@@ -14,6 +14,7 @@
 
 | Date | Change |
 |---|---|
+| 2026-11-24 | A6/A8 from P-35's refusal codes (`workspaceBlock`, `blockedWorkspace`, `WorkspaceUnavailableDialog`): §2, §3, §5, §7, §12 |
 | 2026-11-24 | Read-only notice from `useReadOnly()` (IAM spec §7.10): §2, §3, §6.6b, §12 |
 | 2026-11-24 | IAM screen UI permissions in the role map (§4.3); sign-in takes an email, workspace name or pasted URL (`toIdentifier`), remember-email never stores a URL (§1, §2, §3, §6.1, §8, §9, §12) |
 | 2026-11-11 | Released `v0.4.0` (#68): remote `tenders` added, dashboard contract as `v0.3.0`. Status, pairs and open items updated |
@@ -111,7 +112,7 @@ Removed as duplicates of the SDK (2026-11-05): `platform/consent.ts` (the runtim
 | The SDK start-up sequence and session handling | `src/app/bootstrap/bootstrap.tsx` |
 | Signed-in routes and the `dashboard` and `tenders` `RemoteBoundary`s | `src/app/routes/App.tsx` |
 | IAM ports: PUB-1 → `Workspace`, P-35 → `SessionContext` | `src/infrastructure/api/iam.ts` |
-| Session screens: sign-in, signed out, session ended, device clock, wrong workspace, workspace not found | `src/presentation/features/session-screens/` (components), `src/app/layouts/sessionScreens.tsx` (mounting), `src/app/layouts/screen.tsx` (host) |
+| Session screens: sign-in, signed out, session ended, device clock, wrong workspace, workspace not found, workspace unavailable (trial ended, suspended, access paused, no access) | `src/presentation/features/session-screens/` (components), `src/app/layouts/sessionScreens.tsx` (mounting), `src/app/layouts/screen.tsx` (host) |
 | Login page, identifier form (email, workspace name or URL), remember-email, help and legal links | `src/presentation/pages/login/`, `src/presentation/components/PageLinks.tsx`, `src/shared/constants/links.ts` |
 | Password reset hand-off to Keycloak | `src/infrastructure/auth/passwordReset.ts` |
 | Update, read-only and missing-permissions notices | `src/presentation/widgets/`, mounted by `src/app/routes/App.tsx` with `useAppUpdate`, `useReadOnly`, `useSessionContext`; the read-only and missing-permissions notices share one bottom stack |
@@ -167,10 +168,11 @@ src/
     components/                 BrandLogo, PageLinks
     widgets/                    UpdateAvailable, ContextUnavailable (state as props), ReadOnlyNotice, AppError (the error page)
   application/                  signIn.ts (SignInUseCases); use-cases/ resolveWorkspace, requestPasswordReset,
-                                loadSessionContext (isTransient, retrySessionContext, createStore)
+                                loadSessionContext (blockedWorkspace, isTransient, retrySessionContext, createStore)
   domain/                       repositories/rememberedEmail.ts (contract), errors.ts (WorkspaceNotFoundError),
                                 rules/permissions.ts (IAM_ROLES, permissions: role → action:resource),
-                                 rules/identifier.ts (toIdentifier, isEmailIdentifier, isRememberableIdentifier)
+                                 rules/identifier.ts (toIdentifier, isEmailIdentifier, isRememberableIdentifier),
+                                rules/workspaceAccess.ts (workspaceBlock: P-35 errorCode → WorkspaceBlock)
   infrastructure/
     api/iam.ts                  toWorkspace, toSessionContext, workspaceResolver, sessionContextSource,
                                 loadSessionContextOnce
@@ -308,6 +310,7 @@ The IAM grants follow the IAM screen spec v0.1 §2.2 and §4.3. Two differences 
 | 9 | `isWrongWorkspace(session.workspace, session.user)` → `showWrongWorkspace(idp, signInUseCases)` and return | Not cached, never rendered |
 | 10 | `idp.subscribe(...)` | §6.4, §6.5 |
 | 11 | `setAuthorizer(roleMapAuthorizer(permissions))`; `sessionContextSource.load()` into a store | Failure → `warn 'session context unavailable'`, context `undefined`. A sign-out from here on stops the boot (checked after every await) |
+| 11a | `blockedWorkspace(error)` names a workspace state → `showWorkspaceUnavailable(block, idp, signInUseCases)` and return | §7.1. Not cached, never rendered, not retried |
 | 12 | `setAuthzSubject(context && { roles, tenantId })` | |
 | 13 | With a context: `setFlagProvider(sessionContextFlagProvider(context))`, `rememberWorkspace({ ...session.workspace, slug: context.slug })` | Moves the URL under `/t/<slug>/` |
 | 14 | `initializeI18n({ defaultLocale, supported, detect: () => context.locale })` | The user's IAM locale first, then the browser's languages |
@@ -385,7 +388,8 @@ While `useReadOnly()` is true (P-35 `read_only`, or a `DENY_TENANT_READ_ONLY` an
 | Identity, `/config/runtime.json` | fatal | "The app is unavailable right now." with Try again (reload) + `console.error` |
 | Silent restore | degrade | Signed-out flow |
 | PUB-1 | stop on the screen | One generic message; retry |
-| P-35 | degrade | Deny-all, platform flags, no `/t/<slug>/` move, `warn` log; `App` shows "We couldn't load your permissions…" with Reload (`role="status"`) |
+| P-35, a workspace state (§7.1) | stop on the screen | A6/A8 dialog with Sign out and Switch workspace; the app never renders |
+| P-35, any other failure | degrade | Deny-all, platform flags, no `/t/<slug>/` move, `warn` log; `App` shows "We couldn't load your permissions…" with Reload (`role="status"`) |
 | Manifest | degrade | `error` log; the boundary shows its error |
 | Remote load or render | degrade | Boundary message, "Try again" |
 | Shell render (routes, widgets) | stop that tree | SDK `MFEErrorBoundary` `mfe="web-shell"` around `App`'s router: `error` log (the SDK's text `remote failed to render`, attribute `mfe: web-shell`), the SDK's web-error record (Tier 1, once ratified), then `AppError` (catalogue words, reference, Try again) |
@@ -393,6 +397,20 @@ While `useReadOnly()` is true (P-35 `read_only`, or a `DENY_TENANT_READ_ONLY` an
 | `/healthz` | liveness only | Constant `ok`; does not check Keycloak, IAM, `dashboard` or `tenders` |
 
 ---
+
+### 7.1 P-35 refusals that are workspace states
+
+`workspaceBlock(status, errorCode)` (`domain/rules/workspaceAccess.ts`), codes compared without case, status checked too. Codes from IAM's replies of 2026-11-24 (iam-org-membership #64, iam-authz-enrichment #44): Org & Membership checks the tenant first, then the member; the gateway refuses a member who is not active before the request reaches it.
+
+| P-35 answer | Sent by | `WorkspaceBlock` | Screen (`WorkspaceUnavailableDialog`) |
+|---|---|---|---|
+| `403 TENANT_TRIAL_EXPIRED` | Org & Membership | `trial-expired` | "Your trial has ended" (A6) |
+| `403 TENANT_SUSPENDED`, `404 TENANT_NOT_FOUND` (offboarded) | Org & Membership | `tenant-unavailable` | "Workspace unavailable" (A8) |
+| `403 DENY_MEMBER_SUSPENDED`, `403 MEMBER_SUSPENDED` (the first seconds after a suspension) | gateway, Org & Membership | `member-paused` | "Your access is paused" (A8) |
+| `403 DENY_UNRESOLVABLE_SUBJECT`, `404 MEMBER_NOT_FOUND` (the first seconds after a removal) | gateway, Org & Membership | `no-access` | "You don't have access to this workspace" (A8; also what a suspended member sees from a gateway without `DENY_MEMBER_SUSPENDED`) |
+| Anything else (`INSUFFICIENT_ROLE`, a 404 without these codes, 5xx) | | none | Deny-all and the permissions notice (§7) |
+
+Each dialog offers Sign out and Switch workspace, and no retry. A6 has no Upgrade or Reactivate action: P-35 refused, so the shell does not know the user's roles, and no upgrade URL exists yet (IAM spec §6 A6: "Proposed").
 
 ## 8. Security
 
@@ -507,8 +525,8 @@ Vitest 5, happy-dom at `http://localhost:5001/`, Testing Library. `vitest.config
 | Layer | Path | Real SDK | What it locks |
 |---|---|---|---|
 | Unit | `test/unit/` | partly (`createTestPlatform`, `mockApi`, `roleMapAuthorizer`) | The layer rules firing (`layer-rules.test.ts`); the `shell` catalogue, its fallback for a default locale without one, and no hard-coded user-facing text in presentation (`shell-text.test.ts`, on the TypeScript syntax tree); PUB-1/P-35 mappings against the SDK's contract cases, the entry point, remember-email, the role map, the screen host, `BrandLogo`, the dev middleware (node env, real HTTP) |
-| Integration | `test/integration/` | no (`vi.mock` recording fakes) | The bootstrap's exact order and every branch, the login page and carousel (only current and next photo fetched), session screens (alerts, dialog focus), `App` routes, the missing-context and read-only notices (no action; one shared bottom stack), axe-core over every shell screen (`accessibility.test.tsx`, colour contrast excluded) |
-| End to end | `test/e2e/shell.test.tsx` | yes | Email → PUB-1 → PKCE → callback → `dashboard` under `/t/acme/dashboard`; tokens never stored; deep link; a deep link to `/t/acme/tenders/…` loading only the tenders entry; role map reaching the remote; deny-all; failing remote and Try again; global sign-out (form POST to Keycloak) with no silent sign-in after; device clock; unknown email; a 503 outage retried in the background; the environment from `runtime.json`; Forgot password → the realm's reset page; a workspace name and pasted URLs (one with `@`) reaching PUB-1 as the slug without `login_hint`; a URL with no workspace asking PUB-1 nothing; P-35 `read_only` showing the read-only notice (none for a writable workspace) |
+| Integration | `test/integration/` | no (`vi.mock` recording fakes) | The bootstrap's exact order and every branch (A6/A8 never render the app), the login page and carousel (only current and next photo fetched), session screens (alerts, dialog focus), `App` routes, the missing-context and read-only notices (no action; one shared bottom stack), axe-core over every shell screen (`accessibility.test.tsx`, colour contrast excluded) |
+| End to end | `test/e2e/shell.test.tsx` | yes | Email → PUB-1 → PKCE → callback → `dashboard` under `/t/acme/dashboard`; tokens never stored; deep link; a deep link to `/t/acme/tenders/…` loading only the tenders entry; role map reaching the remote; deny-all; P-35 refusals showing A6/A8 with no remote load and Sign out; failing remote and Try again; global sign-out (form POST to Keycloak) with no silent sign-in after; device clock; unknown email; a 503 outage retried in the background; the environment from `runtime.json`; Forgot password → the realm's reset page; a workspace name and pasted URLs (one with `@`) reaching PUB-1 as the slug without `login_hint`; a URL with no workspace asking PUB-1 nothing; P-35 `read_only` showing the read-only notice (none for a writable workspace) |
 | Smoke | `test/smoke/deployment.test.ts` | yes (config and manifest validation) | Against `SMOKE_BASE_URL`: the SPA rule, Cache-Control, entry integrity, no maps, 404s, `/healthz`; `image` mode adds nginx's baseline headers, gzip, no version, dotfile 404s; `live` mode adds CloudFront's CSP (including `form-action` allowing the IdP), HSTS and nosniff |
 | Browser | `test/browser/shell.spec.ts` (Playwright) | the production build | Chromium, Firefox, WebKit over HTTPS with the production CSP and Trusted Types (`server.ts`), a fake Keycloak on a second origin, a remote stub on the shared SDK: fonts and hashed images with no third-party request, PKCE sign-in and the remote with integrity, `navigate()` without a reload, the sign-out form POST under `form-action`, the start-up failure at `/otel`, axe colour contrast on the login page (the logotype is exempt, WCAG 1.4.3), the read-only notice under the production CSP with its contrast ratio measured (≥ 4.5). Any CSP report fails the test |
 | Dashboard contract | `test/browser/dashboard.spec.ts` (`REMOTE_DIST`) | the production build | A real mfe-dashboard build served as `dashboard` with its own `remote-manifest-entry.json` integrity: it loads with its CSS and no CSP violation, every image it shows loads, the role map reaches it, its `NavLink` stays in the page, its Logout POSTs to Keycloak through the shell. A wrong integrity fails it |

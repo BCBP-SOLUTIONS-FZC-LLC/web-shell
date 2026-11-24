@@ -57,4 +57,4 @@ If the records stop at one `service_version`, roll back to the previous image ta
 ## Related
 
 - The dashboard failing inside a running shell is **not** this alert: it is the SDK's `remote failed to load` (`PlatformWebRemoteLoadErrorBudgetBurn` in the platform runbooks). An alpha.3 dashboard behind an alpha.4 shell shows there as `incompatible`.
-- `session context unavailable` warnings mean IAM P-35 failed. The shell still runs deny-all and retries; it is not a start-up failure.
+- `session context unavailable` warnings mean IAM P-35 failed. The shell still runs deny-all and retries; it is not a start-up failure. When the error's `errorCode` is a workspace state (`TENANT_TRIAL_EXPIRED`, `TENANT_SUSPENDED`, `TENANT_NOT_FOUND`, `MEMBER_SUSPENDED`, `DENY_MEMBER_SUSPENDED`, `DENY_UNRESOLVABLE_SUBJECT`, `MEMBER_NOT_FOUND`) the user sees the trial-ended or workspace-unavailable screen instead: an IAM state, not a shell fault.

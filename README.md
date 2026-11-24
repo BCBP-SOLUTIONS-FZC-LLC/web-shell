@@ -414,7 +414,7 @@ REMOTE_DIST=../mfe-dashboard/dist npm run test-contract
 | Layer | Path | What it exercises |
 |---|---|---|
 | Unit | `test/unit/` | PUB-1 and P-35 mappings and ports, the entry point, remember-email, the screen host, `BrandLogo`, the session-context retry (and its agreement with the SDK ApiClient), the navigator adapter, the dev server's platform middleware, the layer rules and arch-lint firing, the text catalogue and the hard-coded-text guard, the no-SDK-duplicates guard, metrics-check, the use cases, the links, the password reset URL |
-| Integration | `test/integration/` | The login page and the carousel, the session screens, `App` routes and its notices (read-only, missing permissions), and the bootstrap's order and branches; axe-core over every shell screen (`accessibility.test.tsx`) |
+| Integration | `test/integration/` | The login page and the carousel, the session screens (A6/A8 included), `App` routes and its notices (read-only, missing permissions), and the bootstrap's order and branches; axe-core over every shell screen (`accessibility.test.tsx`) |
 | End to end | `test/e2e/` | The real bootstrap, screens, `App` and SDK against a fake Keycloak (PKCE) and network: email → PUB-1 → sign-in → the `dashboard` remote under `/t/<slug>/`, a workspace name or pasted URL reaching PUB-1 as the slug with no `login_hint` (and a URL with no workspace asking nothing), deep links (one to `/t/<slug>/tenders/…` loads only the tenders entry), role-map permissions in the remote, deny-all, the read-only notice from P-35 `read_only`, a failing remote, global sign-out, the device clock |
 | Smoke | `test/smoke/` | `npm run test-smoke` against the served image (CI) or a deployment: the SPA rule, Cache-Control, script integrity, 404s, and the runtime files validated by the SDK. See [test/smoke/README.md](./test/smoke/README.md) |
 | Browser | `test/browser/` | `npm run test-browser` after a build: the production bundle in Chromium, Firefox and WebKit under the production CSP and Trusted Types, with a fake Keycloak on a second origin: fonts, PKCE sign-in, the remote with integrity, `navigate()`, the sign-out form POST, the start-up failure report, colour contrast (the login page, and the read-only notice) |
@@ -654,7 +654,7 @@ Plus, until CloudFront: `nginx/security.d/csp.conf.example` (with that environme
 | Call | When |
 |---|---|
 | `GET /api/v1/public/tenants/resolve?identifier=` (PUB-1) | The sign-in screen, and workspace switching. No token |
-| `GET /api/v1/me/session-context` (P-35) | Once after sign-in (with the SDK's own retries); after a network failure while online, a timeout, 429, 502, 503 or 504 (the SDK ApiClient's own rule), again after 1 s, 2 s, 4 s, one request each. Until it answers the app renders with deny-all permissions |
+| `GET /api/v1/me/session-context` (P-35) | Once after sign-in (with the SDK's own retries); after a network failure while online, a timeout, 429, 502, 503 or 504 (the SDK ApiClient's own rule), again after 1 s, 2 s, 4 s, one request each. Until it answers the app renders with deny-all permissions. A refusal that is a workspace state (trial ended, workspace suspended, access paused, not a member) shows that screen instead of the app, with Sign out and Switch workspace |
 
 #### Dashboard remote (`dashboard`)
 

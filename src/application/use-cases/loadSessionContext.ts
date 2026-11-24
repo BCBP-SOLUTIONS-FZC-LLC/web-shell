@@ -4,6 +4,17 @@
 // background. As platform-reactcommon examples/shell/src/session-context.ts (SDK alpha.4).
 import type { SessionContext } from '@bcbp-solutions-fzc-llc/frontend-sdk/auth'
 import { NetworkError, TimeoutError, isProblemError } from '@bcbp-solutions-fzc-llc/frontend-sdk/problem'
+import { workspaceBlock, type WorkspaceBlock } from '../../domain/rules/workspaceAccess'
+
+export type { WorkspaceBlock }
+
+/**
+ * The workspace state behind a failed P-35 load (trial ended, workspace suspended, access paused, not
+ * a member), or undefined for any other failure. Such an answer is final: the app is not rendered.
+ */
+export function blockedWorkspace(e: unknown): WorkspaceBlock | undefined {
+  return isProblemError(e) ? workspaceBlock(e.status, e.errorCode) : undefined
+}
 
 /**
  * The SDK ApiClient's own rule for a failure worth another try (its RETRY_STATUSES, which it does not

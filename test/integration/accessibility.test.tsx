@@ -58,6 +58,8 @@ describe('accessibility (axe)', () => {
     ['session ended', () => screens.showSessionEnded({ status: 'expired', idle: true } as never, async () => {})],
     ['wrong workspace', () => screens.showWrongWorkspace(idp, useCases)],
     ['workspace not found', () => screens.showWorkspaceNotFound()],
+    ['trial ended (A6)', () => screens.showWorkspaceUnavailable('trial-expired', idp, useCases)],
+    ['access paused (A8)', () => screens.showWorkspaceUnavailable('member-paused', idp, useCases)],
   ])('the %s dialog', async (_name, show) => {
     act(() => show())
     expect(await violations()).toEqual([])

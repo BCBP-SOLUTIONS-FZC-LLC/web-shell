@@ -48,10 +48,11 @@ import {
   showSessionEnded,
   showSignedOut,
   showWorkspaceNotFound,
+  showWorkspaceUnavailable,
   showWrongWorkspace,
 } from '../layouts/sessionScreens'
 import { hideScreen } from '../layouts/screen'
-import { createStore, isTransient, retrySessionContext } from '../../application/use-cases/loadSessionContext'
+import { blockedWorkspace, createStore, isTransient, retrySessionContext } from '../../application/use-cases/loadSessionContext'
 import { ShellRoot } from '../providers/ShellRoot'
 import { registerShellMessages } from '../../infrastructure/i18n/shellMessages'
 // Self-hosted fonts (Fontsource, SIL OFL 1.1): served from /assets/, as the platform CSP requires
@@ -209,6 +210,13 @@ async function start(cfg: RuntimeConfig, report: { otlpBaseUrl: string }): Promi
     }),
   )
   if (signedOut()) return
+  // IAM refuses this user the workspace (trial ended, suspended, access paused, not a member): a
+  // final answer, so the app is never rendered and the workspace is not cached; sign out or switch.
+  const block = blockedWorkspace(firstError)
+  if (block) {
+    showWorkspaceUnavailable(block, idp, signInUseCases)
+    return
+  }
   const applyContext = () => {
     const c = context.get()
     setAuthzSubject(c && { roles: c.roles, tenantId: c.tenantId })

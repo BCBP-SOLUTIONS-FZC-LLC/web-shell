@@ -3,7 +3,8 @@ import { act, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SessionState, Workspace } from '@bcbp-solutions-fzc-llc/frontend-sdk/auth'
-import { NetworkError } from '@bcbp-solutions-fzc-llc/frontend-sdk/problem'
+import { NetworkError, PlatformProblemTypes, parseProblemResponse } from '@bcbp-solutions-fzc-llc/frontend-sdk/problem'
+import { mockProblem } from '@bcbp-solutions-fzc-llc/frontend-sdk/testing'
 
 const calls: string[] = []
 const record =
@@ -369,6 +370,25 @@ describe('bootstrap, signed in', () => {
     await act(() => bootstrap())
     act(() => subscriber!({ status: 'anonymous', reason: 'none' }))
     expect(screen.getByRole('main')).toBeInTheDocument()
+  })
+
+  it('never renders the app when IAM refuses the workspace (A6/A8), and caches nothing', async () => {
+    loadContext.mockRejectedValue(await parseProblemResponse(mockProblem(PlatformProblemTypes.Forbidden, { errorCode: 'TENANT_TRIAL_EXPIRED' })))
+    await act(() => bootstrap())
+    expect(screen.getByRole('alertdialog', { name: 'Your trial has ended' })).toBeInTheDocument()
+    expect(screen.queryByRole('main')).not.toBeInTheDocument()
+    expect(loadContext).toHaveBeenCalledOnce()
+    expect(calls).not.toContain('rememberWorkspace')
+    expect(calls).not.toContain('loadManifest')
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Sign out' }))
+    expect(idp.logout).toHaveBeenCalledOnce()
+  })
+
+  it('keeps the permissions notice for a refusal that is not a workspace state', async () => {
+    loadContext.mockRejectedValue(await parseProblemResponse(mockProblem(PlatformProblemTypes.Forbidden, { errorCode: 'INSUFFICIENT_ROLE' })))
+    await act(() => bootstrap())
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    expect(screen.getByRole('main')).toHaveTextContent('app at (root)')
   })
 
   it('never renders the app for a login in the wrong workspace', async () => {

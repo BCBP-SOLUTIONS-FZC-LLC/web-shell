@@ -33,6 +33,9 @@ sequenceDiagram
         Boot->>SDK: idp.subscribe (expired, signed out)
         Boot->>IAM: GET /v1/me/session-context
         Boot->>SDK: authorizer, subject, flags, rememberWorkspace (/t/slug/)
+        opt P-35 refuses the workspace (trial ended, suspended, access paused, not a member)
+            Boot->>Screens: showWorkspaceUnavailable (A6/A8; app never renders, nothing cached)
+        end
         Boot->>SDK: initializeI18n (detect: P-35 locale), loadManifest, startVersionPolling
         Boot->>Browser: render App inside ShellRoot (PlatformProvider), registerNavigator
         opt no session context

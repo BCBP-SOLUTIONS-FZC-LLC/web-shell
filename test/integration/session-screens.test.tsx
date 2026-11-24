@@ -168,3 +168,31 @@ describe('dialogs', () => {
     await waitFor(() => expect(idp.switchWorkspace).toHaveBeenCalledWith(acme))
   })
 })
+
+describe('workspace unavailable (spec A6, A8)', () => {
+  const idp = { logout: vi.fn(async () => {}), switchWorkspace: vi.fn(async () => {}) } as unknown as IdentityProvider
+
+  it.each([
+    ['trial-expired', en['session.trialExpired.title'], en['session.trialExpired.text']],
+    ['tenant-unavailable', en['session.workspaceUnavailable.title'], en['session.workspaceUnavailable.text']],
+    ['member-paused', en['session.accessPaused.title'], en['session.accessPaused.text']],
+    ['no-access', en['session.noAccess.title'], en['session.noAccess.text']],
+  ] as const)('%s: says why, with sign out and switch workspace and no retry', (block, title, text) => {
+    act(() => screens.showWorkspaceUnavailable(block, idp, useCases))
+    const dialog = screen.getByRole('alertdialog', { name: title })
+    expect(dialog).toHaveTextContent(text)
+    expect(screen.getAllByRole('button').map((b) => b.textContent)).toEqual(['Sign out', 'Switch workspace'])
+  })
+
+  it('signs out, or switches to the workspace the user names', async () => {
+    act(() => screens.showWorkspaceUnavailable('member-paused', idp, useCases))
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'Sign out' }))
+    expect(idp.logout).toHaveBeenCalledOnce()
+
+    resolve.mockResolvedValue(acme)
+    await user.click(screen.getByRole('button', { name: 'Switch workspace' }))
+    await typeEmail('ada@acme.com')
+    await waitFor(() => expect(idp.switchWorkspace).toHaveBeenCalledWith(acme))
+  })
+})

@@ -2,6 +2,7 @@
 // bootstrap's callbacks. The screens themselves (presentation/features/session-screens) only render.
 import type { IdentityProvider, SessionState } from '@bcbp-solutions-fzc-llc/frontend-sdk/auth'
 import type { SignInUseCases } from '../../application/signIn'
+import type { WorkspaceBlock } from '../../application/use-cases/loadSessionContext'
 import type { ShellKey } from '../../shared/i18n'
 import {
   DeviceClockDialog,
@@ -9,6 +10,7 @@ import {
   SignedOutDialog,
   SignInScreen,
   WorkspaceNotFoundDialog,
+  WorkspaceUnavailableDialog,
   WrongWorkspaceDialog,
   type SignInChoice,
 } from '../../presentation/features/session-screens/SessionScreens'
@@ -48,12 +50,19 @@ export function showSessionEnded(s: Extract<SessionState, { status: 'expired' }>
   )
 }
 
+/** Sends the user to the email screen, then to the workspace they choose. */
+function switchWorkspace(idp: IdentityProvider, useCases: SignInUseCases): void {
+  void askForWorkspace(useCases).then(({ workspace }) => idp.switchWorkspace(workspace))
+}
+
 /** A trial login that landed in another tenant than the invitation's: never cached, app not rendered. */
 export function showWrongWorkspace(idp: IdentityProvider, useCases: SignInUseCases): void {
+  showScreen(<WrongWorkspaceDialog onSignOut={() => void idp.logout()} onSwitch={() => switchWorkspace(idp, useCases)} />)
+}
+
+/** IAM refuses this user the workspace (trial ended, suspended, access paused, not a member): app not rendered. */
+export function showWorkspaceUnavailable(block: WorkspaceBlock, idp: IdentityProvider, useCases: SignInUseCases): void {
   showScreen(
-    <WrongWorkspaceDialog
-      onSignOut={() => void idp.logout()}
-      onSwitch={() => void askForWorkspace(useCases).then(({ workspace }) => idp.switchWorkspace(workspace))}
-    />,
+    <WorkspaceUnavailableDialog block={block} onSignOut={() => void idp.logout()} onSwitch={() => switchWorkspace(idp, useCases)} />,
   )
 }
