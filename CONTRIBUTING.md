@@ -59,11 +59,12 @@ src/
     components/          ← BrandLogo, PageLinks
     widgets/             ← Update notice, read-only notice, missing-permissions notice (state passed in, or mounted only while it holds)
   application/           ← Use cases (no React, no browser APIs): resolveWorkspace, requestPasswordReset, loadSessionContext; signIn.ts
-  domain/                ← Contracts, errors, rules: RememberedEmailRepository, WorkspaceNotFoundError, permissions (role map), identifier (sign-in box), workspaceAccess (P-35 refusals → workspace state)
+  domain/                ← Contracts, errors, rules: RememberedEmailRepository, WorkspaceNotFoundError, permissions (role map), identifier (sign-in box), workspaceAccess (P-35 refusals → workspace state), workspaceBanners (which banner, to whom)
   infrastructure/
-    api/iam.ts           ← PUB-1 resolver and P-35 session context (the SDK's /auth ports)
+    api/iam.ts           ← PUB-1 resolver and P-35 session context (the SDK's /auth ports); P-1 and P-27 for the banners
     auth/passwordReset.ts ← Keycloak reset-credentials URL for a workspace
     storage/rememberedEmail.ts ← "Remember Email" in localStorage (the one raw-storage file)
+    storage/upgradeWelcome.ts  ← A5 seen flag, through the SDK's storage('shell')
     federation/navigator.ts ← The router as the SDK's navigate() target
     i18n/shellMessages.ts ← Registers the shell's text before any screen
   shared/
@@ -144,7 +145,7 @@ docs/lld/web-shell-lld.md ← Low-level design (the contract)
 
 ### Adding a widget or component
 
-1. `src/presentation/widgets/` for a piece of the signed-in app that takes its state and actions as props, or is mounted only while that state holds (`UpdateAvailable`, `ContextUnavailable`, `ReadOnlyNotice`, `AppError`); `src/presentation/components/` for a reusable piece (`BrandLogo`, `PageLinks`). Neither imports the SDK, `infrastructure/` or `app/`.
+1. `src/presentation/widgets/` for a piece of the signed-in app that takes its state and actions as props, or is mounted only while that state holds (`UpdateAvailable`, `ContextUnavailable`, `ReadOnlyNotice`, `WorkspaceBanners`, `AppError`); `src/presentation/components/` for a reusable piece (`BrandLogo`, `PageLinks`). Neither imports the SDK, `infrastructure/` or `app/`.
 2. The route (`src/app/routes/App.tsx`) reads SDK hooks and passes plain props down.
 3. Tailwind classes for styling. A `style` prop only for a value computed at run time (`BrandLogo`'s size, `LoginPage`'s `--hero-shift`): React sets it through the CSSOM, which the CSP allows. No `<style>` element, no style attribute in HTML, no runtime CSS-in-JS (the CSP has no `unsafe-inline`).
 

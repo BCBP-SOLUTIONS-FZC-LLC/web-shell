@@ -46,11 +46,11 @@ graph TD
     end
 
     subgraph domain["domain/"]
-        dom["repositories, errors,\nrules/permissions (role map), rules/identifier,\nrules/workspaceAccess"]
+        dom["repositories, errors,\nrules/permissions (role map), rules/identifier,\nrules/workspaceAccess, rules/workspaceBanners"]
     end
 
     subgraph infrastructure["infrastructure/ — implements domain contracts"]
-        infra["api/iam (PUB-1, P-35), auth/passwordReset,\nstorage/rememberedEmail, federation/navigator,\ni18n/shellMessages"]
+        infra["api/iam (PUB-1, P-35, P-1, P-27), auth/passwordReset,\nstorage/rememberedEmail, storage/upgradeWelcome,\nfederation/navigator, i18n/shellMessages"]
     end
 
     subgraph shared["shared/"]
@@ -112,11 +112,12 @@ graph LR
     login(["presentation/pages/login\nLoginPage, useEmailSignIn"])
     widgets(["presentation/widgets"])
     comps(["presentation/components\nBrandLogo, PageLinks"])
-    usecases(["application/use-cases\nresolveWorkspace, requestPasswordReset,\nloadSessionContext"])
-    domain(["domain/\nRememberedEmailRepository, WorkspaceNotFoundError,\nrules/permissions, rules/identifier, rules/workspaceAccess"])
+    usecases(["application/use-cases\nresolveWorkspace, requestPasswordReset,\nloadSessionContext, loadWorkspaceStatus"])
+    domain(["domain/\nRememberedEmailRepository, WorkspaceStatusSource, UpgradeWelcomeRepository,\nWorkspaceNotFoundError, rules/permissions, rules/identifier,\nrules/workspaceAccess, rules/workspaceBanners"])
     iam(["infrastructure/api/iam.ts"])
     reset(["infrastructure/auth/passwordReset.ts"])
     remember(["infrastructure/storage/rememberedEmail.ts\n(localStorage)"])
+    welcome(["infrastructure/storage/upgradeWelcome.ts\n(SDK storage)"])
     nav(["infrastructure/federation/navigator.ts"])
     msgs(["infrastructure/i18n/shellMessages.ts"])
     text(["shared/i18n\nshell namespace, en.json"])
@@ -134,6 +135,7 @@ graph LR
     boot --> iam
     boot --> reset
     boot --> remember
+    boot --> welcome
     boot --> nav
     boot --> msgs
     boot --> sdk
@@ -159,6 +161,9 @@ graph LR
     usecases --> domain
     usecases -. types, /problem .-> sdk
     remember --> domain
+    welcome -. types .-> domain
+    welcome --> sdk
+    iam -. types .-> domain
     iam --> sdk
     reset --> sdk
     msgs --> text
@@ -170,9 +175,9 @@ graph LR
 
 | Module | May import |
 |---|---|
-| `domain/` (contracts, errors, `rules/permissions.ts`, `rules/identifier.ts`, `rules/workspaceAccess.ts`) | Nothing but SDK types |
+| `domain/` (contracts, errors, `rules/permissions.ts`, `rules/identifier.ts`, `rules/workspaceAccess.ts`, `rules/workspaceBanners.ts`) | Nothing but SDK types |
 | `application/` (use cases) | `domain/`, SDK types and the `/problem` error classes. No React, no browser APIs (ports injected) |
-| `infrastructure/` | `domain/`, `shared/i18n`, SDK subpaths. `storage/rememberedEmail.ts` implements `RememberedEmailRepository` over `localStorage`; `i18n/shellMessages.ts` (`registerNamespace` + `setLocale`) changes the page's locale, so only the bootstrap calls it |
+| `infrastructure/` | `domain/`, `shared/i18n`, SDK subpaths. `storage/rememberedEmail.ts` implements `RememberedEmailRepository` over `localStorage`; `storage/upgradeWelcome.ts` implements `UpgradeWelcomeRepository` over the SDK's `storage('shell')`; `api/iam.ts` implements `WorkspaceStatusSource` (P-1, P-27); `i18n/shellMessages.ts` (`registerNamespace` + `setLocale`) changes the page's locale, so only the bootstrap calls it |
 | `presentation/pages` | `components`, `domain/`, `application/` types, `shared/` (their words from `shared/i18n`). Never `infrastructure/`, `app/`, the SDK, `application/` values, storage, the network or navigation: the repository, use cases and state come in as props |
 | `presentation/components` | `shared/` (`ui`, `i18n`, `constants`) |
 | `presentation/widgets` | `shared/i18n` (state and actions are props) |
@@ -242,6 +247,8 @@ sequenceDiagram
             Boot->>SDK: subject, flags, rememberWorkspace (/t/slug/)
             Boot->>SDK: initializeI18n (detect: P-35 locale), loadManifest, startVersionPolling
             Boot->>Browser: render App inside ShellRoot (PlatformProvider), registerNavigator
+            Boot->>IAM: background: GET /v1/tenants/:id (P-1), and /seat-usage (P-27) for owners and admins
+            Boot->>Browser: banners and the read-only grace date into App; A5 welcome once after a recent upgrade
             opt no session context
                 Boot->>IAM: retry after 1 s, 2 s, 4 s (online network error, timeout, 429, 502-504)
                 Boot->>SDK: subject, flags, rememberWorkspace, and the provider updates live
@@ -485,8 +492,9 @@ Roles, plan and flags are not in the token. After sign-in the bootstrap loads th
 | Success | `setAuthzSubject({ roles, tenantId })`; `setFlagProvider(sessionContextFlagProvider(context))`; `rememberWorkspace({ …workspace, slug })` moves the URL under `/t/<slug>/`; the IAM `locale` feeds `initializeI18n` |
 | Refused (workspace state) | `blockedWorkspace` (`domain/rules/workspaceAccess.ts`, LLD §7.1): trial ended, workspace suspended or closed, access paused, not a member → `showWorkspaceUnavailable` (Sign out, Switch workspace). A membership refusal is asked once more after 5 s. No subject, flags, `rememberWorkspace` or render |
 | Any other failure | Warning `session context unavailable`; the authorizer denies all and only platform flags apply; `App` shows the missing-permissions notice with Reload |
-| Read-only | `useReadOnly()` (P-35 `read_only`, or a `DENY_TENANT_READ_ONLY` answer seen on the page): `App` shows "Workspace is read-only (subscription ended)" (`ReadOnlyNotice`, IAM spec §7.10), stacked with the missing-permissions notice at the bottom. Remotes disable their own actions; the shell only says why |
+| Read-only | `useReadOnly()` (P-35 `read_only`, or a `DENY_TENANT_READ_ONLY` answer seen on the page): `App` shows "Workspace is read-only (subscription ended)" (`ReadOnlyNotice`, IAM spec §7.10), stacked with the missing-permissions notice at the bottom. For a cancelled workspace P-1's `read_only_until` adds "Access ends on <date>" (the grace end, when the workspace is suspended). Remotes disable their own actions; the shell only says why |
 | Background retry | Only after a transient failure (`isTransient`): 3 tries after 1 s, 2 s, 4 s, one request each (`loadSessionContextOnce`, `retry: false`). A success updates the subject, the flags and the `PlatformProvider` live, and re-renders the router if the URL moved. A sign-out aborts it A retry that answers with a workspace state (LLD §7.1) unmounts the app and shows that screen instead. |
+| Workspace banners | After render, once the context is known (the first load or a late one): P-1 `GET /api/v1/tenants/:id` and, for owners and tenant admins (`manage:members`), P-27 `…/seat-usage`, in the background (`loadWorkspaceStatus`). `workspaceBanners` (`domain/rules/workspaceBanners.ts`) picks trial days left (everyone), payment problem (owner, `manage:tenant-settings`), all seats used (owner and tenant admin, `manage:members`; `active_users + pending_invitations >= licensed_seats`, IAM has no overage), no owner (tenant admin); `App` shows them in the bottom stack (`WorkspaceBanners`). A failure logs `workspace status unavailable` and shows none. A trial converted to paid in the last 7 days shows the welcome (A5) once per device and workspace (SDK `storage('shell')` key `upgradeWelcomeSeen`, cleared on sign-out) |
 | Role map | `domain/rules/permissions.ts`: keys are IAM's closed set (`member`, `tenant_owner`, `tenant_admin`, `tender_admin`); `roleMapAuthorizer` turns roles into `action:resource` UI permissions (one colon each, or it throws), including the IAM screens' `manage:admin-roles`, `manage:tenant-settings` (owner), `manage:sso`, `manage:delegation-policy`, `read:audit` (admin) and `manage:tender-access` (tender admin). Department levels are never roles. UI hints only: the services enforce |
 
 ---
@@ -536,6 +544,7 @@ Tokens are never written to storage. A reload restores the session from Keycloak
 | Key | Store | Written by | Purpose |
 |---|---|---|---|
 | `@bcbp-solutions-fzc-llc/frontend-sdk:workspaces` | `localStorage` | SDK, `rememberWorkspace` | Cached workspaces (realm, slug), so a return visit skips the sign-in screen |
+| `…:storage:<workspace>:shell:upgradeWelcomeSeen` | `localStorage` (SDK `storage('shell')`) | `infrastructure/storage/upgradeWelcome.ts` | The upgrade welcome (A5) was seen in this workspace on this device; the SDK clears it on sign-out and workspace switch |
 | `@bcbp-solutions-fzc-llc/frontend-sdk:session-id`, `:auth:last-activity`, `:auth:last-user` | `localStorage` | SDK | Telemetry session id, idle timeout across tabs, user change detection |
 | `bcbp.rememberEmail`, `bcbp.loginEmail` | `localStorage` | `infrastructure/storage/rememberedEmail.ts` (behind the domain's `RememberedEmailRepository`) | "Remember Email" only: an email or a bare workspace name only, never a URL (a pasted link may carry a token or code; `isRememberableIdentifier`). Needed before a workspace is known, so it does not use the SDK's per-workspace `storage()`. Every access is wrapped in `try`; blocked storage just forgets |
 
@@ -603,6 +612,8 @@ classDiagram
 | `Workspace` | `realm`, `trial`, `slug?`, `tenantIdHint?` | SDK `/auth`; mapped by `toWorkspace` |
 | P-35 refusal | Problem `status` + `errorCode` (`TENANT_TRIAL_EXPIRED`, `TENANT_SUSPENDED`, `TENANT_NOT_FOUND`, `MEMBER_SUSPENDED`, `DENY_MEMBER_SUSPENDED`, `DENY_UNRESOLVABLE_SUBJECT`, `MEMBER_NOT_FOUND`) → `WorkspaceBlock` | IAM (Org & Membership, gateway); mapped by `workspaceBlock` |
 | `SessionContext` | `tenantId`, `slug`, `roles`, `departments` (`{ id, level }[]`, drawn as `IdLevel[]`), `plan?`, `featureFlags`, `readOnly`, `mfaFreshnessSeconds?`, `locale?` | SDK `/auth`; mapped by `toSessionContext` |
+| `TenantStatus` (P-1) | `name`, `status`, `trialEndsAt?`, `subscriptionStartedAt?`, `ownerlessSince?`, `readOnlyUntil?` | IAM Org & Membership; mapped by `toTenantStatus` |
+| `SeatUsage` (P-27) | `activeUsers`, `pendingInvitations`, `licensedSeats` | IAM Org & Membership; mapped by `toSeatUsage` |
 | Shell value | `user`, `workspace`, `context`, `locale`, `switchWorkspace`, `signOut` | This shell, in `PlatformProvider`; remotes read it through SDK hooks (no props) |
 | Runtime config | `/config/runtime.json`, validated strictly by the SDK (README § Configuration, LLD §9.1) | Each environment |
 | Remote manifest | `/remotes/manifest.json`: `dashboard`, `tenders` → entry URL and `integrity` | Each environment |
@@ -732,6 +743,7 @@ A browser shell has no locks, but it has races: an async start-up that a sign-ou
 | Leave for Keycloak | Browser navigation | stop | The shell is gone until Keycloak redirects back |
 | Session context, a workspace state | P-35 | stop on that screen | A6/A8 dialog with Sign out and Switch workspace; the app never renders (a membership refusal is asked once more after 5 s; a refusal that a background retry receives unmounts the app) |
 | Session context, any other failure | P-35 | degrade, then recover | Warning log. Deny-all permissions and platform flags until it answers; after a transient failure (a network failure while online, a timeout, 429, 502, 503 or 504 (the SDK ApiClient's own rule)) it is retried after 1 s, 2 s, 4 s, one request per attempt, and applied live (any other answer, offline included, is final) (the router moves under `/t/<slug>/` then). A notice with Reload says some actions are hidden |
+| Workspace banners | P-1, P-27 | ignore | Warning log `workspace status unavailable`; no banners, no read-only date, no A5. Not retried |
 | Remote manifest | `/remotes/manifest.json` | degrade | Error log. The app renders; `RemoteBoundary` shows its error |
 | Dashboard or tenders load or render | `dashboard` / `tenders` remote | degrade | Boundary message with "Try again". The rest of the shell keeps running |
 | The shell's own screens render | `App.tsx` and its widgets | stop that tree, recover on retry | The SDK's `MFEErrorBoundary` (`mfe="web-shell"`) logs the error (and records it for the SDK's web-error metric, which counts once Tier 1 is ratified), then shows `AppError`: "Something went wrong on this page.", the trace or request reference, and Try again. Never the error's own message. Instead of a blank page |
@@ -826,10 +838,10 @@ Vitest 5, happy-dom at `http://localhost:5001/`, Testing Library. `vitest.config
 
 | Layer | Path | What it locks |
 |---|---|---|
-| Unit | `test/unit/` | PUB-1 and P-35 mappings and the port calls, the P-35 refusal codes and their statuses (and the one re-ask of a membership refusal), the identifier rule (email, name, URL forms, 254 characters) and the role map's grants, the entry point's fatal path, remember-email with blocked storage, the screen host, `BrandLogo`, the session-context retry and store, the navigator adapter |
-| Integration | `test/integration/` | The login page and the carousel, every session screen, `App` routes and props, and the bootstrap: the exact initialisation order, each anonymous reason, wrong workspace, a P-35 refusal that is a workspace state (A6/A8: no render; the re-ask; a late refusal unmounting the app) and one that is not (`INSUFFICIENT_ROLE`), missing context and its background retry, sign-out during boot, i18n `detect`, navigator registration, start-up failure reporting, manifest failure, expiry and sign-out events; axe-core over every shell screen (`accessibility.test.tsx`) |
-| End to end | `test/e2e/` | The real bootstrap and SDK (inlined by Vitest, fresh per simulated page load) against a fake Keycloak and network: PKCE sign-in, `/t/<slug>/`, the remote's SDK hooks and permissions, deny-all, P-35 refusals showing A6/A8 with no remote load, an IAM outage that recovers in the background, a failing remote, global sign-out (form POST), the device clock |
-| Browser | `test/browser/`, CI `browser` | The production build in Chromium, Firefox and WebKit under the production CSP and Trusted Types, over HTTPS, with a fake Keycloak on a second origin: self-hosted fonts and hashed images, PKCE sign-in, the remote's entry with integrity and the share scope, `navigate()` without a reload, the sign-out form POST under `form-action`, the start-up failure reaching `/otel`, colour contrast (axe on the login page; the read-only notice's ratio measured in the signed-in page) |
+| Unit | `test/unit/` | PUB-1, P-35, P-1 and P-27 mappings and the port calls, which banner shows to whom, the A5 window and seen flag, the P-35 refusal codes and their statuses (and the one re-ask of a membership refusal), the identifier rule (email, name, URL forms, 254 characters) and the role map's grants, the entry point's fatal path, remember-email with blocked storage, the screen host, `BrandLogo`, the session-context retry and store, the navigator adapter |
+| Integration | `test/integration/` | The login page and the carousel, every session screen, `App` routes and props (the banners and the read-only date included), and the bootstrap: the exact initialisation order, each anonymous reason, wrong workspace, a P-35 refusal that is a workspace state (A6/A8: no render; the re-ask; a late refusal unmounting the app) and one that is not (`INSUFFICIENT_ROLE`), missing context and its background retry, the banner load (P-27 only for owners and admins, failures, a late context, a sign-out mid-load) and A5 once, sign-out during boot, i18n `detect`, navigator registration, start-up failure reporting, manifest failure, expiry and sign-out events; axe-core over every shell screen (`accessibility.test.tsx`) |
+| End to end | `test/e2e/` | The real bootstrap and SDK (inlined by Vitest, fresh per simulated page load) against a fake Keycloak and network: PKCE sign-in, `/t/<slug>/`, the remote's SDK hooks and permissions, deny-all, P-35 refusals showing A6/A8 with no remote load, the trial, seats and read-only-date banners from P-1/P-27 (no P-27 for a member), A5 once, an IAM outage that recovers in the background, a failing remote, global sign-out (form POST), the device clock |
+| Browser | `test/browser/`, CI `browser` | The production build in Chromium, Firefox and WebKit under the production CSP and Trusted Types, over HTTPS, with a fake Keycloak on a second origin: self-hosted fonts and hashed images, PKCE sign-in, the remote's entry with integrity and the share scope, `navigate()` without a reload, the sign-out form POST under `form-action`, the start-up failure reaching `/otel`, colour contrast (axe on the login page; the read-only notice's and a workspace banner's ratio measured in the signed-in page) |
 | Dashboard contract | `test/browser/dashboard.spec.ts`, CI `dashboard-contract` | The real mfe-dashboard build in this shell under the production CSP (informational) |
 | Smoke | `test/smoke/`, `.github/scripts/smoke-tests.sh` | Image at most 200 MB and the startup gate, then the suite against the container: SPA rule, Cache-Control per location, script integrity, 404s, runtime config and manifest validated by the SDK. With `SMOKE_MODE=live`, a deployment's security headers too |
 
@@ -879,7 +891,7 @@ What the shell promises to others, and how each promise changes (VERSIONING.md h
 | `runtime.json` schema | The SDK's schema (strict; unknown keys refused). New keys arrive with an SDK release (alpha.6: `environment`) | The SDK at start-up; smoke `image` and `live` |
 | Remote contract | Remote name `dashboard`, container `__platform_mfe_dashboard`, no props, the `PlatformProvider` shell value. A rename is a MAJOR change and deploys with the dashboard. Remote `tenders` (mfe-tender): container `__platform_mfe_tenders`, no props, `ownerDomain` `tender_management`; same rules, deploys with mfe-tender | `npm run test-contract` against a real mfe-dashboard build; CI `Dashboard contract`. `tenders`: integration and e2e stubs only (LLD §15 #18) |
 | Routes and storage keys | `/t/<slug>/dashboard/*`, `/t/<slug>/tenders/*`; `bcbp.*` keys. A change updates README, ARCHITECTURE, the LLD and CHANGELOG together | e2e and browser suites (`/tenders/*`: integration and e2e only) |
-| IAM ports (PUB-1, P-35) | IAM's swagger; the SDK's contract cases; P-35 refusal codes (LLD §7.1): IAM's replies of 2026-11-24 | `test/unit/iam.test.ts` against the SDK's contract cases; `test/unit/session-context.test.ts` for the refusal codes |
+| IAM ports (PUB-1, P-35, P-1, P-27) | IAM's swagger; the SDK's contract cases; P-35 refusal codes (LLD §7.1): IAM's replies of 2026-11-24 | `test/unit/iam.test.ts` against the SDK's contract cases; `test/unit/session-context.test.ts` for the refusal codes; `test/unit/workspace-status.test.ts` for P-1 and P-27 (no SDK contract cases exist for them) |
 | The shell's text | Keys of `src/shared/i18n/en.json`; a new locale adds a catalogue | `test/unit/shell-text.test.ts` |
 
 ---

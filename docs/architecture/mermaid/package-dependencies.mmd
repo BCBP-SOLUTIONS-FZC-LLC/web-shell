@@ -9,11 +9,12 @@ graph LR
     login(["presentation/pages/login\nLoginPage, useEmailSignIn"])
     widgets(["presentation/widgets"])
     comps(["presentation/components\nBrandLogo, PageLinks"])
-    usecases(["application/use-cases\nresolveWorkspace, requestPasswordReset,\nloadSessionContext"])
-    domain(["domain/\nRememberedEmailRepository, WorkspaceNotFoundError,\nrules/permissions, rules/identifier, rules/workspaceAccess"])
+    usecases(["application/use-cases\nresolveWorkspace, requestPasswordReset,\nloadSessionContext, loadWorkspaceStatus"])
+    domain(["domain/\nRememberedEmailRepository, WorkspaceStatusSource, UpgradeWelcomeRepository,\nWorkspaceNotFoundError, rules/permissions, rules/identifier,\nrules/workspaceAccess, rules/workspaceBanners"])
     iam(["infrastructure/api/iam.ts"])
     reset(["infrastructure/auth/passwordReset.ts"])
     remember(["infrastructure/storage/rememberedEmail.ts\n(localStorage)"])
+    welcome(["infrastructure/storage/upgradeWelcome.ts\n(SDK storage)"])
     nav(["infrastructure/federation/navigator.ts"])
     msgs(["infrastructure/i18n/shellMessages.ts"])
     text(["shared/i18n\nshell namespace, en.json"])
@@ -31,6 +32,7 @@ graph LR
     boot --> iam
     boot --> reset
     boot --> remember
+    boot --> welcome
     boot --> nav
     boot --> msgs
     boot --> sdk
@@ -56,6 +58,9 @@ graph LR
     usecases --> domain
     usecases -. types, /problem .-> sdk
     remember --> domain
+    welcome -. types .-> domain
+    welcome --> sdk
+    iam -. types .-> domain
     iam --> sdk
     reset --> sdk
     msgs --> text

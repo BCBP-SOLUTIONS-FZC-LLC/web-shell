@@ -19,11 +19,11 @@ graph TD
     end
 
     subgraph domain["domain/"]
-        dom["repositories, errors,\nrules/permissions (role map), rules/identifier,\nrules/workspaceAccess"]
+        dom["repositories, errors,\nrules/permissions (role map), rules/identifier,\nrules/workspaceAccess, rules/workspaceBanners"]
     end
 
     subgraph infrastructure["infrastructure/ — implements domain contracts"]
-        infra["api/iam (PUB-1, P-35), auth/passwordReset,\nstorage/rememberedEmail, federation/navigator,\ni18n/shellMessages"]
+        infra["api/iam (PUB-1, P-35, P-1, P-27), auth/passwordReset,\nstorage/rememberedEmail, storage/upgradeWelcome,\nfederation/navigator, i18n/shellMessages"]
     end
 
     subgraph shared["shared/"]
