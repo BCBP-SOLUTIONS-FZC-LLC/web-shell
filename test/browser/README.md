@@ -15,7 +15,7 @@ npx playwright install chromium firefox webkit   # once, if the browsers are mis
 
 | Server | Serves |
 |---|---|
-| App | `dist/` with the production CSP (`buildCsp` reads `nginx/security.d/csp.conf.example`, the one CSP source) and the nginx SPA rule; a runtime config pointed at the fake Keycloak; a manifest whose `dashboard` entry is a stub built only on the shell's shared React and SDK (integrity `sha384`); PUB-1 and P-35; recorders for `/otel/*` and `/csp-report`; `GET /__test/state` and `/__test/reset` |
+| App | `dist/` with the production CSP (`buildCsp` reads `nginx/security.d/csp.conf.example`, the one CSP source) and the nginx SPA rule; a runtime config pointed at the fake Keycloak; a manifest whose `dashboard` entry is a stub built only on the shell's shared React and SDK (integrity `sha384`); PUB-1, P-35, P-1 and P-27; recorders for `/otel/*` and `/csp-report`; `GET /__test/state` and `/__test/reset` |
 | Fake Keycloak (second origin) | Authorize (the user counts as signed in; `prompt=none` fails without an SSO session), the token endpoint with PKCE and CORS, and the end-session endpoint the global sign-out POSTs a form to |
 
 ## Cases (`shell.spec.ts`)
@@ -27,6 +27,8 @@ npx playwright install chromium firefox webkit   # once, if the browsers are mis
 | `navigate()` | A remote's navigation under the basename changes the URL without a reload (`registerNavigator`) |
 | Sign-out | The form POST reaches Keycloak under `form-action` with `client_id`, `id_token_hint`, `post_logout_redirect_uri`; "You are signed out"; the next sign-in sends `prompt=login` |
 | Start-up failure | A missing `/config/runtime.json` shows the unavailable page and `the app could not start` reaches `/otel/v1/logs` |
+| Read-only notice | P-35 `read_only` shows "Workspace is read-only (subscription ended)" under the production CSP; its contrast ratio measured in the page (≥ 4.5; axe cannot be injected into the signed-in page) and no CSP violation |
+| Workspace banner | P-1 `status=trial` shows "3 days left in your trial" under the production CSP; contrast ratio ≥ 4.5 and no CSP violation |
 | Colour contrast | axe `color-contrast` over the login page. The page is served without its CSP for this case only (axe is an injected script). The "BCBP SOLUTIONS" logotype (`data-logotype`) is exempt: WCAG 1.4.3 sets no contrast requirement for text that is part of a logo |
 
 After every case, any report the browser sent to `/csp-report` fails it.

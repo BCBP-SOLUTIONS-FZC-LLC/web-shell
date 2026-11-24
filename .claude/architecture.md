@@ -9,13 +9,13 @@ Condensed from [ARCHITECTURE.md](../ARCHITECTURE.md) and the [LLD](../docs/lld/w
 | Path | What it is |
 |---|---|
 | `src/app/bootstrap/index.ts` | Rsbuild's entry: `import('./bootstrap')` (Module Federation async boundary); `showUnavailable` replaces `#app` on a throw, with words read from `shared/i18n/en.json` |
-| `src/app/bootstrap/bootstrap.tsx` | Composition root: SDK start-up order, session branches, `idp.subscribe`, the sign-in use cases built from infrastructure, render inside `ShellRoot`, P-35 background retry, start-up failure report (`the app could not start`), `registerNavigator` |
+| `src/app/bootstrap/bootstrap.tsx` | Composition root: SDK start-up order, session branches, `idp.subscribe`, the sign-in use cases built from infrastructure, render inside `ShellRoot`, P-35 background retry, start-up failure report (`the app could not start`), `registerNavigator`; the background P-1/P-27 load into the notices store, A5 (`showUpgradeWelcome`, never after expiry or over another screen) |
 | `src/app/providers/ShellRoot.tsx` | `PlatformProvider` with the live context (store) and locale (`useLocale`) |
-| `src/app/routes/App.tsx` | `BrowserRouter` (basename `/t/<slug>` when the URL has one); `/dashboard/*` → `RemoteBoundary remote="dashboard" module="./App"`; `/tenders/*` → `RemoteBoundary remote="tenders" module="./App"` (mfe-tender); `*` → `/dashboard`; `onRouter` hands `navigate` to the bootstrap; mounts the update, read-only and missing-permissions widgets with the SDK's state (the last two in one bottom stack); the SDK's `MFEErrorBoundary` (`mfe="web-shell"`) around the router shows `AppError` on a render error |
-| `src/app/layouts/screen.tsx` | `#shell-screen` fixed overlay host: `showScreen`, `hideScreen`, `resetScreen` |
-| `src/app/layouts/sessionScreens.tsx` | Mounts the session screens: `askForWorkspace`, `showSignedOut`, `showDeviceClock`, `showSessionEnded`, `showWrongWorkspace`, `showWorkspaceUnavailable` (A6/A8), `showWorkspaceNotFound` (re-exports `WORKSPACE_NOT_FOUND`) |
+| `src/app/routes/App.tsx` | `BrowserRouter` (basename `/t/<slug>` when the URL has one); `/dashboard/*` → `RemoteBoundary remote="dashboard" module="./App"`; `/tenders/*` → `RemoteBoundary remote="tenders" module="./App"` (mfe-tender); `*` → `/dashboard`; `onRouter` hands `navigate` to the bootstrap; mounts the update, workspace-banner, read-only and missing-permissions widgets (the last three in one bottom stack); `notices` prop (the bootstrap's store, read with `useSyncExternalStore`); the SDK's `MFEErrorBoundary` (`mfe="web-shell"`) around the router shows `AppError` on a render error |
+| `src/app/layouts/screen.tsx` | `#shell-screen` fixed overlay host: `showScreen`, `hideScreen`, `isScreenShown` (the bootstrap skips A5 while another screen is up), `resetScreen` |
+| `src/app/layouts/sessionScreens.tsx` | Mounts the session screens: `askForWorkspace`, `showSignedOut`, `showDeviceClock`, `showSessionEnded`, `showWrongWorkspace`, `showWorkspaceUnavailable` (A6/A8), `showUpgradeWelcome` (A5), `showWorkspaceNotFound` (re-exports `WORKSPACE_NOT_FOUND`) |
 | `src/presentation/pages/login/` | `LoginPage`, `useEmailSignIn` (submit, forgot password; the remembered-email repository is a prop) |
-| `src/presentation/features/session-screens/SessionScreens.tsx` | The screens as components: `SignInScreen` (calls the use cases it is given; every failure → catalogue words), `SignedOutDialog`, `DeviceClockDialog`, `SessionEndedDialog`, `WrongWorkspaceDialog`, `WorkspaceNotFoundDialog`, `WorkspaceUnavailableDialog` (A6/A8, one per `WorkspaceBlock`), `WORKSPACE_NOT_FOUND` |
+| `src/presentation/features/session-screens/SessionScreens.tsx` | The screens as components: `SignInScreen` (calls the use cases it is given; every failure → catalogue words), `SignedOutDialog`, `DeviceClockDialog`, `SessionEndedDialog`, `WrongWorkspaceDialog`, `WorkspaceNotFoundDialog`, `UpgradeWelcomeDialog` (A5), `WorkspaceUnavailableDialog` (A6/A8, one per `WorkspaceBlock`), `WORKSPACE_NOT_FOUND` |
 | `src/presentation/components/` | `BrandLogo`, `PageLinks` (help/legal links shown only with a URL, Forgot password button) |
 | `src/presentation/widgets/` | `UpdateAvailable`, `ContextUnavailable` (state and reload passed in as props), `ReadOnlyNotice` (`App` mounts it while `useReadOnly()` is true; `until`: P-1's grace date), `WorkspaceBanners` (banners as props, from the bootstrap's store), `AppError` (the shell's error page: catalogue words, reference, Try again) |
 | `src/application/` | `signIn.ts` (`SignInUseCases`), `use-cases/resolveWorkspace.ts`, `use-cases/requestPasswordReset.ts` (ports injected), `use-cases/loadWorkspaceStatus.ts` (P-1, and P-27 when asked; failures reported and skipped), `use-cases/loadSessionContext.ts` (`blockedWorkspace`: P-35 refusal → `WorkspaceBlock`, re-exports the type; `settleRefusal`: one re-ask of a membership refusal after 5 s; `isTransient`, `retrySessionContext` 1 s, 2 s, 4 s, abortable; `createStore`) |
@@ -26,7 +26,7 @@ Condensed from [ARCHITECTURE.md](../ARCHITECTURE.md) and the [LLD](../docs/lld/w
 | `src/infrastructure/storage/upgradeWelcome.ts` | `upgradeWelcomeStorage`: the A5 seen flag in the SDK's `storage('shell')` |
 | `src/infrastructure/federation/navigator.ts` | `shellNavigator(navigate, basename)`: under the basename → router, else a full load |
 | `src/infrastructure/i18n/shellMessages.ts` | `registerShellMessages`: registers the `shell` namespace and loads it before any screen (bootstrap only) |
-| `src/shared/i18n/` | `en.json` (every user-facing word, keyed), `catalogues.ts` (tag → language → English), `index.ts`: `useShellText` (React), `shellText`, `ShellKey` |
+| `src/shared/i18n/` | `en.json` (every user-facing word, keyed), `catalogues.ts` (tag → language → English), `index.ts`: `useShellText` (React), `shellText`, `shellDate` (a date in the current locale), `ShellKey` |
 | `src/shared/constants/links.ts` | Help and legal links (labels are keys; URLs unset until official) |
 | `src/shared/ui/` | `assets/images/` (carousel photos and logo, content-hashed under `/assets/`), `theme/`, `index.css` |
 | `src/shared/types/globals.d.ts` | `__ENVIRONMENT__`, `__BUILD_VERSION__` |
@@ -50,12 +50,12 @@ Condensed from [ARCHITECTURE.md](../ARCHITECTURE.md) and the [LLD](../docs/lld/w
 | `infrastructure/` | `domain/`, `shared/i18n`, the SDK | `presentation/`, `application/`, `app/` |
 | `presentation/` (any folder) | pages: components, `domain/`, `application/` types, `shared/`; features: pages, components, `domain/`, `application/` types, `shared/i18n`; components: `shared/` only; widgets: `shared/i18n` only | `infrastructure/`, `app/`, the SDK, `application/` values; `fetch`, storage, `location`, `history`, `navigator`, `open` |
 | `presentation/features/` (session screens) | as above, plus SDK `/auth` types | SDK `/auth` values (no login without a click) |
-| `shared/` | `i18n`: SDK `/i18n`, `/react` (text); `constants`: `i18n`; `ui`, `types`: nothing | any shell layer |
+| `shared/` | `i18n`: SDK `/i18n`, `/react` (text, dates); `constants`: `i18n`; `ui`, `types`: nothing | any shell layer |
 | `app/` | `bootstrap.tsx`: every layer except presentation and `shared/constants`, which it reaches through `layouts`, `providers` and `routes` (the only importer of `infrastructure/`, the only module that renders `#app`); `routes`, `providers`, `layouts`: only what they render or provide (arch-lint) | — |
 
 Enforced twice: `eslint.config.js` (editor feedback, browser globals; `test/unit/layer-rules.test.ts`) and `.dependency-cruiser.cjs` (`npm run arch-lint`: every dependency declared per component; `test/unit/arch-lint.test.ts`). Fix a violation by injecting a port or passing a prop from `app/`, never by widening a rule.
 
-SDK subpaths in use: `/core /config /tracing /logging /metrics /flags /auth /http /authz /i18n /mfe /nav /problem /security /react`. Tests also use `/testing` and `contracts/*.json`.
+SDK subpaths in use: `/core /config /tracing /logging /metrics /flags /auth /http /authz /i18n /mfe /nav /problem /security /storage /react`. Tests also use `/testing` and `contracts/*.json`.
 
 ## Build
 
@@ -85,5 +85,5 @@ No CSP or HSTS in the image. CloudFront sends the platform's; until it exists (n
 | `test/e2e/shell.test.tsx` | Real bootstrap and SDK. `load(path)` = unmount roots, clear `globalThis[Symbol.for('@bcbp-solutions-fzc-llc/frontend-sdk')]`, `vi.resetModules()`, import the bootstrap again. Needs `server.deps.inline` for the SDK in `vitest.config.ts`. Stubs: the remote's entry `<script>` (defines `window.__platform_mfe_dashboard`, or `__platform_mfe_tenders` for `/remotes/tenders/…`), `location.assign/replace` (recorded), `HTMLFormElement#submit` (the sign-out POST, recorded), `createRoot` (tracked) |
 | `test/fixtures` | `FakeKeycloak` (`approve()`, token endpoint, PKCE check, refresh rotation, `now` for clock skew), `FakeNetwork` (`on('GET /path', …)`, `sent(path)`), `FakeBroadcastChannel` |
 | `test/smoke` | `vitest.smoke.config.ts`; `SMOKE_BASE_URL` required; `SMOKE_MODE` `image` (localhost default) or `live` (CSP incl. `form-action`, HSTS, nosniff) |
-| `test/browser/shell.spec.ts` | Production build in Chromium, Firefox, WebKit over HTTPS with the production CSP; fake Keycloak on a second origin; a stub remote on the shared SDK. 6 cases × 3 engines. Not in `npm test` |
+| `test/browser/shell.spec.ts` | Production build in Chromium, Firefox, WebKit over HTTPS with the production CSP; fake Keycloak on a second origin; a stub remote on the shared SDK. 8 cases × 3 engines. Not in `npm test` |
 | `test/browser/dashboard.spec.ts` | Same, with a real mfe-dashboard build (`REMOTE_DIST`). 4 cases × 3 engines; CI `Dashboard contract` (informational) |

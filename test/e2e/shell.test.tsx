@@ -1,6 +1,6 @@
 // The shell booted end to end in-process, as platform-reactcommon test/e2e/shell.test.tsx does for
 // its reference shell: the real bootstrap, screens, App and the real SDK (nothing mocked), against a
-// FakeNetwork (runtime config, manifest, IAM PUB-1 and P-35) and a FakeKeycloak (PKCE).
+// FakeNetwork (runtime config, manifest, IAM PUB-1, P-35, P-1 and P-27) and a FakeKeycloak (PKCE).
 //
 // Each load() is a page load in the same tab: storage is kept, the SDK starts from nothing (its
 // runtime global is cleared and every module is evaluated again), and the bootstrap runs.

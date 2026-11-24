@@ -1,6 +1,6 @@
 // @vitest-environment node
-// config/dev-platform.mjs: the dev server's stand-in for CloudFront and the IAM ports. Its PUB-1 and
-// P-35 answers must map through the shell's own iam.ts, or local sign-in breaks.
+// config/dev-platform.mjs: the dev server's stand-in for CloudFront and the IAM ports. Its PUB-1, P-35,
+// P-1 and P-27 answers must map through the shell's own iam.ts, or local sign-in breaks.
 import { createServer, request, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { join } from 'node:path'
@@ -124,6 +124,9 @@ describe('dev platform middleware', () => {
     expect(toTenantStatus((await get('/api/v1/tenants/local-tenant')).json() as TenantResponse)).toMatchObject({ status: 'trial', trialEndsAt: expect.any(String) })
     vi.stubEnv('DEV_TENANT_STATUS', 'cancelled')
     expect(toTenantStatus((await get('/api/v1/tenants/local-tenant')).json() as TenantResponse)).toMatchObject({ status: 'cancelled', readOnlyUntil: expect.any(String) })
+    // A cancelled workspace is read-only on P-35 too, so the notice and its date show in dev.
+    const ctx = (await get('/api/v1/me/session-context', { headers: { authorization: 'Bearer t' } })).json() as SessionContextResponse
+    expect(ctx.read_only).toBe(true)
   })
 
   it('answers other API paths 404 and passes non-API paths on', async () => {

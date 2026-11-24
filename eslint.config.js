@@ -113,7 +113,7 @@ export default tseslint.config(
   },
   {
     // shared/: cross-cutting helpers for every layer (text, constants, UI assets, types). It depends
-    // on no shell layer, and of the SDK only on text lookup (/i18n) and its React hook (/react).
+    // on no shell layer, and of the SDK only on text lookup and date formatting (/i18n) and its React hook (/react).
     files: ['src/shared/**/*.{ts,tsx}'],
     rules: {
       'no-restricted-imports': 'off',

@@ -23,7 +23,7 @@ export function useShellText(): (key: ShellKey, vars?: Vars) => string {
   return useT(SHELL_NAMESPACE)
 }
 
-/** A calendar date (RFC 3339 in) in the current locale, e.g. "24 Dec 2026". Use inside a component that calls useShellText, so it follows the locale. */
+/** A calendar date (RFC 3339 in) in the current locale, e.g. "Dec 24, 2026" in English. Use inside a component that calls useShellText, so it follows the locale. */
 export function shellDate(iso: string): string {
   return formatDate(iso, { dateStyle: 'medium' })
 }

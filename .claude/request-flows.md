@@ -36,7 +36,7 @@ Typed email, workspace name or URL (`toIdentifier`) → PUB-1 (generic message o
 |---|---|
 | `expired` | "Session ended" over the app (text: `serverEnded`, `idle`, other); Sign in → `signInAgain` with the sign-in screen as `ask` |
 | `anonymous` / `signed-out` (here or another tab) | Unmount `#app`, then "You are signed out"; Sign in → `idp.login({ workspace })` |
-| P-35 `read_only`, or a `DENY_TENANT_READ_ONLY` answer seen on the page | "Workspace is read-only (subscription ended)" at the bottom (`useReadOnly`), no action |
+| P-35 `read_only`, or a `DENY_TENANT_READ_ONLY` answer seen on the page | "Workspace is read-only (subscription ended)" at the bottom (`useReadOnly`), no action; for a cancelled workspace, P-1's `read_only_until` adds "Access ends on <date>" |
 | New `/version.json` | "A new version is available." with Reload (`useAppUpdate`); never forced |
 | `switchWorkspace(id)` | PUB-1 → not found: "Workspace not found"; else `idp.switchWorkspace` |
 | Remote `useSignOut()` | `idp.logout()`; global by default: form POST to the realm's end-session endpoint (ID token out of URLs; CSP `form-action` must allow the IdP), then `/` shows the signed-out dialog |
@@ -53,5 +53,7 @@ Typed email, workspace name or URL (`toIdentifier`) → PUB-1 (generic message o
 | `GET /api/v1/public/tenants/resolve?identifier=` (PUB-1) | none | `workspaceResolver` |
 | `POST {idp}/realms/{realm}/protocol/openid-connect/token` | — | SDK |
 | `GET /api/v1/me/session-context` (P-35) | Bearer | `sessionContextSource` |
+| `GET /api/v1/tenants/:id` (P-1) | Bearer | `workspaceStatusSource` |
+| `GET /api/v1/tenants/:id/seat-usage` (P-27) | Bearer | `workspaceStatusSource` (`manage:members` only) |
 | `GET /remotes/manifest.json`, `/version.json` | — | SDK `/mfe` |
 | `POST /otel/v1/{traces,logs,metrics}` | — | SDK telemetry, consent-gated |

@@ -5,7 +5,7 @@
 | Command | What |
 |---|---|
 | `npm ci` | Needs `NODE_AUTH_TOKEN` (`gh auth refresh -s read:packages`; `export NODE_AUTH_TOKEN=$(gh auth token)`) |
-| `npm run dev` / `preview` | Rsbuild on :5001 with `config/dev-platform.mjs` (`DEV_API_URL`, `DEV_REALM`, `DEV_ROLES`) |
+| `npm run dev` / `preview` | Rsbuild on :5001 with `config/dev-platform.mjs` (`DEV_API_URL`, `DEV_REALM`, `DEV_ROLES`, `DEV_TENANT_STATUS`) |
 | `npm run keycloak:setup` | Keycloak 26.8.1 on :8080, realm `tenant-bcbp`, client `app1`, seed user |
 | `npm run lint` / `typecheck` / `build` | ESLint (platform rules) / `tsc -p tsconfig.test.json` / `tsc && rsbuild build` |
 | `npm run arch-lint` | dependency-cruiser over `src/` with `.dependency-cruiser.cjs`: the component map (`components`, `deps.mayDependOn`, `vendors`, `typeOnlyVendors`) in allowed mode, plus no cycles and no unresolvable imports. Like go-arch-lint |

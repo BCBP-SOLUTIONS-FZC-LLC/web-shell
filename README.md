@@ -16,7 +16,7 @@ The browser shell for the BCBP micro-frontend platform. It runs the platform SDK
 |---|---|
 | The SDK bootstrap (`src/app/bootstrap/bootstrap.tsx`) and the routes of the signed-in app: `/t/<slug>/dashboard/*` renders the dashboard remote, `/t/<slug>/tenders/*` the tenders remote | Dashboard pages, navigation inside the dashboard and dashboard data (`mfe-dashboard`, loaded as `dashboard`); tender screens (`mfe-tender`, loaded as `tenders`) |
 | The sign-in page (email, workspace name or URL) and the session screens. The SDK does Authorization Code + PKCE against the workspace's Keycloak realm and keeps tokens in memory | Credentials, password policy, MFA and token issuance (Keycloak). This repo ships a local realm and theme for development |
-| The IAM ports: PUB-1 (email or slug → realm) and P-35 (session context), over the SDK's `ApiClient` | The IAM APIs themselves, tenant membership, roles and audit |
+| The IAM ports: PUB-1 (email or slug → realm), P-35 (session context), and P-1/P-27 for the banners (tenant, seat usage), over the SDK's `ApiClient` | The IAM APIs themselves, tenant membership, roles and audit |
 | The shell value remotes read through SDK hooks: the user, workspace, session context and sign-out (`PlatformProvider`) | Any other remote. `dashboard` and `tenders` are in the local manifest |
 | Static hosting of `index.html`, hashed `/assets/`, `/config/runtime.json`, `/remotes/manifest.json`, `/version.json` and `GET /healthz` | Cluster deploy and each environment's runtime config and remote manifest. Publishing a tag pushes an image; it does not roll a cluster |
 
@@ -146,7 +146,7 @@ web-shell/
 │   ├── presentation/            # pages/login, features/session-screens, components, widgets
 │   ├── application/             # Use cases: resolve workspace, password reset, session context retry and refusal mapping, workspace status
 │   ├── domain/                  # Contracts, errors, the role map, the identifier, workspace-access and banner rules
-│   ├── infrastructure/          # api (PUB-1, P-35), auth (password reset), storage (remember email), federation (navigator), i18n
+│   ├── infrastructure/          # api (PUB-1, P-35, P-1, P-27), auth (password reset), storage (remember email), federation (navigator), i18n
 │   └── shared/                  # i18n (the shell's text), constants (links), ui (images, theme, CSS), types
 ├── .dependency-cruiser.cjs      # Architecture lint: components and their allowed dependencies
 ├── rsbuild.config.ts           # Platform plugin, React, Tailwind, dev server
@@ -192,7 +192,7 @@ The full component map is in CONTRIBUTING (§ Architecture lint); `test/unit/lay
 
 | Key or channel | Store | Purpose |
 |---|---|---|
-| `@bcbp-solutions-fzc-llc/frontend-sdk:*` | `localStorage` | SDK metadata: workspace cache (up to 20), session id, last activity, last user. No tokens |
+| `@bcbp-solutions-fzc-llc/frontend-sdk:*` | `localStorage` | SDK metadata: workspace cache (up to 20), session id, last activity, last user; also `storage()` values such as the A5 seen flag below. No tokens |
 | `bcbp.rememberEmail`, `bcbp.loginEmail` | `localStorage` | "Remember Email" on the login form only: an email or a bare workspace name, never a URL (`infrastructure/storage/rememberedEmail.ts`, the one raw-storage file) |
 | `…:storage:<workspace>:shell:upgradeWelcomeSeen` | `localStorage` (SDK `storage('shell')`) | The upgrade welcome (A5) was seen in this workspace on this device; cleared on sign-out |
 | `BroadcastChannel` `platform-auth` | Browser | SDK: sign-out and workspace switches reach every tab |
@@ -296,7 +296,7 @@ The dev server stands in for what CloudFront and the platform APIs provide (`con
 | `/config/runtime.json` | `config/runtime.local.json` (Keycloak `http://localhost:8080`, client `app1`, environment `local`) |
 | `/remotes/manifest.json` | `config/remotes.local.json` (`dashboard` at `http://localhost:5002/remoteEntry.js`, `tenders` at `http://localhost:5003/remoteEntry.js`) |
 | `GET /api/v1/public/tenants/resolve` | Any identifier → realm `tenant-bcbp` |
-| `GET /api/v1/me/session-context` | Slug `bcbp`, roles `member`, `tenant_owner` (the signup owner; `DEV_ROLES=member,tenant_admin` overrides), 401 without a bearer token |
+| `GET /api/v1/me/session-context` | Slug `bcbp`, roles `member`, `tenant_owner` (the signup owner; `DEV_ROLES=member,tenant_admin` overrides), `read_only` only with `DEV_TENANT_STATUS=cancelled`, 401 without a bearer token |
 | `GET /api/v1/tenants/local-tenant` and `…/seat-usage` | P-1 `Local workspace`, status `DEV_TENANT_STATUS` (default `active`); P-27 3 of 10 seats |
 | `POST /otel/*` | `204`, dropped |
 
@@ -317,7 +317,7 @@ With Keycloak and the dev server running (`mfe-dashboard` too for the sign-out r
 | Session expiry | Set `auth.idleTimeoutMs` to `60000` (the SDK's minimum; lower values are refused) in `config/runtime.local.json` and leave the tab idle: "Session ended" appears over the app |
 | Missing permissions | Sign in once without it (that caches the workspace), then restart with `DEV_API_URL=http://localhost:9 npm run dev` (nothing listens there) and reload: P-35 gets a 503 problem, the amber notice says some actions are hidden, and the background retry runs. PUB-1 is proxied too, so the sign-in screen cannot resolve while it is set |
 | A different role | `DEV_ROLES=member,tenant_admin npm run dev` |
-| A workspace banner | `DEV_TENANT_STATUS=trial npm run dev` (or `past_due`, `cancelled` with a read-only date) |
+| A workspace banner | `DEV_TENANT_STATUS=trial npm run dev` (or `past_due` as the default owner; `cancelled` also makes the P-35 stub `read_only`, so the read-only notice shows with its end date) |
 | Remote down | Stop `mfe-dashboard`: `/t/bcbp/dashboard` shows the boundary's error, the shell keeps running |
 
 ### Developer tools
@@ -482,7 +482,7 @@ The image takes `PLATFORM_ENVIRONMENT`, `BUILD_VERSION` and `SOURCE_DATE_EPOCH` 
 | `DEV_API_URL` | `config/dev-platform.mjs` | Proxy `/api` to a real API instead of the stubs (unreachable → 503 problem) |
 | `DEV_REALM` | `config/dev-platform.mjs` | The realm the PUB-1 stub returns (default `tenant-bcbp`) |
 | `DEV_ROLES` | `config/dev-platform.mjs` | The roles the P-35 stub returns (default `member,tenant_owner`) |
-| `DEV_TENANT_STATUS` | `config/dev-platform.mjs` | The `status` the P-1 stub returns (default `active`; `trial` adds a trial end in 14 days, `cancelled` a read-only end in 30) |
+| `DEV_TENANT_STATUS` | `config/dev-platform.mjs` | The `status` the P-1 stub returns (default `active`; `trial` adds a trial end in 14 days; `cancelled` adds a read-only end in 30 and makes the P-35 stub `read_only: true`) |
 | `SMOKE_BASE_URL` | `test/smoke` | The image or deployment the smoke suite checks (required) |
 | `SMOKE_MODE` | `test/smoke` | `image` (adds nginx's headers) or `live` (adds the CSP, HSTS and the `environment` check) |
 | `ENVIRONMENT` | `test/smoke` | The page environment the runtime config is validated with (default `prod` for `image`, `dev` for `live`); in `live` also the environment the deployed `runtime.json` must name |
@@ -526,7 +526,7 @@ One alert is defined here: `WebShellStartupFailures` (Loki, on `the app could no
 
 ### Tracing and logs
 
-OTLP/HTTP to the same-origin `telemetry.otlpBaseUrl` (`/otel`), sampled by `telemetry.sampleRatio`. API calls carry `x-request-id`, `traceparent` and `x-session-id`. v1 consent is essential only, so error logs and essential warnings leave the page and the rest stays in it. The shell's own events: `the app could not start` (error), `manifest load failed` (error), `session context unavailable` (warning, kept in the page under v1 consent). Error boundaries (`RemoteBoundary`, `MFEErrorBoundary` `web-shell`) log render errors with their `mfe`.
+OTLP/HTTP to the same-origin `telemetry.otlpBaseUrl` (`/otel`), sampled by `telemetry.sampleRatio`. API calls carry `x-request-id`, `traceparent` and `x-session-id`. v1 consent is essential only, so error logs and essential warnings leave the page and the rest stays in it. The shell's own events: `the app could not start` (error), `manifest load failed` (error), `session context unavailable` and `workspace status unavailable` (warnings, kept in the page under v1 consent). Error boundaries (`RemoteBoundary`, `MFEErrorBoundary` `web-shell`) log render errors with their `mfe`.
 
 ---
 

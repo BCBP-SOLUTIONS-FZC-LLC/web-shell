@@ -40,6 +40,8 @@ graph LR
     root --> sdk
     host --> screens
     host -. types .-> usecases
+    host -. types .-> text
+    host -. /auth types .-> sdk
     host --> screen
     screens --> login
     screens -. types, signIn.ts .-> usecases

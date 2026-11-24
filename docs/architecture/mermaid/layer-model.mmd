@@ -10,12 +10,12 @@ graph TD
     subgraph presentation["presentation/"]
         pages["pages/login\nLoginPage, useEmailSignIn"]
         features["features/session-screens\nsign-in, signed out, session ended, …"]
-        widgets["widgets/\nupdate notice, read-only notice, missing permissions, error page"]
+        widgets["widgets/\nupdate notice, workspace banners, read-only notice,\nmissing permissions, error page"]
         components["components/\nBrandLogo, PageLinks"]
     end
 
     subgraph application["application/"]
-        usecases["use-cases/\nresolveWorkspace, requestPasswordReset,\nloadSessionContext"]
+        usecases["use-cases/\nresolveWorkspace, requestPasswordReset,\nloadSessionContext, loadWorkspaceStatus"]
     end
 
     subgraph domain["domain/"]
@@ -31,7 +31,7 @@ graph TD
     end
 
     subgraph sdk["@bcbp-solutions-fzc-llc/frontend-sdk, shared with remotes"]
-        sdkmods["/core /config /auth /http /authz /flags /problem\n/tracing /logging /metrics /i18n /mfe /nav /security /react"]
+        sdkmods["/core /config /auth /http /authz /flags /problem\n/tracing /logging /metrics /i18n /mfe /nav /security /storage /react"]
     end
 
     subgraph remote["Remotes, loaded in the browser"]

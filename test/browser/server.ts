@@ -4,7 +4,7 @@
 // - the app (https://127.0.0.1:<port>): the production build in dist/ with the PRODUCTION response
 //   headers (platform-reactcommon examples/cloudfront/csp.mjs, copied below), the nginx SPA rule, a
 //   runtime config pointed at the fake Keycloak, a manifest with one remote whose entry is a stub
-//   built only on the shared SDK (as mfe-dashboard is), IAM PUB-1 and P-35, and recorders for
+//   built only on the shared SDK (as mfe-dashboard is), IAM PUB-1, P-35, P-1 and P-27, and recorders for
 //   /otel/* and /csp-report;
 // - a fake Keycloak on a second origin (https://127.0.0.1:<port>): authorize (the user is taken as
 //   signed in), the token endpoint with PKCE and CORS, and the end-session endpoint the SDK's
