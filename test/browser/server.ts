@@ -232,6 +232,11 @@ export async function startServers(): Promise<{ app: string; idp: string; close:
         locale: 'en',
       })
     }
+    // IAM P-1 and P-27 for the banners: a paid workspace with free seats shows none.
+    if (p === '/api/v1/tenants/7d3c1f9e-2b4a-4c6d-8e0f-1a2b3c4d5e6f') return json(res, 200, { name: 'Acme', status: 'active' })
+    if (p === '/api/v1/tenants/7d3c1f9e-2b4a-4c6d-8e0f-1a2b3c4d5e6f/seat-usage') {
+      return json(res, 200, { active_users: 3, pending_invitations: 0, licensed_seats: 10 })
+    }
     // nginx's SPA rule: only extension-less paths are app routes; a missing file is 404.
     if (/^\/(api|otel|config|remotes|assets)(\/|$)/.test(p) || extname(p)) {
       const file = normalize(join(DIST, p))

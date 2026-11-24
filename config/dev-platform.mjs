@@ -75,6 +75,20 @@ export function devPlatformMiddleware(root) {
         read_only: false,
       })
     }
+    // IAM P-1 and P-27 for the banners. DEV_TENANT_STATUS (trial, past_due, cancelled …) shows one.
+    if (path === '/api/v1/tenants/local-tenant') {
+      const status = process.env.DEV_TENANT_STATUS ?? 'active'
+      const days = (n) => new Date(Date.now() + n * 86_400_000).toISOString()
+      return send(res, 200, {
+        name: 'Local workspace',
+        status,
+        ...(status === 'trial' ? { trial_ends_at: days(14) } : {}),
+        ...(status === 'cancelled' ? { read_only_until: days(30) } : {}),
+      })
+    }
+    if (path === '/api/v1/tenants/local-tenant/seat-usage') {
+      return send(res, 200, { active_users: 3, pending_invitations: 0, licensed_seats: 10 })
+    }
     return sendProblem(res, PlatformProblemTypes.NotFound)
   }
 }

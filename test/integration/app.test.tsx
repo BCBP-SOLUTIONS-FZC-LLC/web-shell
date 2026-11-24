@@ -1,5 +1,6 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
+import en from '../../src/shared/i18n/en.json'
 
 const routeTemplate = vi.fn()
 const boundaryProps = vi.fn()
@@ -23,6 +24,8 @@ vi.mock('@bcbp-solutions-fzc-llc/frontend-sdk/react', async (original) => ({
 }))
 
 const { default: App, DASHBOARD_REMOTE, TENDERS_REMOTE } = await import('../../src/app/routes/App')
+const { createStore } = await import('../../src/application/use-cases/loadSessionContext')
+type AppNotices = import('../../src/app/routes/App').AppNotices
 
 describe('App', () => {
   it('renders the dashboard remote under the workspace basename, with no props', () => {
@@ -104,6 +107,45 @@ describe('App', () => {
     } finally {
       readOnly = false
       context = { roles: ['member'] }
+    }
+  })
+
+  it('shows the workspace banners in the same bottom stack, and follows the store when they arrive', () => {
+    window.history.replaceState({}, '', '/t/acme/dashboard')
+    const notices = createStore<AppNotices>({ banners: [] })
+    render(<App basename="/t/acme" notices={notices} />)
+    expect(screen.queryByRole('status')).toBeNull()
+    act(() =>
+      notices.set({
+        banners: [{ kind: 'trial', days: 12 }, { kind: 'past-due' }, { kind: 'seats-full', seats: 25 }, { kind: 'ownerless' }],
+      }),
+    )
+    expect(screen.getAllByRole('status').map((n) => n.textContent)).toEqual([
+      '12 days left in your trial',
+      en['app.banner.pastDue'],
+      'All 25 seats are in use. New invitations will be refused until seats are added.',
+      en['app.banner.ownerless'],
+    ])
+    expect(screen.queryByRole('button')).toBeNull()
+  })
+
+  it.each([
+    [1, '1 day left in your trial'],
+    [0, 'Your trial ends today'],
+  ])('says %i trial days left in words', (days, words) => {
+    window.history.replaceState({}, '', '/t/acme/dashboard')
+    render(<App basename="/t/acme" notices={createStore<AppNotices>({ banners: [{ kind: 'trial', days }] })} />)
+    expect(screen.getByRole('status')).toHaveTextContent(words)
+  })
+
+  it("adds the grace end date to the read-only notice when IAM gives one (P-1 read_only_until)", () => {
+    window.history.replaceState({}, '', '/t/acme/dashboard')
+    readOnly = true
+    try {
+      render(<App basename="/t/acme" notices={createStore<AppNotices>({ banners: [], readOnlyUntil: '2026-12-24T10:00:00Z' })} />)
+      expect(screen.getByRole('status')).toHaveTextContent('Workspace is read-only (subscription ended). Access ends on Dec 24, 2026.')
+    } finally {
+      readOnly = false
     }
   })
 

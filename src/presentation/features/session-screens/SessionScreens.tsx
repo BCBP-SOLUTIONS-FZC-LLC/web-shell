@@ -46,8 +46,8 @@ function Dialog({ title, role = 'dialog', children }: { title: ShellKey; role?: 
 }
 
 /** A paragraph of the dialog. */
-function Text({ id }: { id: ShellKey }) {
-  return <p className="mt-3 text-sm text-gray-600">{useShellText()(id)}</p>
+function Text({ id, vars }: { id: ShellKey; vars?: Record<string, string | number> }) {
+  return <p className="mt-3 text-sm text-gray-600">{useShellText()(id, vars)}</p>
 }
 
 function Button({ onClick, label }: { onClick: () => void; label: ShellKey }) {
@@ -152,6 +152,20 @@ export function WorkspaceUnavailableDialog({ block, onSignOut, onSwitch }: { blo
       <Text id={text} />
       <Button onClick={onSignOut} label="common.signOut" />
       <Button onClick={onSwitch} label="session.wrongWorkspace.switch" />
+    </Dialog>
+  )
+}
+
+/**
+ * The workspace moved from its trial to a paid plan (spec A5): welcome words only, never "error". Shown
+ * once per device over the running app; the user already set a new password (and MFA, if they had it)
+ * on the new sign-in page.
+ */
+export function UpgradeWelcomeDialog({ name, onContinue }: { name: string; onContinue: () => void }) {
+  return (
+    <Dialog title="session.upgraded.title">
+      <Text id="session.upgraded.text" vars={{ name }} />
+      <Button onClick={onContinue} label="common.continue" />
     </Dialog>
   )
 }

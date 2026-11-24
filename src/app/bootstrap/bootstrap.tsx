@@ -26,18 +26,21 @@ import {
   type Workspace,
 } from '@bcbp-solutions-fzc-llc/frontend-sdk/auth'
 import { setTokenSource } from '@bcbp-solutions-fzc-llc/frontend-sdk/http'
-import { roleMapAuthorizer, setAuthorizer, setAuthzSubject } from '@bcbp-solutions-fzc-llc/frontend-sdk/authz'
+import { hasPermission, roleMapAuthorizer, setAuthorizer, setAuthzSubject } from '@bcbp-solutions-fzc-llc/frontend-sdk/authz'
 import { initializeI18n } from '@bcbp-solutions-fzc-llc/frontend-sdk/i18n'
 import { loadManifest, startVersionPolling } from '@bcbp-solutions-fzc-llc/frontend-sdk/mfe'
 import { registerNavigator } from '@bcbp-solutions-fzc-llc/frontend-sdk/nav'
 import { installTrustedTypesPolicy } from '@bcbp-solutions-fzc-llc/frontend-sdk/security'
 import { installGlobalErrorHandlers } from '@bcbp-solutions-fzc-llc/frontend-sdk/react'
-import App from '../routes/App'
+import App, { type AppNotices } from '../routes/App'
 import type { SignInUseCases } from '../../application/signIn'
 import { requestPasswordResetUseCase } from '../../application/use-cases/requestPasswordReset'
 import { resolveWorkspaceUseCase } from '../../application/use-cases/resolveWorkspace'
 import { isEmailIdentifier } from '../../domain/rules/identifier'
-import { loadSessionContextOnce, sessionContextSource, workspaceResolver } from '../../infrastructure/api/iam'
+import { loadSessionContextOnce, sessionContextSource, workspaceResolver, workspaceStatusSource } from '../../infrastructure/api/iam'
+import { upgradeWelcomeStorage } from '../../infrastructure/storage/upgradeWelcome'
+import { loadWorkspaceStatus } from '../../application/use-cases/loadWorkspaceStatus'
+import { readOnlyUntil, recentlyUpgraded, workspaceBanners } from '../../domain/rules/workspaceBanners'
 import { passwordResetUrl } from '../../infrastructure/auth/passwordReset'
 import { localStorageRememberedEmail } from '../../infrastructure/storage/rememberedEmail'
 import { shellNavigator } from '../../infrastructure/federation/navigator'
@@ -47,6 +50,7 @@ import {
   showDeviceClock,
   showSessionEnded,
   showSignedOut,
+  showUpgradeWelcome,
   showWorkspaceNotFound,
   showWorkspaceUnavailable,
   showWrongWorkspace,
@@ -261,6 +265,31 @@ async function start(cfg: RuntimeConfig, report: { otlpBaseUrl: string }): Promi
     },
     signOut: (o?: { global?: boolean }) => idp.logout(o),
   }
+  // The workspace banners and the read-only grace date (IAM P-1, P-27 for owners and tenant admins),
+  // loaded once in the background when the context is known: a failure only means no banners.
+  const notices = createStore<AppNotices>({ banners: [] })
+  let noticesRequested = false
+  const loadNotices = async () => {
+    const c = context.get()
+    if (!c || noticesRequested) return
+    noticesRequested = true
+    const who = { owner: hasPermission('manage', 'tenant-settings'), manager: hasPermission('manage', 'members') }
+    const status = await loadWorkspaceStatus(workspaceStatusSource, c.tenantId, {
+      seats: who.manager,
+      signal: signedOutDuringBoot.signal,
+      onError: (error, what) => getLogger().warn('workspace status unavailable', { error, what }),
+    })
+    if (signedOut()) return
+    const now = Date.now()
+    const until = readOnlyUntil(status.tenant)
+    notices.set({ banners: workspaceBanners(status.tenant, status.seats, who, now), ...(until ? { readOnlyUntil: until } : {}) })
+    // A trial that just converted (A5): welcome the user once on this device.
+    if (status.tenant && recentlyUpgraded(status.tenant, now) && !upgradeWelcomeStorage.seen()) {
+      showUpgradeWelcome(status.tenant.name, () => upgradeWelcomeStorage.markSeen())
+    }
+  }
+  const startNotices = () => void loadNotices().catch((error: unknown) => getLogger().warn('workspace status unavailable', { error }))
+
   let basename = routerBasename()
   const render = () => {
     const base = basename
@@ -271,7 +300,7 @@ async function start(cfg: RuntimeConfig, report: { otlpBaseUrl: string }): Promi
       <StrictMode>
         <ShellRoot context={context} shell={shell}>
           {/* Keyed by the basename: a router whose basename changes is a new router. */}
-          <App key={base ?? '/'} {...(base ? { basename: base } : {})} onRouter={onRouter} />
+          <App key={base ?? '/'} {...(base ? { basename: base } : {})} onRouter={onRouter} notices={notices} />
         </ShellRoot>
       </StrictMode>,
     )
@@ -279,6 +308,7 @@ async function start(cfg: RuntimeConfig, report: { otlpBaseUrl: string }): Promi
   hideScreen()
   app = createRoot(document.getElementById('app')!)
   render()
+  startNotices()
 
   // A transient failure (the ApiClient's own rule: online network error, timeout, 429, 502-504) is
   // retried 3 times (1 s, 2 s, 4 s), one request each (loadSessionContextOnce); on success
@@ -303,6 +333,7 @@ async function start(cfg: RuntimeConfig, report: { otlpBaseUrl: string }): Promi
     if (retried && !signedOut()) {
       context.set(retried)
       applyContext()
+      startNotices()
       // rememberWorkspace may have moved the URL under /t/<slug>/: route from there.
       const moved = routerBasename()
       if (moved !== basename) {
