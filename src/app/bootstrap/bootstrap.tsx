@@ -36,7 +36,7 @@ import App, { type AppNotices } from '../routes/App'
 import type { SignInUseCases } from '../../application/signIn'
 import { requestPasswordResetUseCase } from '../../application/use-cases/requestPasswordReset'
 import { resolveWorkspaceUseCase } from '../../application/use-cases/resolveWorkspace'
-import { isEmailIdentifier } from '../../domain/rules/identifier'
+import { isEmailIdentifier, toIdentifier } from '../../domain/rules/identifier'
 import { loadSessionContextOnce, sessionContextSource, workspaceResolver, workspaceStatusSource } from '../../infrastructure/api/iam'
 import { upgradeWelcomeStorage } from '../../infrastructure/storage/upgradeWelcome'
 import { loadWorkspaceStatus } from '../../application/use-cases/loadWorkspaceStatus'
@@ -52,11 +52,20 @@ import {
   showSignedOut,
   showUpgradeWelcome,
   showWorkspaceNotFound,
+  showWorkspaceLoadFailed,
+  showWorkspaceLoading,
   showWorkspaceUnavailable,
   showWrongWorkspace,
 } from '../layouts/sessionScreens'
 import { hideScreen, isScreenShown } from '../layouts/screen'
-import { blockedWorkspace, createStore, isTransient, retrySessionContext, settleRefusal } from '../../application/use-cases/loadSessionContext'
+import {
+  blockedWorkspace,
+  createStore,
+  isTransient,
+  refusalIsReasked,
+  retrySessionContext,
+  settleRefusal,
+} from '../../application/use-cases/loadSessionContext'
 import { ShellRoot } from '../providers/ShellRoot'
 import { registerShellMessages } from '../../infrastructure/i18n/shellMessages'
 // Self-hosted fonts (Fontsource, SIL OFL 1.1): served from /assets/, as the platform CSP requires
@@ -64,6 +73,22 @@ import { registerShellMessages } from '../../infrastructure/i18n/shellMessages'
 import '@fontsource-variable/geist'
 import '@fontsource-variable/inter'
 import '../../shared/ui/index.css'
+
+/**
+ * A trial workspace that nothing can check after sign-in: no slug to compare with P-35's, and no tenant
+ * id hint for isWrongWorkspace. The shared trial realm's SSO session could be another user's.
+ */
+function uncheckable(w: Workspace): boolean {
+  return w.trial && w.slug === undefined && w.tenantIdHint === undefined
+}
+
+/** `prompt: 'login'` for a workspace nothing can check after sign-in (`uncheckable`), else nothing. */
+function credentialsFor(w: Workspace): { prompt?: 'login' } {
+  return uncheckable(w) ? { prompt: 'login' } : {}
+}
+
+/** How often the banners are worked out again from the loaded P-1 and P-27 (the trial's days left). */
+const BANNER_REFRESH_MS = 3_600_000
 
 /** Where the platform's telemetry goes when the runtime config could not be read (its default). */
 const DEFAULT_OTLP_BASE_URL = '/otel'
@@ -149,18 +174,28 @@ async function start(cfg: RuntimeConfig, report: { otlpBaseUrl: string }): Promi
   if (session.status === 'anonymous') {
     // init() has already moved the URL off the callback path to the page the user opened.
     const signIn = async () => {
-      // A failed silent attempt names its workspace; otherwise /t/<slug> → cached or resolved
-      // workspace, else the most recent cached one, else ask for the email.
+      // A failed silent attempt names its workspace (a trial one re-checked with PUB-1). Without one, PUB-1
+      // no longer knows it (the SDK dropped it): ask for the email, never another cached workspace (SDK
+      // alpha.7 SessionState). Otherwise /t/<slug> → cached or resolved workspace, else the most recent
+      // cached one, else ask for the email.
       const known: Workspace | undefined =
-        (session.reason === 'login-required' ? session.workspace : undefined) ??
-        (await chooseWorkspace({ pathname: window.location.pathname, resolver: workspaceResolver, cfg: cfg.auth }))
+        session.reason === 'login-required'
+          ? session.workspace
+          : await chooseWorkspace({ pathname: window.location.pathname, resolver: workspaceResolver, cfg: cfg.auth })
       // The remembered value may be a workspace name: only an email becomes login_hint.
       const remembered = signInUseCases.rememberedEmail.get()
       const choice = known
         ? { workspace: known, ...(isEmailIdentifier(remembered) ? { loginHint: remembered } : {}) }
         : await askForWorkspace(signInUseCases)
       // returnUrl defaults to the current page in the SDK.
-      await idp.login({ workspace: choice.workspace, ...(choice.loginHint ? { loginHint: choice.loginHint } : {}) })
+      await idp.login({
+        workspace: choice.workspace,
+        ...(choice.loginHint ? { loginHint: choice.loginHint } : {}),
+        // A trial workspace with neither a slug nor a tenant id hint (an invitation email, if IAM drops the
+        // hint: OQ-10) cannot be checked after sign-in: credentials, never another user's live SSO session.
+        // Every other way in does the same: signInAgain (its `prompt` callback) and a remote's switch.
+        ...credentialsFor(choice.workspace),
+      })
     }
     // After a logout, wait for the user: an automatic login would ride the live SSO session.
     if (session.reason === 'signed-out') showSignedOut(signIn)
@@ -182,14 +217,26 @@ async function start(cfg: RuntimeConfig, report: { otlpBaseUrl: string }): Promi
   const signedOut = () => signedOutDuringBoot.signal.aborted
   // Set once the session expired during use: "Session ended" is up and nothing may replace it.
   let expired = false
+  // Set once a refusal screen replaced the app or the boot (A6/A8, wrong workspace, not loaded): it stays.
+  let refused = false
+  const refuse = (show: () => void) => {
+    refused = true
+    show()
+  }
+  // The boot steps stop on any of them: nothing may mount, cover the screen that is up, or keep working
+  // for an app that is gone (the hourly banner refresh).
+  const stopped = () => signedOut() || expired || refused
   idp.subscribe((s) => {
     // Expiry happens only during use. Never redirect on our own; the user clicks "Sign in".
-    if (s.status === 'expired') {
+    // A refusal screen stays: "Session ended" over it would sign in again to the same session (a foreign
+    // trial one, say), and the screen's own Sign out and Switch already ask for credentials.
+    if (s.status === 'expired' && !refused) {
       expired = true
       showSessionEnded(s, () =>
         signInAgain({
           idp,
           state: s,
+          prompt: (w) => credentialsFor(w).prompt,
           resolver: workspaceResolver,
           cfg: cfg.auth,
           ask: () => askForWorkspace(signInUseCases).then((c) => c.workspace),
@@ -216,19 +263,87 @@ async function start(cfg: RuntimeConfig, report: { otlpBaseUrl: string }): Promi
       return undefined
     }),
   )
-  if (signedOut()) return
+  if (stopped()) return
   // IAM refuses this user the workspace (trial ended, suspended, access paused, not a member): the app
   // is never rendered and the shell remembers nothing (no rememberWorkspace, no /t/<slug>/ move); sign
   // out or switch. A membership refusal is asked once more first: IAM's caches may lag a change.
   if (firstError !== undefined) {
+    // A membership refusal's second ask waits 5 s: say so, without anything of the session. A tenant state
+    // settles at once, so its screen comes with no loading screen before it.
+    if (refusalIsReasked(firstError)) showWorkspaceLoading()
     const settled = await settleRefusal(firstError, loadSessionContextOnce, { signal: signedOutDuringBoot.signal })
-    if (signedOut()) return
+    if (stopped()) return
     if ('block' in settled) {
-      showWorkspaceUnavailable(settled.block, idp, signInUseCases)
+      refuse(() => showWorkspaceUnavailable(settled.block, idp, signInUseCases))
       return
     }
     if ('context' in settled) context.set(settled.context)
     else firstError = settled.error
+  }
+  // A transient failure (the ApiClient's own rule: online network error, timeout, 429, 502-504) is
+  // retried 3 times (1 s, 2 s, 4 s), one request each (loadSessionContextOnce). A sign-out stops the
+  // retries. A final answer (401, 403, 404: P-35 missing in this environment) is not asked again, except
+  // on a trial's check (`anyFailure`: offline, 500 and 404 too). A retry answered with a workspace state
+  // (A6/A8) ends the retries and is returned as `refusal`.
+  const retryContext = async (anyFailure = false) => {
+    let refusal: unknown
+    const retried = await retrySessionContext(loadSessionContextOnce, {
+      signal: signedOutDuringBoot.signal,
+      ...(anyFailure ? { retryable: (e: unknown) => blockedWorkspace(e) === undefined } : {}),
+      onError: (error, attempt) => {
+        getLogger().warn('session context unavailable', { error, attempt })
+        if (blockedWorkspace(error)) refusal = error
+      },
+    })
+    return { retried, refusal }
+  }
+  // A trial session is checked against the workspace it was for (SDK alpha.7): every trial tenant shares
+  // one realm, so a silent restore can ride another trial tenant's SSO session, and a cached entry has no
+  // tenantIdHint for isWrongWorkspace. So P-35 (its slug) is awaited before anything mounts: nothing of
+  // a possibly foreign session shows. Only a trial with a slug can be checked; the other sessions'
+  // P-35 is retried in the background, after the render.
+  const w = session.workspace
+  if (w.trial && w.slug !== undefined) {
+    if (!context.get()) {
+      showWorkspaceLoading()
+      // Every failure but a workspace state is retried first: without P-35 the app never renders here.
+      const tried = await retryContext(true)
+      let { retried } = tried
+      if (stopped()) return
+      // Settled like the first load's refusal: a membership refusal is asked once more after 5 s.
+      if (tried.refusal !== undefined) {
+        const settled = await settleRefusal(tried.refusal, loadSessionContextOnce, { signal: signedOutDuringBoot.signal })
+        if (stopped()) return
+        if ('block' in settled) {
+          refuse(() => showWorkspaceUnavailable(settled.block, idp, signInUseCases))
+          return
+        }
+        if ('context' in settled) retried = settled.context
+        else {
+          // The second ask failed otherwise (a 503, say): retried like every other failure here, as the first
+          // load's would be. A refusal now has been asked twice: it is final.
+          const again = await retryContext(true)
+          if (stopped()) return
+          const block = blockedWorkspace(again.refusal)
+          if (block) {
+            refuse(() => showWorkspaceUnavailable(block, idp, signInUseCases))
+            return
+          }
+          retried = again.retried
+        }
+      }
+      // Unchecked: never the app. Sign out, switch, or try again (a reload).
+      if (!retried) {
+        refuse(() => showWorkspaceLoadFailed(idp, signInUseCases))
+        return
+      }
+      context.set(retried)
+    }
+    // A mismatch caches nothing (no rememberWorkspace) and keeps the URL.
+    if (context.get()!.slug !== w.slug) {
+      refuse(() => showWrongWorkspace(idp, signInUseCases))
+      return
+    }
   }
   const applyContext = () => {
     const c = context.get()
@@ -236,7 +351,7 @@ async function start(cfg: RuntimeConfig, report: { otlpBaseUrl: string }): Promi
     if (!c) return
     setFlagProvider(sessionContextFlagProvider(c))
     // Cache the workspace with its slug (trial tokens carry none) and move the URL to /t/<slug>/.
-    rememberWorkspace({ ...session.workspace, slug: c.slug })
+    rememberWorkspace({ ...w, slug: c.slug })
   }
   applyContext()
   // The user's IAM locale first (P-35), else the browser's languages, else the default.
@@ -245,9 +360,9 @@ async function start(cfg: RuntimeConfig, report: { otlpBaseUrl: string }): Promi
     supported: cfg.i18n.supportedLocales,
     detect: () => context.get()?.locale,
   })
-  if (signedOut()) return
+  if (stopped()) return
   await loadManifest().catch((error: unknown) => getLogger().error('manifest load failed', { error }))
-  if (signedOut()) return
+  if (stopped()) return
   startVersionPolling()
 
   // Route under /t/<slug> only when the URL is there (rememberWorkspace moved it, or the user opened it).
@@ -258,13 +373,21 @@ async function start(cfg: RuntimeConfig, report: { otlpBaseUrl: string }): Promi
   const shell = {
     user: session.user,
     workspace: session.workspace,
+    // What a remote passes is cleaned up as the sign-in box's input is (a name lower-cased, a URL's slug),
+    // so a trial slug compares equal to P-35's after the switch. Only "not found" (or an identifier that
+    // names no workspace) shows that dialog; PUB-1 unreachable or rate-limited rejects, so the remote can
+    // offer a retry.
+    // After a sign-out, an expiry or a refusal it does nothing: "Session ended" or the refusal screen stays.
     switchWorkspace: async (identifier: string) => {
-      const w = await workspaceResolver.resolve(identifier)
-      if (!w) {
+      if (stopped()) return
+      const id = toIdentifier(identifier, (pathname) => slugFromPath(pathname, cfg.auth))
+      const target = id === undefined ? undefined : await workspaceResolver.resolve(id)
+      if (stopped()) return
+      if (!target) {
         showWorkspaceNotFound()
         return
       }
-      await idp.switchWorkspace(w)
+      await idp.switchWorkspace(target, credentialsFor(target))
     },
     signOut: (o?: { global?: boolean }) => idp.logout(o),
   }
@@ -282,15 +405,23 @@ async function start(cfg: RuntimeConfig, report: { otlpBaseUrl: string }): Promi
       signal: signedOutDuringBoot.signal,
       onError: (error, what) => getLogger().warn('workspace status unavailable', { error, what }),
     })
-    if (signedOut()) return
+    if (stopped()) return
     const now = Date.now()
     const until = readOnlyUntil(status.tenant)
-    notices.set({ banners: workspaceBanners(status.tenant, status.seats, who, now), ...(until ? { readOnlyUntil: until } : {}) })
+    const show = (at: number) =>
+      notices.set({ banners: workspaceBanners(status.tenant, status.seats, who, at), ...(until ? { readOnlyUntil: until } : {}) })
+    show(now)
+    // The trial's days left move with the clock: worked out again every hour while the page is open
+    // (P-1 is not asked again), until a sign-out or an expiry.
+    const refresh = setInterval(() => (stopped() ? clearInterval(refresh) : show(Date.now())), BANNER_REFRESH_MS)
+    signedOutDuringBoot.signal.addEventListener('abort', () => clearInterval(refresh), { once: true })
     // A trial that just converted (A5): welcome the user once on this device.
     // Never over another screen (session ended, workspace not found) or after the session expired:
     // the welcome's Continue would hide that screen and leave the user without its action.
     if (status.tenant && recentlyUpgraded(status.tenant, now) && !expired && !isScreenShown() && !upgradeWelcomeStorage.seen()) {
-      showUpgradeWelcome(status.tenant.name, () => upgradeWelcomeStorage.markSeen())
+      // Seen once shown: another screen (Session ended, a late refusal) may replace it before Continue.
+      upgradeWelcomeStorage.markSeen()
+      showUpgradeWelcome(status.tenant.name)
     }
   }
   const startNotices = () => void loadNotices().catch((error: unknown) => getLogger().warn('workspace status unavailable', { error }))
@@ -315,27 +446,32 @@ async function start(cfg: RuntimeConfig, report: { otlpBaseUrl: string }): Promi
   render()
   startNotices()
 
-  // A transient failure (the ApiClient's own rule: online network error, timeout, 429, 502-504) is
-  // retried 3 times (1 s, 2 s, 4 s), one request each (loadSessionContextOnce); on success
-  // the subject, flags and provider get the context. A sign-out stops the retries. A final answer
-  // (401, 403, 404: P-35 missing in this environment) is not asked again.
+  // The background retry (retryContext above; never a trial with a slug, whose P-35 was awaited): on
+  // success the subject, flags and provider get the context.
   if (!context.get() && isTransient(firstError)) {
+    const tried = await retryContext()
+    let { retried } = tried
+    // A refusal is settled like the first load's (a membership refusal is asked once more after 5 s;
+    // the deny-all app stays meanwhile), then a workspace state replaces the app with its screen.
     let late: ReturnType<typeof blockedWorkspace>
-    const retried = await retrySessionContext(loadSessionContextOnce, {
-      signal: signedOutDuringBoot.signal,
-      onError: (error, attempt) => {
-        getLogger().warn('session context unavailable', { error, attempt })
-        late = blockedWorkspace(error) ?? late
-      },
-    })
-    // A retry answered with a workspace state: replace the deny-all app with that screen.
+    if (tried.refusal !== undefined) {
+      if (stopped()) late = blockedWorkspace(tried.refusal)
+      else {
+        const settled = await settleRefusal(tried.refusal, loadSessionContextOnce, { signal: signedOutDuringBoot.signal })
+        if ('block' in settled) late = settled.block
+        else if ('context' in settled) retried = settled.context
+      }
+    }
+    // A refusal received unmounts the app (a sign-out already did). After an expiry "Session ended" stays on
+    // top, with nothing of the workspace under it: its Sign in leaves the page, and the next load meets the
+    // refusal again. Otherwise the refusal's own screen replaces the app.
     if (late && !signedOut()) {
       app?.unmount()
       app = undefined
-      showWorkspaceUnavailable(late, idp, signInUseCases)
+      if (!stopped()) refuse(() => showWorkspaceUnavailable(late, idp, signInUseCases))
       return
     }
-    if (retried && !signedOut()) {
+    if (retried && !stopped()) {
       context.set(retried)
       applyContext()
       startNotices()

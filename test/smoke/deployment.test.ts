@@ -166,6 +166,14 @@ describe(`web-shell smoke (${mode}, ${baseUrl})`, () => {
       if (image) expect(r.status, where(r)).toBe(404)
     })
 
+    // A trial workspace with a slug never opens without P-35 (its slug is checked against P-35's), so a
+    // deployment without it would lock every such trial user out: P-35 must be routed. Without a token
+    // the gateway refuses with 401; a 404 means the route or the service is missing.
+    it.skipIf(image)('IAM P-35 is deployed: GET /api/v1/me/session-context without a token is 401, never 404', async () => {
+      const r = await get('/api/v1/me/session-context')
+      expect(r.status, where(r, 'P-35 must be routed in every environment where trial users sign in')).toBe(401)
+    })
+
     it.skipIf(!image).each(['/otel/v1/traces', '/csp-report', '/config/missing.json', '/remotes/missing/remoteEntry.js'])(
       'the image never answers %s with index.html',
       async (path) => {

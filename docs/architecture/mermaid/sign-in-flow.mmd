@@ -22,7 +22,7 @@ sequenceDiagram
         IAM-->>UC: realm, strategy
         UC-->>Screens: workspace
         Screens-->>Boot: onChosen(workspace, loginHint only for an email)
-        Boot->>SDK: idp.login(workspace, loginHint)
+        Boot->>SDK: idp.login(workspace, loginHint?, prompt: 'login' when uncheckable)
         Note over SDK: verifier, S256 challenge, state<br/>location to the realm's authorize URL
         SDK->>KC: GET /realms/{realm}/.../auth?code_challenge_method=S256&login_hint
         KC->>SDK: redirect to {origin}/auth/callback?code&state

@@ -71,6 +71,16 @@ test('signs in through Keycloak (PKCE) and loads the dashboard remote with its i
   expect(await violations(page)).toEqual([])
 })
 
+test("a reload checks the saved paid realm's discovery document under the production CSP, then restores silently", async ({ page }) => {
+  await signIn(page)
+  expect((await state(page)).discoveries).toEqual([])
+  await page.reload()
+  await expect(page.getByRole('heading', { name: 'Dashboard for Ada Lovelace in acme' })).toBeVisible()
+  // SDK alpha.9: the realm still exists, so no PUB-1 re-check; connect-src allows the IdP origin.
+  expect((await state(page)).discoveries).toEqual(['tenant-acme'])
+  expect(await violations(page)).toEqual([])
+})
+
 test("a remote's navigate() stays in the single-page app", async ({ page }) => {
   await signIn(page)
   await page.evaluate(() => ((window as unknown as { __samePage: boolean }).__samePage = true))
@@ -138,13 +148,34 @@ test('the workspace banner (IAM P-1) shows under the production CSP with AA cont
   await page.route('**/api/v1/tenants/*', (route) =>
     route.request().url().endsWith('/seat-usage')
       ? route.fallback()
-      : route.fulfill({ json: { name: 'Acme', status: 'trial', trial_ends_at: new Date(Date.now() + 3 * 86_400_000 - 60_000).toISOString() } }),
+      : route.fulfill({ json: { name: 'Acme', status: 'trial', trial_ends_at: new Date(Date.now() + 3 * 86_400_000 + 60_000).toISOString() } }),
   )
   await signIn(page)
   const banner = page.getByRole('status')
   await expect(banner).toHaveText('3 days left in your trial')
   expect(await contrastRatio(page, '[role="status"]')).toBeGreaterThanOrEqual(4.5)
   expect(await violations(page)).toEqual([])
+  // The stack sits at the bottom of the window, and scrolled to the end the remote's content ends above
+  // it: the banners never cover the remote's last controls.
+  await page.setViewportSize({ width: 800, height: 300 })
+  const layout = await page.evaluate(() => {
+    window.scrollTo(0, document.documentElement.scrollHeight)
+    const stack = document.querySelector('[role="status"]')!.parentElement!
+    const content = stack.previousElementSibling!
+    return {
+      contentBottom: content.getBoundingClientRect().bottom,
+      stackTop: stack.getBoundingClientRect().top,
+      stackBottom: stack.getBoundingClientRect().bottom,
+      view: window.innerHeight,
+      published: getComputedStyle(document.documentElement).getPropertyValue('--shell-notices-height'),
+      height: stack.offsetHeight,
+    }
+  })
+  // The stack's height reaches remotes as a CSS variable, set through the CSSOM under the production CSP.
+  expect(layout.published).toBe(`${layout.height}px`)
+  expect(layout.height).toBeGreaterThan(0)
+  expect(layout.contentBottom).toBeLessThanOrEqual(layout.stackTop + 0.5)
+  expect(Math.abs(layout.stackBottom - layout.view)).toBeLessThanOrEqual(0.5)
 })
 
 test('the read-only notice shows under the production CSP with AA contrast', async ({ page }) => {

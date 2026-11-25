@@ -119,6 +119,8 @@ export interface State {
   cspReports: string[]
   logouts: Record<string, string>[]
   tokenRequests: number
+  /** Realms whose OIDC discovery document the page loaded (the SDK's realm probe before a restore, alpha.9). */
+  discoveries: string[]
 }
 
 async function body(req: IncomingMessage): Promise<string> {
@@ -149,7 +151,7 @@ const listen = (s: Server) =>
 export async function startServers(): Promise<{ app: string; idp: string; close: () => Promise<void> }> {
   if (!existsSync(join(DIST, 'index.html'))) throw new Error('test/browser: no dist/index.html. Run `npm run build` first.')
   const tls = certificate()
-  let state: State = { otel: [], cspReports: [], logouts: [], tokenRequests: 0 }
+  let state: State = { otel: [], cspReports: [], logouts: [], tokenRequests: 0, discoveries: [] }
   /** Whether the user has a Keycloak SSO session (prompt=none succeeds). */
   let sso = false
   const codes = new Map<string, { redirectUri: string; challenge: string; nonce: string }>()
@@ -194,7 +196,7 @@ export async function startServers(): Promise<{ app: string; idp: string; close:
     const p = url.pathname
     if (p === '/__test/state') return json(res, 200, state)
     if (p === '/__test/reset') {
-      state = { otel: [], cspReports: [], logouts: [], tokenRequests: 0 }
+      state = { otel: [], cspReports: [], logouts: [], tokenRequests: 0, discoveries: [] }
       sso = false
       return json(res, 200, {})
     }
@@ -256,6 +258,14 @@ export async function startServers(): Promise<{ app: string; idp: string; close:
     const redirect = (to: string) => {
       res.writeHead(302, { Location: to })
       res.end()
+    }
+    // Discovery, as Keycloak serves it (public, CORS for any origin). Another realm gets a 404 without CORS,
+    // as Keycloak answers a missing realm.
+    const discovery = /^\/realms\/([^/]+)\/\.well-known\/openid-configuration$/.exec(url.pathname)?.[1]
+    if (discovery === REALM) {
+      state.discoveries.push(discovery)
+      res.writeHead(200, { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json' })
+      return res.end(JSON.stringify({ issuer, authorization_endpoint: `${issuer}/protocol/openid-connect/auth`, token_endpoint: `${issuer}/protocol/openid-connect/token` }))
     }
     if (url.pathname === `/realms/${REALM}/protocol/openid-connect/auth`) {
       const q = url.searchParams

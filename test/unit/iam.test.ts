@@ -50,6 +50,23 @@ describe('workspaceResolver (PUB-1)', () => {
     await expect(workspaceResolver.resolve('acme', controller.signal)).resolves.toBeUndefined()
   })
 
+  // SDK alpha.8: only { found: false } is "not found"; anything else fails the call, so the SDK keeps the saved workspace.
+  it.each([
+    ['a WAF challenge page (202, HTML)', () => new Response('<html>challenge</html>', { status: 202, headers: { 'content-type': 'text/html' } })],
+    ['an HTML page with a 200', () => new Response('<html></html>', { status: 200, headers: { 'content-type': 'text/html' } })],
+    ['an empty body', () => new Response(null, { status: 200 })],
+    ['JSON without a boolean found', () => Response.json({ realm: 'trial' })],
+    ['a JSON array', () => Response.json([{ found: true }])],
+  ])('fails on %s, which is not a PUB-1 answer', async (_name, answer) => {
+    mockApi({ 'GET /v1/public/tenants/resolve': answer })
+    await expect(workspaceResolver.resolve('acme')).rejects.toThrow('without a resolve response')
+  })
+
+  it('a 429 throws (the rate limit)', async () => {
+    mockApi({ 'GET /v1/public/tenants/resolve': () => mockProblem(PlatformProblemTypes.RateLimitExceeded) })
+    await expect(workspaceResolver.resolve('acme')).rejects.toThrow()
+  })
+
   it('uses the configured paid realm prefix', () => {
     platform.reset()
     platform = createTestPlatform({ config: { auth: { paidRealmPrefix: 'org-' } as never } })
@@ -79,8 +96,21 @@ describe('edge cases the contract does not list', () => {
     expect(toWorkspace('x', { found: true, realm: 'acme' })).toEqual({ realm: 'acme', trial: false })
   })
 
+  it("keeps a trial slug the way P-35 writes it (trimmed, lower-case), so the bootstrap's slug check compares equal", () => {
+    expect(toWorkspace(' Acme ', { found: true, realm: 'trial', strategy: 'shared' })).toEqual({ realm: 'trial', trial: true, slug: 'acme' })
+  })
+
   it('gives a trial found by email no slug, and no tenant hint when none is sent', () => {
     expect(toWorkspace('ada@acme.com', { found: true, realm: 'trial', strategy: 'shared' })).toEqual({ realm: 'trial', trial: true })
+  })
+
+  it('keeps a P-35 slug trimmed and lower-cased, as a PUB-1 trial slug is', () => {
+    expect(toSessionContext({ tenant_id: 't-1', slug: ' Acme ' } as Parameters<typeof toSessionContext>[0]).slug).toBe('acme')
+  })
+
+  it('keeps the context when a P-35 body has no slug (outside the contract), as before the slug was normalised', () => {
+    const r = { tenant_id: 't-1', roles: ['member'] } as unknown as Parameters<typeof toSessionContext>[0]
+    expect(toSessionContext(r)).toMatchObject({ tenantId: 't-1', roles: ['member'], slug: undefined })
   })
 
   it('maps a minimal session context with lists defaulted and optional fields absent', () => {

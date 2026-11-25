@@ -19,11 +19,21 @@ const tenant = (t: Partial<TenantStatus>): TenantStatus => ({ name: 'Acme', stat
 const seats = (activeUsers: number, pendingInvitations: number, licensedSeats: number): SeatUsage => ({ activeUsers, pendingInvitations, licensedSeats })
 
 describe('workspaceBanners (spec §5.6)', () => {
-  it('shows trial days left to everyone, rounded up, and 0 on the last day', () => {
-    expect(workspaceBanners(tenant({ status: 'trial', trialEndsAt: iso(NOW + 13.2 * DAY) }), undefined, member, NOW)).toEqual([{ kind: 'trial', days: 14 }])
-    expect(workspaceBanners(tenant({ status: 'trial', trialEndsAt: iso(NOW + 1000) }), undefined, member, NOW)).toEqual([{ kind: 'trial', days: 1 }])
-    // IAM has not moved the tenant to trial_expired yet: never a negative count.
-    expect(workspaceBanners(tenant({ status: 'trial', trialEndsAt: iso(NOW - DAY) }), undefined, member, NOW)).toEqual([{ kind: 'trial', days: 0 }])
+  it('shows trial days left to everyone, to the nearest day, and 0 only in the last 24 hours', () => {
+    const banner = (end: number) => workspaceBanners(tenant({ status: 'trial', trialEndsAt: iso(end) }), undefined, member, NOW)
+    // A new 14-day trial reads 14, not 13.
+    expect(banner(NOW + 14 * DAY - 5)).toEqual([{ kind: 'trial', days: 14 }])
+    expect(banner(NOW + 13.2 * DAY)).toEqual([{ kind: 'trial', days: 13 }])
+    expect(banner(NOW + 1.6 * DAY)).toEqual([{ kind: 'trial', days: 2 }])
+    expect(banner(NOW + 1.4 * DAY)).toEqual([{ kind: 'trial', days: 1 }])
+    expect(banner(NOW + DAY)).toEqual([{ kind: 'trial', days: 1 }])
+    expect(banner(NOW + DAY - 1)).toEqual([{ kind: 'trial', days: 0 }])
+    expect(banner(NOW + 1000)).toEqual([{ kind: 'trial', days: 0 }])
+  })
+
+  it('says the trial has ended once its end has passed, while IAM still says trial', () => {
+    expect(workspaceBanners(tenant({ status: 'trial', trialEndsAt: iso(NOW) }), undefined, member, NOW)).toEqual([{ kind: 'trial-ended' }])
+    expect(workspaceBanners(tenant({ status: 'trial', trialEndsAt: iso(NOW - DAY) }), undefined, member, NOW)).toEqual([{ kind: 'trial-ended' }])
   })
 
   it('shows no trial banner without a readable end date, or once the tenant is paid', () => {
@@ -73,11 +83,18 @@ describe('readOnlyUntil and recentlyUpgraded', () => {
     expect(converted(DAY)).toBe(true)
     expect(converted(7 * DAY - 1)).toBe(true)
     expect(converted(7 * DAY)).toBe(false)
-    // A start in the future (clock skew) is not "recent".
+    // A device up to 10 minutes behind IAM still welcomes the first load after the conversion; further ahead
+    // than that the start is not "recent".
+    expect(converted(-5 * 60_000)).toBe(true)
+    expect(converted(-10 * 60_000)).toBe(true)
+    expect(converted(-10 * 60_000 - 1)).toBe(false)
     expect(converted(-DAY)).toBe(false)
     // Paid from the start: no trial end.
     expect(converted(DAY, { trialEndsAt: undefined })).toBe(false)
     expect(converted(DAY, { status: 'trial' })).toBe(false)
+    // Only while on a paid plan: a payment being retried still counts, a cancellation since does not.
+    expect(converted(DAY, { status: 'past_due' })).toBe(true)
+    expect(converted(DAY, { status: 'cancelled' })).toBe(false)
     expect(recentlyUpgraded(tenant({ trialEndsAt: iso(NOW) }), NOW)).toBe(false)
     expect(recentlyUpgraded(undefined, NOW)).toBe(false)
   })

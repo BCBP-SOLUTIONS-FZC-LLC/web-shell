@@ -60,7 +60,9 @@ describe('accessibility (axe)', () => {
     ['workspace not found', () => screens.showWorkspaceNotFound()],
     ['trial ended (A6)', () => screens.showWorkspaceUnavailable('trial-expired', idp, useCases)],
     ['access paused (A8)', () => screens.showWorkspaceUnavailable('member-paused', idp, useCases)],
-    ['workspace upgraded (A5)', () => screens.showUpgradeWelcome('Acme', () => {})],
+    ['workspace loading (P-35 awaited)', () => screens.showWorkspaceLoading()],
+    ['workspace not loaded (trial check)', () => screens.showWorkspaceLoadFailed(idp, useCases)],
+    ['workspace upgraded (A5)', () => screens.showUpgradeWelcome('Acme')],
   ])('the %s dialog', async (_name, show) => {
     act(() => show())
     expect(await violations()).toEqual([])

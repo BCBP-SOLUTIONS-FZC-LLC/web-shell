@@ -21,11 +21,11 @@ sequenceDiagram
         else device-clock
             Boot->>Screens: showDeviceClock (wait for a click)
         else none or login-required
-            Boot->>SDK: workspace from the failed attempt, or chooseWorkspace
+            Boot->>SDK: workspace from the failed attempt (login-required; without one, ask), else chooseWorkspace
             opt no known workspace
                 Boot->>Screens: askForWorkspace (email, name or URL → PUB-1)
             end
-            Boot->>SDK: idp.login(workspace, loginHint)
+            Boot->>SDK: idp.login(workspace, loginHint?, prompt: 'login' when uncheckable)
         end
     else authenticated, wrong workspace
         Boot->>Screens: showWrongWorkspace (app never renders)
@@ -35,8 +35,15 @@ sequenceDiagram
         opt membership refused (access paused, not a member)
             Boot->>IAM: ask once more after 5 s (IAM's caches may lag a change)
         end
+        opt trial workspace with a slug, no context yet, any failure but a workspace state
+            Boot->>IAM: retry after 1 s, 2 s, 4 s before anything mounts
+        end
         alt P-35 refuses the workspace (trial ended, suspended, access paused, not a member)
             Boot->>Screens: showWorkspaceUnavailable (A6/A8; app never renders, the shell remembers nothing)
+        else trial with a slug, still no context
+            Boot->>Screens: showWorkspaceLoadFailed (sign out, switch or try again; app never renders)
+        else trial with a slug, P-35 slug is another tenant's
+            Boot->>Screens: showWrongWorkspace (nothing cached, URL kept, app never renders)
         else
             Boot->>SDK: subject, flags, rememberWorkspace (/t/slug/)
             Boot->>SDK: initializeI18n (detect: P-35 locale), loadManifest, startVersionPolling
@@ -45,7 +52,7 @@ sequenceDiagram
             Boot->>Browser: banners and the read-only grace date into App
             Boot->>Screens: showUpgradeWelcome (A5) once after a recent upgrade, never after expiry or over another screen
             opt no session context
-                Boot->>IAM: retry after 1 s, 2 s, 4 s (online network error, timeout, 429, 502-504)
+                Boot->>IAM: retry after 1 s, 2 s, 4 s (online network error, timeout, 429, 502-504; never a trial with a slug)
                 Boot->>SDK: subject, flags, rememberWorkspace, and the provider updates live
                 Boot->>Screens: a retry answering with a workspace state: unmount App, showWorkspaceUnavailable
             end

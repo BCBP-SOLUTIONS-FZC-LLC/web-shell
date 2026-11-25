@@ -10,6 +10,8 @@ import {
   SignedOutDialog,
   SignInScreen,
   UpgradeWelcomeDialog,
+  WorkspaceLoadFailedDialog,
+  WorkspaceLoadingScreen,
   WorkspaceNotFoundDialog,
   WorkspaceUnavailableDialog,
   WrongWorkspaceDialog,
@@ -51,12 +53,16 @@ export function showSessionEnded(s: Extract<SessionState, { status: 'expired' }>
   )
 }
 
-/** Sends the user to the email screen, then to the workspace they choose. */
+/**
+ * Sends the user to the email screen, then to the workspace they choose, always through the credentials
+ * page (`prompt: 'login'`): from a refusal screen, the live SSO session may be someone else's on a
+ * shared device, also in another realm.
+ */
 function switchWorkspace(idp: IdentityProvider, useCases: SignInUseCases): void {
-  void askForWorkspace(useCases).then(({ workspace }) => idp.switchWorkspace(workspace))
+  void askForWorkspace(useCases).then(({ workspace }) => idp.switchWorkspace(workspace, { prompt: 'login' }))
 }
 
-/** A trial login that landed in another tenant than the invitation's: never cached, app not rendered. */
+/** A trial login that landed in another tenant than the invitation's or the URL's: never cached, app not rendered. */
 export function showWrongWorkspace(idp: IdentityProvider, useCases: SignInUseCases): void {
   showScreen(<WrongWorkspaceDialog onSignOut={() => void idp.logout()} onSwitch={() => switchWorkspace(idp, useCases)} />)
 }
@@ -68,15 +74,26 @@ export function showWorkspaceUnavailable(block: WorkspaceBlock, idp: IdentityPro
   )
 }
 
-/** The "workspace upgraded" welcome (A5) over the running app; `onSeen` runs when the user continues. */
-export function showUpgradeWelcome(name: string, onSeen: () => void): void {
+/** While P-35 is awaited before anything may render; the next screen, or the app, replaces it. */
+export function showWorkspaceLoading(): void {
+  showScreen(<WorkspaceLoadingScreen />)
+}
+
+/**
+ * A trial session whose workspace could not be checked: P-35 did not load. Nothing of the session is
+ * shown (it may be another trial tenant's on a shared device): sign out, switch, or try again (a reload).
+ */
+export function showWorkspaceLoadFailed(idp: IdentityProvider, useCases: SignInUseCases): void {
   showScreen(
-    <UpgradeWelcomeDialog
-      name={name}
-      onContinue={() => {
-        onSeen()
-        hideScreen()
-      }}
+    <WorkspaceLoadFailedDialog
+      onRetry={() => window.location.reload()}
+      onSignOut={() => void idp.logout()}
+      onSwitch={() => switchWorkspace(idp, useCases)}
     />,
   )
+}
+
+/** The "workspace upgraded" welcome (A5) over the running app; Continue closes it. */
+export function showUpgradeWelcome(name: string): void {
+  showScreen(<UpgradeWelcomeDialog name={name} onContinue={hideScreen} />)
 }

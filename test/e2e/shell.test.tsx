@@ -336,6 +336,134 @@ describe('the shell, end to end', () => {
     expect(posted[0]!.url).toBe(`POST ${IDP}/realms/tenant-acme/protocol/openid-connect/logout`)
   })
 
+  it("a trial deep link whose session is another trial tenant's shows the wrong-workspace screen, never the app (SDK alpha.7)", async () => {
+    // Every trial tenant shares one realm: the session (P-35 slug acme) is not the one /t/beta named.
+    net.on('GET /api/v1/public/tenants/resolve', (req) =>
+      Response.json(new URL(req.url).searchParams.get('identifier') === 'beta' ? { found: true, realm: 'trial', strategy: 'shared' } : { found: false }),
+    )
+    await load('/t/beta/dashboard')
+    await until(() => assigned.length > 0, 'the redirect to Keycloak')
+    expect(new URL(assigned[0]!).pathname).toBe('/realms/trial/protocol/openid-connect/auth')
+    await approveLogin()
+    await screen.findByRole('alertdialog', { name: /different workspace/ }, { timeout: 5_000 })
+    expect(injected).toEqual([])
+    expect(window.location.pathname).toBe('/t/beta/dashboard')
+    expect(net.sent(`/api/v1/tenants/${TENANT}`)).toHaveLength(0)
+  })
+
+  it("a trial session whose P-35 never loads shows \"We couldn't load your workspace\", never the app", { timeout: 20_000 }, async () => {
+    net.on('GET /api/v1/public/tenants/resolve', (req) =>
+      Response.json(new URL(req.url).searchParams.get('identifier') === 'beta' ? { found: true, realm: 'trial', strategy: 'shared' } : { found: false }),
+    )
+    net.on('GET /api/v1/me/session-context', () => mockProblem(PlatformProblemTypes.ServiceUnavailable))
+    await load('/t/beta/dashboard')
+    await until(() => assigned.length > 0, 'the redirect to Keycloak')
+    await approveLogin()
+    await screen.findByRole('alertdialog', { name: "We couldn't load your workspace" }, { timeout: 15_000 })
+    expect(injected).toEqual([])
+    expect(screen.getByRole('button', { name: 'Sign out' })).toBeInTheDocument()
+  })
+
+  it('a silent restore of a trial workspace PUB-1 no longer knows asks for the email, never another saved workspace', { timeout: 15_000 }, async () => {
+    // Two saved workspaces: acme (paid), then the trial beta (P-35 slug beta).
+    await signInByEmail()
+    let betaKnown = true
+    net.on('GET /api/v1/public/tenants/resolve', (req) => {
+      const id = new URL(req.url).searchParams.get('identifier')
+      return Response.json(
+        id === 'beta' && betaKnown ? { found: true, realm: 'trial', strategy: 'shared' } : id === 'acme' ? { found: true, realm: 'tenant-acme', strategy: 'dedicated' } : { found: false },
+      )
+    })
+    net.on('GET /api/v1/me/session-context', (req) =>
+      bearerOf(req) ? Response.json({ tenant_id: TENANT, slug: 'beta', roles, feature_flags: [], read_only: false, locale: 'en' }) : mockProblem(PlatformProblemTypes.Unauthorized),
+    )
+    await load('/t/beta/dashboard')
+    await until(() => assigned.length > 0, 'the redirect to Keycloak')
+    await approveLogin()
+    await screen.findByRole('heading', { name: /Dashboard for Ada Lovelace in beta/ }, { timeout: 5_000 })
+
+    // The trial was deleted or moved: Keycloak answers login_required, PUB-1 no longer knows beta.
+    betaKnown = false
+    await load('/t/beta/dashboard')
+    await until(() => assigned.length > 0, 'the silent re-sign-in redirect')
+    const silent = new URL(assigned.at(-1)!)
+    expect(silent.searchParams.get('prompt')).toBe('none')
+    assigned.length = 0
+    const resolvesBefore = net.sent('/api/v1/public/tenants/resolve').length
+    const cb = new URL(silent.searchParams.get('redirect_uri')!)
+    cb.searchParams.set('error', 'login_required')
+    cb.searchParams.set('state', silent.searchParams.get('state')!)
+    cb.searchParams.set('iss', kc.issuer('trial'))
+    await load(cb.pathname + cb.search)
+    expect(await emailBox()).toBeInTheDocument()
+    expect(assigned).toEqual([])
+    // init()'s one re-check answered "not found"; the shell asked, without another PUB-1 call.
+    expect(net.sent('/api/v1/public/tenants/resolve').slice(resolvesBefore).map((r) => new URL(r.url).searchParams.get('identifier'))).toEqual(['beta'])
+  })
+
+  it('a reload of a paid workspace Keycloak still serves asks PUB-1 nothing (SDK alpha.9 realm probe)', async () => {
+    await signInByEmail()
+    const resolvesBefore = net.sent('/api/v1/public/tenants/resolve').length
+    await load('/t/acme/dashboard')
+    await until(() => assigned.length > 0, 'the silent restore redirect')
+    const silent = new URL(assigned.at(-1)!)
+    expect(silent.pathname).toBe('/realms/tenant-acme/protocol/openid-connect/auth')
+    expect(silent.searchParams.get('prompt')).toBe('none')
+    expect(kc.discoveries).toEqual(['tenant-acme'])
+    expect(net.sent('/api/v1/public/tenants/resolve')).toHaveLength(resolvesBefore)
+  })
+
+  it('after a revert deletes the paid realm, a reload restores into the trial realm PUB-1 names, never Keycloak\'s 404 (SDK alpha.9)', async () => {
+    await signInByEmail()
+    // Realm Provisioner reverts the conversion: tenant-acme is deleted and PUB-1 names the shared trial realm.
+    kc.deleted.add('tenant-acme')
+    net.on('GET /api/v1/public/tenants/resolve', (req) =>
+      Response.json(new URL(req.url).searchParams.get('identifier') === 'acme' ? { found: true, realm: 'trial', strategy: 'shared', tenant_id: TENANT } : { found: false }),
+    )
+    const resolvesBefore = net.sent('/api/v1/public/tenants/resolve').length
+    await load('/t/acme/dashboard')
+    await until(() => assigned.length > 0, 'the silent restore redirect')
+    const silent = new URL(assigned.at(-1)!)
+    expect(silent.pathname).toBe('/realms/trial/protocol/openid-connect/auth')
+    expect(silent.searchParams.get('prompt')).toBe('none')
+    // The paid realm failed like a missing realm (no CORS), the trial realm answered: gone, so one PUB-1 call.
+    expect(kc.discoveries).toEqual(['tenant-acme', 'trial'])
+    expect(net.sent('/api/v1/public/tenants/resolve').slice(resolvesBefore).map((r) => new URL(r.url).searchParams.get('identifier'))).toEqual(['acme'])
+  })
+
+  it('a WAF challenge page in place of the PUB-1 re-check keeps the saved trial workspace, never drops it as unknown (SDK alpha.8)', { timeout: 15_000 }, async () => {
+    await signInByEmail()
+    let challenge = false
+    net.on('GET /api/v1/public/tenants/resolve', (req) => {
+      const id = new URL(req.url).searchParams.get('identifier')
+      if (id === 'beta' && challenge) return new Response('<html>challenge</html>', { status: 202, headers: { 'content-type': 'text/html' } })
+      return Response.json(id === 'beta' ? { found: true, realm: 'trial', strategy: 'shared' } : { found: true, realm: 'tenant-acme', strategy: 'dedicated' })
+    })
+    net.on('GET /api/v1/me/session-context', (req) =>
+      bearerOf(req) ? Response.json({ tenant_id: TENANT, slug: 'beta', roles, feature_flags: [], read_only: false, locale: 'en' }) : mockProblem(PlatformProblemTypes.Unauthorized),
+    )
+    await load('/t/beta/dashboard')
+    await until(() => assigned.length > 0, 'the redirect to Keycloak')
+    await approveLogin()
+    await screen.findByRole('heading', { name: /Dashboard for Ada Lovelace in beta/ }, { timeout: 5_000 })
+
+    // Keycloak answers login_required; the gateway's WAF answers the re-check with a 202 challenge page.
+    challenge = true
+    await load('/t/beta/dashboard')
+    await until(() => assigned.length > 0, 'the silent re-sign-in redirect')
+    const silent = new URL(assigned.at(-1)!)
+    assigned.length = 0
+    const cb = new URL(silent.searchParams.get('redirect_uri')!)
+    cb.searchParams.set('error', 'login_required')
+    cb.searchParams.set('state', silent.searchParams.get('state')!)
+    cb.searchParams.set('iss', kc.issuer('trial'))
+    await load(cb.pathname + cb.search)
+    // The saved entry survives: sign-in goes on to the trial realm, not back to the email screen.
+    await until(() => assigned.length > 0, 'the sign-in redirect to the saved trial realm')
+    expect(new URL(assigned.at(-1)!).pathname).toBe('/realms/trial/protocol/openid-connect/auth')
+    expect(screen.queryByRole('textbox', { name: /work email or workspace name/i })).toBeNull()
+  })
+
   it('a read-only workspace (P-35 read_only) loads with the read-only notice over the remote', async () => {
     net.on('GET /api/v1/me/session-context', (req) =>
       bearerOf(req)
@@ -348,7 +476,7 @@ describe('the shell, end to end', () => {
 
   it('a trial workspace shows the days left over the remote (P-1), loaded with the token after the app renders', async () => {
     net.on(`GET /api/v1/tenants/${TENANT}`, (req) =>
-      bearerOf(req) ? Response.json({ name: 'Acme', status: 'trial', trial_ends_at: new Date(Date.now() + 5 * 86_400_000 - 60_000).toISOString() }) : mockProblem(PlatformProblemTypes.Unauthorized),
+      bearerOf(req) ? Response.json({ name: 'Acme', status: 'trial', trial_ends_at: new Date(Date.now() + 5 * 86_400_000 + 60_000).toISOString() }) : mockProblem(PlatformProblemTypes.Unauthorized),
     )
     await signInByEmail()
     expect(await screen.findByRole('status')).toHaveTextContent('5 days left in your trial')

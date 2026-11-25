@@ -291,6 +291,46 @@ describe('bootstrap, signed in', () => {
     expect(screen.getByRole('main')).toHaveTextContent('app at /t/acme')
   })
 
+  it('unmounts the app when a background retry is refused after an expiry, and keeps "Session ended" on top', async () => {
+    loadContext
+      .mockRejectedValueOnce(new NetworkError(false, 'req-1'))
+      .mockRejectedValue(await parseProblemResponse(mockProblem(PlatformProblemTypes.Forbidden, { errorCode: 'MEMBER_SUSPENDED' })))
+    vi.useFakeTimers({ toFake: ['setTimeout'] })
+    const started = bootstrap()
+    await act(() => vi.advanceTimersByTimeAsync(0))
+    expect(screen.getByRole('main')).toBeInTheDocument()
+    act(() => subscriber!({ status: 'expired', idle: false } as SessionState))
+    await act(() => vi.advanceTimersByTimeAsync(1_000))
+    await act(() => started)
+    expect(screen.queryByRole('main')).not.toBeInTheDocument()
+    expect(screen.getByRole('alertdialog', { name: 'Session ended' })).toBeInTheDocument()
+    expect(screen.queryByRole('alertdialog', { name: 'Your access is paused' })).not.toBeInTheDocument()
+    // No second ask once stopped.
+    expect(loadContext).toHaveBeenCalledTimes(2)
+  })
+
+  it('applies nothing from a late background retry once the session expired', async () => {
+    loadContext.mockRejectedValueOnce(new NetworkError(false, 'req-1')).mockResolvedValue({ tenantId: 't-1', slug: 'acme', roles: ['member'] })
+    vi.useFakeTimers({ toFake: ['setTimeout'] })
+    const started = bootstrap()
+    await act(() => vi.advanceTimersByTimeAsync(0))
+    act(() => subscriber!({ status: 'expired', idle: false } as SessionState))
+    await act(() => vi.advanceTimersByTimeAsync(1_000))
+    await act(() => started)
+    expect(calls).not.toContain('rememberWorkspace')
+    expect(loadTenant).not.toHaveBeenCalled()
+    expect(screen.getByRole('alertdialog', { name: 'Session ended' })).toBeInTheDocument()
+  })
+
+  it('sets no banners when the session expires while P-1 loads', async () => {
+    let answer!: (v: unknown) => void
+    loadTenant.mockReturnValue(new Promise((r) => (answer = r)))
+    await act(() => bootstrap())
+    act(() => subscriber!({ status: 'expired', idle: false } as SessionState))
+    await act(async () => answer({ name: 'Acme', status: 'past_due' }))
+    expect(appNotices?.get()).toEqual({ banners: [] })
+  })
+
   it('stops the retries on a sign-out', async () => {
     loadContext.mockRejectedValue(new NetworkError(false, 'req-1'))
     vi.useFakeTimers({ toFake: ['setTimeout'] })
@@ -348,11 +388,35 @@ describe('bootstrap, signed in', () => {
     expect(idp.logout).toHaveBeenCalledWith({ global: false })
 
     resolve.mockResolvedValueOnce(acme)
-    await shell.switchWorkspace('acme')
-    expect(idp.switchWorkspace).toHaveBeenCalledWith(acme)
+    await shell.switchWorkspace(' Acme ')
+    // Cleaned up as the sign-in box's input is.
+    expect(resolve).toHaveBeenLastCalledWith('acme')
+    expect(idp.switchWorkspace).toHaveBeenCalledWith(acme, {})
 
     resolve.mockResolvedValueOnce(undefined)
     await act(() => shell.switchWorkspace('nope'))
+    expect(screen.getByRole('alertdialog', { name: 'Workspace not found' })).toBeInTheDocument()
+  })
+
+  it("a remote's switch asks for credentials for a trial nothing can check, and rejects when PUB-1 can't answer", async () => {
+    await act(() => bootstrap())
+    const shell = shellProps as { switchWorkspace: (id: string) => Promise<void> }
+    const unchecked: Workspace = { realm: 'trial', trial: true }
+    resolve.mockResolvedValueOnce(unchecked)
+    await shell.switchWorkspace('invitee@acme.com')
+    expect(idp.switchWorkspace).toHaveBeenLastCalledWith(unchecked, { prompt: 'login' })
+    // Unreachable or rate-limited: the remote gets the error to offer a retry, not "not found".
+    resolve.mockRejectedValueOnce(new NetworkError(true, 'req-1'))
+    await expect(shell.switchWorkspace('acme')).rejects.toBeInstanceOf(NetworkError)
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    // A pasted workspace URL gives its slug, as in the sign-in box.
+    resolve.mockResolvedValueOnce(acme)
+    await shell.switchWorkspace('https://app.example.com/t/acme/dashboard')
+    expect(resolve).toHaveBeenLastCalledWith('acme')
+    // An identifier that names no workspace never reaches PUB-1.
+    resolve.mockClear()
+    await act(() => shell.switchWorkspace('   '))
+    expect(resolve).not.toHaveBeenCalled()
     expect(screen.getByRole('alertdialog', { name: 'Workspace not found' })).toBeInTheDocument()
   })
 
@@ -367,6 +431,21 @@ describe('bootstrap, signed in', () => {
     await userEvent.setup().click(screen.getByRole('button', { name: 'Sign in' }))
     await typeEmail('ada@acme.com')
     await waitFor(() => expect(signInAgain).toHaveBeenCalledOnce())
+  })
+
+  it("signs in again after an expiry with credentials for a trial workspace nothing can check (signInAgain's prompt, SDK alpha.9)", async () => {
+    let given: { idp: unknown; prompt?: (w: Workspace) => 'login' | undefined } | undefined
+    signInAgain.mockImplementationOnce(async (o) => void (given = o as unknown as typeof given))
+    await act(() => bootstrap())
+    act(() => subscriber!({ status: 'expired', serverEnded: false, idle: false }))
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Sign in' }))
+    await waitFor(() => expect(given).toBeDefined())
+    // The provider itself, no wrapper: the SDK applies the prompt to the workspace it chooses.
+    expect(given!.idp).toBe(idp)
+    expect(given!.prompt!({ realm: 'trial', trial: true })).toBe('login')
+    expect(given!.prompt!({ realm: 'trial', trial: true, slug: 'beta' })).toBeUndefined()
+    expect(given!.prompt!({ realm: 'trial', trial: true, tenantIdHint: 't-1' })).toBeUndefined()
+    expect(given!.prompt!(acme)).toBeUndefined()
   })
 
   it('unmounts the app on sign-out and signs back in on click', async () => {
@@ -388,6 +467,27 @@ describe('bootstrap, signed in', () => {
     expect(screen.getByRole('main')).toBeInTheDocument()
   })
 
+  it("a remote's switch never covers \"Session ended\": nothing after an expiry, even one during PUB-1", async () => {
+    await act(() => bootstrap())
+    const shell = shellProps as { switchWorkspace: (id: string) => Promise<void> }
+    let answer!: (w: Workspace | undefined) => void
+    resolve.mockImplementationOnce(() => new Promise<Workspace | undefined>((r) => (answer = r)))
+    const switching = shell.switchWorkspace('globex')
+    act(() => subscriber!({ status: 'expired', serverEnded: false, idle: false } as SessionState))
+    await act(async () => {
+      answer(undefined)
+      await switching
+    })
+    expect(screen.queryByRole('alertdialog', { name: 'Workspace not found' })).not.toBeInTheDocument()
+    expect(screen.getByRole('alertdialog', { name: 'Session ended' })).toBeInTheDocument()
+    // Once stopped, a switch asks PUB-1 nothing and moves nowhere.
+    resolve.mockClear()
+    await act(() => shell.switchWorkspace('acme'))
+    expect(resolve).not.toHaveBeenCalled()
+    expect(idp.switchWorkspace).not.toHaveBeenCalled()
+    expect(screen.getByRole('alertdialog', { name: 'Session ended' })).toBeInTheDocument()
+  })
+
   it('never renders the app when IAM refuses the workspace (A6/A8), and caches nothing', async () => {
     loadContext.mockRejectedValue(await parseProblemResponse(mockProblem(PlatformProblemTypes.Forbidden, { errorCode: 'TENANT_TRIAL_EXPIRED' })))
     await act(() => bootstrap())
@@ -404,8 +504,11 @@ describe('bootstrap, signed in', () => {
     vi.useFakeTimers({ toFake: ['setTimeout'] })
     loadContext.mockRejectedValueOnce(await parseProblemResponse(mockProblem(PlatformProblemTypes.Forbidden, { errorCode: 'DENY_MEMBER_SUSPENDED' })))
     const booted = bootstrap()
+    await act(() => vi.advanceTimersByTimeAsync(0))
+    expect(screen.getByRole('status')).toHaveTextContent('Loading your workspace…')
     await act(() => vi.advanceTimersByTimeAsync(5_000))
     await act(() => booted)
+    expect(screen.queryByText('Loading your workspace…')).not.toBeInTheDocument()
     expect(loadContext).toHaveBeenCalledTimes(2)
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
     expect(screen.getByRole('main')).toHaveTextContent('app at /t/acme')
@@ -446,11 +549,273 @@ describe('bootstrap, signed in', () => {
     expect(screen.queryByRole('main')).not.toBeInTheDocument()
   })
 
+  it('asks a membership refusal from a background retry once more, and keeps the app when the context then comes', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout'] })
+    loadContext
+      .mockRejectedValueOnce(new NetworkError(false, 'req-1'))
+      .mockRejectedValueOnce(await parseProblemResponse(mockProblem(PlatformProblemTypes.Forbidden, { errorCode: 'DENY_MEMBER_SUSPENDED' })))
+      .mockResolvedValue({ tenantId: 't-1', slug: 'acme', roles: ['member'] })
+    const started = bootstrap()
+    await act(() => vi.advanceTimersByTimeAsync(1_000))
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    await act(() => vi.advanceTimersByTimeAsync(5_000))
+    await act(() => started)
+    expect(loadContext).toHaveBeenCalledTimes(3)
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    expect(screen.getByRole('main')).toHaveTextContent('app at /t/acme')
+  })
+
+  it('keeps the deny-all app when that second ask fails otherwise', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout'] })
+    loadContext
+      .mockRejectedValueOnce(new NetworkError(false, 'req-1'))
+      .mockRejectedValueOnce(await parseProblemResponse(mockProblem(PlatformProblemTypes.Forbidden, { errorCode: 'MEMBER_SUSPENDED' })))
+      .mockRejectedValueOnce(new Error('500'))
+    const started = bootstrap()
+    await act(() => vi.advanceTimersByTimeAsync(6_000))
+    await act(() => started)
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    expect(screen.getByRole('main')).toHaveTextContent('app at (root)')
+  })
+
+  it('replaces the app with "Your access is paused" when that refusal holds on the second ask', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout'] })
+    loadContext
+      .mockRejectedValueOnce(new NetworkError(false, 'req-1'))
+      .mockRejectedValue(await parseProblemResponse(mockProblem(PlatformProblemTypes.Forbidden, { errorCode: 'MEMBER_SUSPENDED' })))
+    const started = bootstrap()
+    await act(() => vi.advanceTimersByTimeAsync(6_000))
+    await act(() => started)
+    expect(screen.getByRole('alertdialog', { name: 'Your access is paused' })).toBeInTheDocument()
+    expect(screen.queryByRole('main')).not.toBeInTheDocument()
+  })
+
   it('keeps the permissions notice for a refusal that is not a workspace state', async () => {
     loadContext.mockRejectedValue(await parseProblemResponse(mockProblem(PlatformProblemTypes.Forbidden, { errorCode: 'INSUFFICIENT_ROLE' })))
     await act(() => bootstrap())
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
     expect(screen.getByRole('main')).toHaveTextContent('app at (root)')
+  })
+
+  describe('a trial session with a slug (SDK alpha.7: the shared trial realm)', () => {
+    const trial: Workspace = { realm: 'trial', trial: true, slug: 'acme' }
+    beforeEach(() => {
+      initResult = { status: 'authenticated', user, workspace: trial, expiresAt: Date.now() + 60_000 }
+    })
+
+    it("shows the wrong-workspace screen when P-35's slug is another tenant's, and caches nothing", async () => {
+      loadContext.mockResolvedValue({ tenantId: 't-2', slug: 'globex', roles: ['member'] })
+      await act(() => bootstrap())
+      expect(screen.getByRole('alertdialog', { name: /different workspace/ })).toBeInTheDocument()
+      expect(screen.queryByRole('main')).not.toBeInTheDocument()
+      expect(calls).not.toContain('rememberWorkspace')
+      expect(calls).not.toContain('setAuthzSubject')
+      expect(window.location.pathname).toBe('/')
+    })
+
+    it('keeps the refusal screen when the session then expires: "Session ended" would sign in to the same session', async () => {
+      loadContext.mockResolvedValue({ tenantId: 't-2', slug: 'globex', roles: ['member'] })
+      await act(() => bootstrap())
+      act(() => subscriber!({ status: 'expired', serverEnded: true, idle: false } as SessionState))
+      expect(screen.getByRole('alertdialog', { name: /different workspace/ })).toBeInTheDocument()
+      expect(screen.queryByRole('alertdialog', { name: 'Session ended' })).not.toBeInTheDocument()
+      // A sign-out still shows its own screen.
+      act(() => subscriber!({ status: 'anonymous', reason: 'signed-out' }))
+      expect(screen.getByRole('dialog', { name: 'You are signed out' })).toBeInTheDocument()
+    })
+
+    it('renders the app when the slugs match', async () => {
+      await act(() => bootstrap())
+      expect(screen.getByRole('main')).toHaveTextContent('app at /t/acme')
+    })
+
+    it('waits for a transient P-35 failure to be retried before anything mounts', async () => {
+      loadContext.mockRejectedValueOnce(new NetworkError(false, 'req-1')).mockResolvedValue({ tenantId: 't-2', slug: 'globex', roles: ['member'] })
+      vi.useFakeTimers({ toFake: ['setTimeout'] })
+      const started = bootstrap()
+      await act(() => vi.advanceTimersByTimeAsync(0))
+      expect(screen.queryByRole('main')).not.toBeInTheDocument()
+      // Words only while it waits: never a blank page, nothing of the session.
+      expect(screen.getByRole('status')).toHaveTextContent('Loading your workspace…')
+      await act(() => vi.advanceTimersByTimeAsync(1_000))
+      await act(() => started)
+      expect(screen.getByRole('alertdialog', { name: /different workspace/ })).toBeInTheDocument()
+      expect(screen.queryByRole('main')).not.toBeInTheDocument()
+    })
+
+    it('renders the app when the retried P-35 matches', async () => {
+      loadContext.mockRejectedValueOnce(new NetworkError(false, 'req-1'))
+      vi.useFakeTimers({ toFake: ['setTimeout'] })
+      const started = bootstrap()
+      await act(() => vi.advanceTimersByTimeAsync(1_000))
+      await act(() => started)
+      expect(screen.getByRole('main')).toHaveTextContent('app at /t/acme')
+    })
+
+    it('shows "We couldn\'t load your workspace" when P-35 never loads, and reloads on Try again', async () => {
+      loadContext.mockRejectedValue(new NetworkError(false, 'req-1'))
+      const reload = vi.fn()
+      vi.stubGlobal('location', { ...window.location, pathname: '/', reload })
+      vi.useFakeTimers({ toFake: ['setTimeout'] })
+      const started = bootstrap()
+      await act(() => vi.advanceTimersByTimeAsync(1_000 + 2_000 + 4_000))
+      await act(() => started)
+      vi.useRealTimers()
+      expect(loadContext).toHaveBeenCalledTimes(4)
+      expect(screen.getByRole('alertdialog', { name: "We couldn't load your workspace" })).toBeInTheDocument()
+      expect(screen.queryByRole('main')).not.toBeInTheDocument()
+      expect(calls).not.toContain('rememberWorkspace')
+      const u = userEvent.setup()
+      await u.click(screen.getByRole('button', { name: 'Try again' }))
+      expect(reload).toHaveBeenCalledOnce()
+      vi.unstubAllGlobals()
+      // A reload may fail the same way: the user can also leave a possibly foreign session.
+      await u.click(screen.getByRole('button', { name: 'Sign out' }))
+      expect(idp.logout).toHaveBeenCalledOnce()
+      await u.click(screen.getByRole('button', { name: 'Switch workspace' }))
+      expect(await screen.findByRole('textbox', { name: /work email or workspace name/i })).toBeInTheDocument()
+    })
+
+    it('retries every failure that is not a workspace state (offline, 404, 500) before that screen', async () => {
+      loadContext.mockRejectedValue(new Error('404'))
+      vi.useFakeTimers({ toFake: ['setTimeout'] })
+      const started = bootstrap()
+      await act(() => vi.advanceTimersByTimeAsync(1_000 + 2_000 + 4_000))
+      await act(() => started)
+      expect(loadContext).toHaveBeenCalledTimes(4)
+      expect(screen.getByRole('alertdialog', { name: "We couldn't load your workspace" })).toBeInTheDocument()
+    })
+
+    it('renders the app when a retry after a final-looking failure answers', async () => {
+      loadContext.mockRejectedValueOnce(new NetworkError(true, 'req-1'))
+      vi.useFakeTimers({ toFake: ['setTimeout'] })
+      const started = bootstrap()
+      await act(() => vi.advanceTimersByTimeAsync(1_000))
+      await act(() => started)
+      expect(screen.getByRole('main')).toHaveTextContent('app at /t/acme')
+    })
+
+    it('shows the workspace state a retry answers with (A6/A8)', async () => {
+      loadContext
+        .mockRejectedValueOnce(new NetworkError(false, 'req-1'))
+        .mockRejectedValueOnce(await parseProblemResponse(mockProblem(PlatformProblemTypes.Forbidden, { errorCode: 'TENANT_TRIAL_EXPIRED' })))
+      vi.useFakeTimers({ toFake: ['setTimeout'] })
+      const started = bootstrap()
+      await act(() => vi.advanceTimersByTimeAsync(1_000))
+      await act(() => started)
+      expect(screen.getByRole('alertdialog', { name: 'Your trial has ended' })).toBeInTheDocument()
+      expect(screen.queryByRole('main')).not.toBeInTheDocument()
+    })
+
+    it('asks a membership refusal on a retry once more, and renders the app when it then answers', async () => {
+      loadContext
+        .mockRejectedValueOnce(new NetworkError(false, 'req-1'))
+        .mockRejectedValueOnce(await parseProblemResponse(mockProblem(PlatformProblemTypes.Forbidden, { errorCode: 'MEMBER_SUSPENDED' })))
+      vi.useFakeTimers({ toFake: ['setTimeout'] })
+      const started = bootstrap()
+      await act(() => vi.advanceTimersByTimeAsync(1_000))
+      expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+      await act(() => vi.advanceTimersByTimeAsync(5_000))
+      await act(() => started)
+      expect(loadContext).toHaveBeenCalledTimes(3)
+      expect(screen.getByRole('main')).toHaveTextContent('app at /t/acme')
+    })
+
+    it('retries when that second ask fails otherwise, as the first load would, and renders the app when it answers', async () => {
+      loadContext
+        .mockRejectedValueOnce(new NetworkError(false, 'req-1'))
+        .mockRejectedValueOnce(await parseProblemResponse(mockProblem(PlatformProblemTypes.Forbidden, { errorCode: 'MEMBER_SUSPENDED' })))
+        .mockRejectedValueOnce(new Error('503'))
+      vi.useFakeTimers({ toFake: ['setTimeout'] })
+      const started = bootstrap()
+      await act(() => vi.advanceTimersByTimeAsync(7_000))
+      await act(() => started)
+      expect(loadContext).toHaveBeenCalledTimes(4)
+      expect(screen.getByRole('main')).toHaveTextContent('app at /t/acme')
+    })
+
+    it('shows "We couldn\'t load your workspace" when the retries after that second ask fail too', async () => {
+      loadContext
+        .mockRejectedValueOnce(new NetworkError(false, 'req-1'))
+        .mockRejectedValueOnce(await parseProblemResponse(mockProblem(PlatformProblemTypes.Forbidden, { errorCode: 'MEMBER_SUSPENDED' })))
+        .mockRejectedValue(new Error('500'))
+      vi.useFakeTimers({ toFake: ['setTimeout'] })
+      const started = bootstrap()
+      await act(() => vi.advanceTimersByTimeAsync(13_000))
+      await act(() => started)
+      expect(loadContext).toHaveBeenCalledTimes(6)
+      expect(screen.getByRole('alertdialog', { name: "We couldn't load your workspace" })).toBeInTheDocument()
+    })
+
+    it('shows the refusal when a retry after that second ask is refused again: asked twice, it is final', async () => {
+      const suspended = await parseProblemResponse(mockProblem(PlatformProblemTypes.Forbidden, { errorCode: 'MEMBER_SUSPENDED' }))
+      loadContext
+        .mockRejectedValueOnce(new NetworkError(false, 'req-1'))
+        .mockRejectedValueOnce(suspended)
+        .mockRejectedValueOnce(new Error('503'))
+        .mockRejectedValueOnce(suspended)
+      vi.useFakeTimers({ toFake: ['setTimeout'] })
+      const started = bootstrap()
+      await act(() => vi.advanceTimersByTimeAsync(7_000))
+      await act(() => started)
+      expect(loadContext).toHaveBeenCalledTimes(4)
+      expect(screen.getByRole('alertdialog', { name: 'Your access is paused' })).toBeInTheDocument()
+      expect(screen.queryByRole('main')).not.toBeInTheDocument()
+    })
+
+    it('stops when the session expires during the retries after that second ask', async () => {
+      loadContext
+        .mockRejectedValueOnce(new NetworkError(false, 'req-1'))
+        .mockRejectedValueOnce(await parseProblemResponse(mockProblem(PlatformProblemTypes.Forbidden, { errorCode: 'MEMBER_SUSPENDED' })))
+        .mockRejectedValueOnce(new Error('503'))
+      vi.useFakeTimers({ toFake: ['setTimeout'] })
+      const started = bootstrap()
+      await act(() => vi.advanceTimersByTimeAsync(6_000))
+      act(() => subscriber!({ status: 'expired', serverEnded: false, idle: false } as SessionState))
+      await act(() => vi.advanceTimersByTimeAsync(7_000))
+      await act(() => started)
+      expect(screen.getByRole('alertdialog', { name: 'Session ended' })).toBeInTheDocument()
+      expect(screen.queryByRole('main')).not.toBeInTheDocument()
+    })
+
+    it('shows nothing when the user signs out during the second ask', async () => {
+      loadContext
+        .mockRejectedValueOnce(new NetworkError(false, 'req-1'))
+        .mockRejectedValue(await parseProblemResponse(mockProblem(PlatformProblemTypes.Forbidden, { errorCode: 'MEMBER_SUSPENDED' })))
+      vi.useFakeTimers({ toFake: ['setTimeout'] })
+      const started = bootstrap()
+      await act(() => vi.advanceTimersByTimeAsync(1_000))
+      act(() => subscriber!({ status: 'anonymous', reason: 'signed-out' }))
+      await act(() => vi.advanceTimersByTimeAsync(5_000))
+      await act(() => started)
+      expect(screen.queryByRole('alertdialog', { name: 'Your access is paused' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('main')).not.toBeInTheDocument()
+    })
+
+    it('keeps "Session ended" when the session expires during the retries', async () => {
+      loadContext.mockRejectedValueOnce(new NetworkError(false, 'req-1')).mockResolvedValue({ tenantId: 't-1', slug: 'acme', roles: ['member'] })
+      vi.useFakeTimers({ toFake: ['setTimeout'] })
+      const started = bootstrap()
+      await act(() => vi.advanceTimersByTimeAsync(0))
+      act(() => subscriber!({ status: 'expired', idle: false } as SessionState))
+      await act(() => vi.advanceTimersByTimeAsync(1_000))
+      await act(() => started)
+      expect(screen.getByRole('alertdialog', { name: 'Session ended' })).toBeInTheDocument()
+      expect(screen.queryByRole('main')).not.toBeInTheDocument()
+      expect(calls).not.toContain('rememberWorkspace')
+    })
+
+    it('shows nothing when the user signs out during the retries', async () => {
+      loadContext.mockRejectedValue(new NetworkError(false, 'req-1'))
+      vi.useFakeTimers({ toFake: ['setTimeout'] })
+      const started = bootstrap()
+      await act(() => vi.advanceTimersByTimeAsync(0))
+      act(() => subscriber!({ status: 'anonymous', reason: 'signed-out' }))
+      await act(() => vi.advanceTimersByTimeAsync(10_000))
+      await act(() => started)
+      expect(screen.queryByRole('alertdialog', { name: "We couldn't load your workspace" })).not.toBeInTheDocument()
+      expect(screen.queryByRole('main')).not.toBeInTheDocument()
+    })
   })
 
   it('never renders the app for a login in the wrong workspace', async () => {
@@ -557,6 +922,38 @@ describe('bootstrap, signed out', () => {
     expect(idp.login).toHaveBeenCalledWith({ workspace: acme })
   })
 
+  it('asks for the email under /t/<slug> when PUB-1 no longer knows the workspace the silent sign-in tried', async () => {
+    initResult = { status: 'anonymous', reason: 'login-required' }
+    chooseWorkspace.mockResolvedValue({ realm: 'tenant-other', trial: false, slug: 'other' })
+    window.history.replaceState({}, '', '/t/gone/dashboard')
+    resolve.mockResolvedValue(acme)
+    void bootstrap()
+    await typeEmail('ada@acme.com')
+    await waitFor(() => expect(idp.login).toHaveBeenCalledWith({ workspace: acme, loginHint: 'ada@acme.com' }))
+    expect(chooseWorkspace).not.toHaveBeenCalled()
+  })
+
+  it('asks for the email in that case with no slug in the URL too, never another cached workspace', async () => {
+    initResult = { status: 'anonymous', reason: 'login-required' }
+    chooseWorkspace.mockResolvedValue({ realm: 'tenant-other', trial: false, slug: 'other' })
+    resolve.mockResolvedValue(acme)
+    void bootstrap()
+    await typeEmail('ada@acme.com')
+    await waitFor(() => expect(idp.login).toHaveBeenCalledWith({ workspace: acme, loginHint: 'ada@acme.com' }))
+    expect(chooseWorkspace).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['neither a slug nor a tenant id hint: credentials', { realm: 'trial', trial: true }, { prompt: 'login' }],
+    ['a tenant id hint: as usual', { realm: 'trial', trial: true, tenantIdHint: 't-9' }, {}],
+  ])('signs in to a trial workspace with %s', async (_name, workspace, extra) => {
+    initResult = { status: 'anonymous', reason: 'none' }
+    resolve.mockResolvedValue(workspace as Workspace)
+    void bootstrap()
+    await typeEmail('ada@acme.com')
+    await waitFor(() => expect(idp.login).toHaveBeenCalledWith({ workspace, loginHint: 'ada@acme.com', ...extra }))
+  })
+
   it('waits for a click after a logout', async () => {
     initResult = { status: 'anonymous', reason: 'signed-out' }
     chooseWorkspace.mockResolvedValue(acme)
@@ -580,7 +977,7 @@ describe('bootstrap, workspace banners (IAM P-1, P-27) and the upgrade welcome (
   const notices = () => appNotices?.get()
 
   it("loads P-1 for the context's tenant after render, and gives a member the trial banner (no P-27)", async () => {
-    loadTenant.mockResolvedValue({ name: 'Acme', status: 'trial', trialEndsAt: new Date(Date.now() + 3 * DAY - 1000).toISOString() })
+    loadTenant.mockResolvedValue({ name: 'Acme', status: 'trial', trialEndsAt: new Date(Date.now() + 3 * DAY + 60_000).toISOString() })
     await act(() => bootstrap())
     await waitFor(() => expect(notices()).toEqual({ banners: [{ kind: 'trial', days: 3 }] }))
     expect(loadTenant).toHaveBeenCalledWith('t-1')
@@ -623,13 +1020,39 @@ describe('bootstrap, workspace banners (IAM P-1, P-27) and the upgrade welcome (
     const dialog = await screen.findByRole('dialog', { name: 'Welcome to your upgraded workspace' })
     expect(dialog).toHaveTextContent('Acme is now on a paid plan.')
     expect(dialog).not.toHaveTextContent(/error/i)
-    await userEvent.setup().click(screen.getByRole('button', { name: 'Continue' }))
+    // Seen once shown: another screen may replace it before Continue.
     expect(welcomeSeen.value).toBe(true)
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Continue' }))
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     // Seen: the next page load does not show it again.
     await act(() => bootstrap())
     await waitFor(() => expect(loadTenant).toHaveBeenCalledTimes(2))
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('works the trial days out again every hour while the page is open, until a sign-out or an expiry', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] })
+    vi.setSystemTime(Date.parse('2026-11-24T12:00:00Z'))
+    loadTenant.mockResolvedValue({ name: 'Acme', status: 'trial', trialEndsAt: '2026-11-25T12:30:00Z' })
+    await act(() => bootstrap())
+    await waitFor(() => expect(notices()).toEqual({ banners: [{ kind: 'trial', days: 1 }] }))
+    await act(() => vi.advanceTimersByTimeAsync(3_600_000))
+    expect(notices()).toEqual({ banners: [{ kind: 'trial', days: 0 }] })
+    // An expiry stops it.
+    act(() => subscriber!({ status: 'expired', idle: false } as SessionState))
+    await act(() => vi.advanceTimersByTimeAsync(2 * 86_400_000))
+    expect(notices()).toEqual({ banners: [{ kind: 'trial', days: 0 }] })
+  })
+
+  it('stops working the banners out on a sign-out', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] })
+    vi.setSystemTime(Date.parse('2026-11-24T12:00:00Z'))
+    loadTenant.mockResolvedValue({ name: 'Acme', status: 'trial', trialEndsAt: '2026-11-25T12:30:00Z' })
+    await act(() => bootstrap())
+    await waitFor(() => expect(notices()).toEqual({ banners: [{ kind: 'trial', days: 1 }] }))
+    act(() => subscriber!({ status: 'anonymous', reason: 'signed-out' }))
+    await act(() => vi.advanceTimersByTimeAsync(2 * 86_400_000))
+    expect(notices()).toEqual({ banners: [{ kind: 'trial', days: 1 }] })
   })
 
   it('loads the banners when a late session context arrives', async () => {

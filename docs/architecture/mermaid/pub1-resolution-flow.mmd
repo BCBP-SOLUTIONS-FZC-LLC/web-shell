@@ -10,7 +10,7 @@ sequenceDiagram
     Boot->>SDK: chooseWorkspace(pathname, resolver)
     alt URL has a workspace slug that is cached, or no slug and any workspace is cached
         SDK->>Cache: the slug's workspace, or the most recent one
-        Cache-->>Boot: Workspace (no PUB-1 call)
+        Cache-->>Boot: Workspace (paid: realm confirmed with Keycloak discovery, PUB-1 only if it is gone; trial: re-checked with PUB-1, ≤ 5 s)
     else URL has a workspace slug that is not cached
         SDK->>PUB: resolve(slug) through workspaceResolver
         PUB-->>SDK: realm
@@ -34,5 +34,5 @@ sequenceDiagram
         end
         Screen-->>Boot: Workspace, and loginHint only when an email was typed (onChosen)
     end
-    Boot->>SDK: idp.login(workspace, loginHint)
+    Boot->>SDK: idp.login(workspace, loginHint?, prompt: 'login' when uncheckable)
     Note over SDK: after sign-in rememberWorkspace caches it with the slug from P-35

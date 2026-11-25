@@ -47,7 +47,7 @@ In Kubernetes, the same four files as ConfigMap volumes at those paths (`readOnl
 SMOKE_BASE_URL=https://<host> SMOKE_MODE=live ENVIRONMENT=<dev|staging|prod> npm run test-smoke
 ```
 
-`live` mode fails without the CSP (including the IdP in `form-action`), HSTS of at least a year, or `nosniff`, and checks the SPA rule, caching, integrity and the runtime files. Then sign in, open the dashboard, and sign out: the sign-out must reach Keycloak (the next sign-in asks for the password).
+`live` mode fails without the CSP (including the IdP in `form-action`), HSTS of at least a year, or `nosniff`, or when IAM P-35 is not routed (`GET /api/v1/me/session-context` without a token must be 401, never 404: trial workspaces with a slug never open without it), and checks the SPA rule, caching, integrity and the runtime files. Then sign in, open the dashboard, and sign out: the sign-out must reach Keycloak (the next sign-in asks for the password).
 
 ## When CloudFront arrives
 

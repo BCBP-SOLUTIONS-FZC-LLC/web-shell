@@ -1,6 +1,6 @@
 // The signed-in shell. The bootstrap renders this only with an authenticated session, so there is
 // no signed-out route here: sign-in screens are mounted by the bootstrap outside this tree.
-import { useEffect, useSyncExternalStore } from 'react'
+import { useEffect, useLayoutEffect, useRef, useSyncExternalStore, type ReactNode } from 'react'
 import { BrowserRouter, Navigate, Route, Routes, useNavigate, type NavigateFunction } from 'react-router-dom'
 import {
   MFEErrorBoundary,
@@ -89,6 +89,36 @@ function RouterBridge({ onRouter }: { onRouter: (navigate: NavigateFunction) => 
   return null
 }
 
+/** The CSS custom property remotes read for the notice stack's height. */
+export const NOTICES_HEIGHT_VAR = '--shell-notices-height'
+
+/**
+ * Publishes the bottom notice stack's height as `--shell-notices-height` on <html> (0px when empty), so a
+ * remote's fixed elements can end above it (`bottom: var(--shell-notices-height, 0px)`) instead of
+ * sitting under it. Set through the CSSOM, which the platform CSP allows (no inline style).
+ */
+function NoticeStack({ children }: { children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null)
+  useLayoutEffect(() => {
+    const el = ref.current!
+    const root = document.documentElement
+    const publish = () => root.style.setProperty(NOTICES_HEIGHT_VAR, `${el.offsetHeight}px`)
+    publish()
+    // Every engine the shell supports has ResizeObserver (the browser suite runs all three).
+    const observer = new ResizeObserver(publish)
+    observer.observe(el)
+    return () => {
+      observer.disconnect()
+      root.style.removeProperty(NOTICES_HEIGHT_VAR)
+    }
+  }, [])
+  return (
+    <div ref={ref} className="sticky bottom-0 z-40 flex flex-col">
+      {children}
+    </div>
+  )
+}
+
 /**
  * Routes under /t/<slug>/ once the workspace has a slug (the SDK moves the URL there after
  * sign-in, from the session context); otherwise from the site root.
@@ -112,17 +142,22 @@ export default function App({
       <BrowserRouter {...(basename ? { basename } : {})}>
         {onRouter ? <RouterBridge onRouter={onRouter} /> : null}
         <Update />
-        {/* The page's notices, stacked at the bottom so two never cover each other. */}
-        <div className="fixed inset-x-0 bottom-0 z-40 flex flex-col">
-          <WorkspaceBanners banners={banners} />
-          <ReadOnly until={readOnlyUntil} />
-          {context ? null : <ContextUnavailable onReload={() => window.location.reload()} />}
+        <div className="flex min-h-screen flex-col">
+          <div className="flex-1">
+            <Routes>
+              <Route path="/dashboard/*" element={<Dashboard />} />
+              <Route path="/tenders/*" element={<Tenders />} />
+              <Route path="*" element={<Navigate to="/dashboard" replace />} />
+            </Routes>
+          </div>
+          {/* The page's notices, stacked at the bottom so two never cover each other. Sticky, in the page's
+              flow: they stay in view, and the page ends below them, so the remote's last controls scroll clear. */}
+          <NoticeStack>
+            <WorkspaceBanners banners={banners} />
+            <ReadOnly until={readOnlyUntil} />
+            {context ? null : <ContextUnavailable onReload={() => window.location.reload()} />}
+          </NoticeStack>
         </div>
-        <Routes>
-          <Route path="/dashboard/*" element={<Dashboard />} />
-          <Route path="/tenders/*" element={<Tenders />} />
-          <Route path="*" element={<Navigate to="/dashboard" replace />} />
-        </Routes>
       </BrowserRouter>
     </MFEErrorBoundary>
   )
