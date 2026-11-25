@@ -55,11 +55,11 @@ src/
     layouts/             ← screen.tsx (full-screen host), sessionScreens.tsx (mounts the session screens)
   presentation/
     pages/login/         ← LoginPage, useEmailSignIn (the remembered-email repository is passed in)
-    features/session-screens/ ← Sign-in, signed out, session ended, device clock, wrong workspace (components)
+    features/session-screens/ ← Sign-in, signed out, session ended, device clock, wrong workspace, workspace not found, workspace unavailable (A6/A8) (components)
     components/          ← BrandLogo, PageLinks
     widgets/             ← Update notice, read-only notice, missing-permissions notice (state passed in, or mounted only while it holds)
   application/           ← Use cases (no React, no browser APIs): resolveWorkspace, requestPasswordReset, loadSessionContext; signIn.ts
-  domain/                ← Contracts, errors, rules: RememberedEmailRepository, WorkspaceNotFoundError, permissions (role map), identifier (sign-in box)
+  domain/                ← Contracts, errors, rules: RememberedEmailRepository, WorkspaceNotFoundError, permissions (role map), identifier (sign-in box), workspaceAccess (P-35 refusals → workspace state)
   infrastructure/
     api/iam.ts           ← PUB-1 resolver and P-35 session context (the SDK's /auth ports)
     auth/passwordReset.ts ← Keycloak reset-credentials URL for a workspace
@@ -198,7 +198,7 @@ Follow [docs/observability.md § Adding a metric](docs/observability.md#adding-a
 
 | Layer | Location | Docker | Notes |
 |---|---|---|---|
-| Unit | `test/unit/` | No | IAM mappings and ports, entry point, remember-email, screen host, `BrandLogo`, session-context retry, navigator, dev platform middleware, layer rules, arch-lint, text catalogue, no-SDK-duplicates, metrics-check, use cases |
+| Unit | `test/unit/` | No | IAM mappings and ports, entry point, remember-email, screen host, `BrandLogo`, session-context retry and refusal mapping, navigator, dev platform middleware, layer rules, arch-lint, text catalogue, no-SDK-duplicates, metrics-check, use cases |
 | Integration | `test/integration/` | No | The login page and carousel, session screens, `App`, bootstrap order and branches. SDK subpaths are `vi.mock` fakes where needed; axe-core over every shell screen (`accessibility.test.tsx`) |
 | End to end | `test/e2e/` | No | The real shell and SDK against `test/fixtures/` fakes (Keycloak, network, BroadcastChannel); only the remote's entry script is stubbed |
 | Smoke | `test/smoke/`, CI `smoke` job | Image or deployment | `.github/scripts/smoke-tests.sh`: image ≤ 200 MB and the startup gate, then `npm run test-smoke` against the container (SPA rule, Cache-Control, integrity, 404s, SDK-validated runtime files). [test/smoke/README.md](./test/smoke/README.md) |
@@ -216,7 +216,7 @@ npx vitest run test/unit/iam.test.ts
 
 These tests pin behavior other repos and the login flow depend on. Change them only when the contract change is intentional, and update `README.md` and `VERSIONING.md` in the same pull request.
 
-- **`test/integration/bootstrap.test.tsx`** — the exact SDK initialisation order, no automatic login after a logout or a device-clock refusal, the app never renders for a wrong-workspace login, deny-all without a session context, and the app unmounts on sign-out.
+- **`test/integration/bootstrap.test.tsx`** — the exact SDK initialisation order, no automatic login after a logout or a device-clock refusal, the app never renders for a wrong-workspace login or a P-35 refusal that is a workspace state (A6/A8), deny-all without a session context, and the app unmounts on sign-out.
 - **`test/unit/iam.test.ts`** — the PUB-1 → `Workspace` and P-35 → `SessionContext` ports, through the real `ApiClient` (`createTestPlatform`, `mockApi`), against the SDK's contract cases in `@bcbp-solutions-fzc-llc/frontend-sdk/contracts`; PUB-1 is called without a token.
 - **`test/integration/session-screens.test.tsx`** — "not found" and "unreachable" show the same message.
 - **`test/integration/app.test.tsx`** — `/dashboard/*` renders `dashboard` `./App` and `/tenders/*` renders `tenders` `./App`, each with no props, under the workspace basename.

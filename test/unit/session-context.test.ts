@@ -1,10 +1,11 @@
 // The P-35 retry: which failures are retried, the backoff, the abort, and the store React reads.
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { NetworkError, TimeoutError, parseProblemResponse, typeForStatus } from '@bcbp-solutions-fzc-llc/frontend-sdk/problem'
+import { NetworkError, PlatformProblemTypes, TimeoutError, parseProblemResponse, typeForStatus } from '@bcbp-solutions-fzc-llc/frontend-sdk/problem'
 import { createApiClient } from '@bcbp-solutions-fzc-llc/frontend-sdk/http'
 import { createTestPlatform, mockApi, mockProblem } from '@bcbp-solutions-fzc-llc/frontend-sdk/testing'
 import type { SessionContext } from '@bcbp-solutions-fzc-llc/frontend-sdk/auth'
-import { createStore, isTransient, retrySessionContext } from '../../src/application/use-cases/loadSessionContext'
+import { workspaceBlock } from '../../src/domain/rules/workspaceAccess'
+import { blockedWorkspace, createStore, isTransient, retrySessionContext, settleRefusal } from '../../src/application/use-cases/loadSessionContext'
 
 const ctx = { tenantId: 't-1', slug: 'acme', roles: ['member'] } as unknown as SessionContext
 /**
@@ -142,5 +143,81 @@ describe('createStore', () => {
     store.set(3)
     expect(seen).toEqual([2])
     expect(store.get()).toBe(3)
+  })
+})
+
+describe('blockedWorkspace (P-35 refusals that are workspace states)', () => {
+  const forbidden = (errorCode: string) => parseProblemResponse(mockProblem(PlatformProblemTypes.Forbidden, { errorCode }))
+  const notFound = (errorCode: string) => parseProblemResponse(mockProblem(PlatformProblemTypes.NotFound, { errorCode }))
+
+  it("maps IAM's codes to the screen they need", async () => {
+    expect(blockedWorkspace(await forbidden('TENANT_TRIAL_EXPIRED'))).toBe('trial-expired')
+    expect(blockedWorkspace(await forbidden('TENANT_SUSPENDED'))).toBe('tenant-unavailable')
+    expect(blockedWorkspace(await notFound('TENANT_NOT_FOUND'))).toBe('tenant-unavailable')
+    expect(blockedWorkspace(await forbidden('MEMBER_SUSPENDED'))).toBe('member-paused')
+    expect(blockedWorkspace(await forbidden('DENY_MEMBER_SUSPENDED'))).toBe('member-paused')
+    expect(blockedWorkspace(await forbidden('DENY_UNRESOLVABLE_SUBJECT'))).toBe('no-access')
+    expect(blockedWorkspace(await notFound('MEMBER_NOT_FOUND'))).toBe('no-access')
+  })
+
+  it('compares the code without case', async () => {
+    expect(blockedWorkspace(await forbidden('member_suspended'))).toBe('member-paused')
+  })
+
+  it('keeps every other failure on the permissions notice', async () => {
+    // Any other non-active membership: IAM keeps INSUFFICIENT_ROLE, which is not "access paused".
+    expect(blockedWorkspace(await forbidden('INSUFFICIENT_ROLE'))).toBeUndefined()
+    expect(blockedWorkspace(await forbidden('DENY_ROLE_INSUFFICIENT'))).toBeUndefined()
+    expect(blockedWorkspace(await problem(403))).toBeUndefined()
+    // P-35 missing in an environment: a 404 without IAM's code.
+    expect(blockedWorkspace(await notFound('ROUTE_NOT_FOUND'))).toBeUndefined()
+    // A known code on a status IAM never sends it with is not taken as final.
+    expect(blockedWorkspace(await notFound('TENANT_SUSPENDED'))).toBeUndefined()
+    expect(blockedWorkspace(await problem(503))).toBeUndefined()
+    expect(blockedWorkspace(new NetworkError(false, 'req-1'))).toBeUndefined()
+    expect(blockedWorkspace(new Error('403'))).toBeUndefined()
+    // A problem with no errorCode at all.
+    expect(workspaceBlock(403, undefined)).toBeUndefined()
+  })
+})
+
+describe('settleRefusal (a membership refusal is asked once more)', () => {
+  const forbidden = (errorCode: string) => parseProblemResponse(mockProblem(PlatformProblemTypes.Forbidden, { errorCode }))
+
+  it('takes a tenant state as final at once, without asking again', async () => {
+    const load = vi.fn<() => Promise<SessionContext>>()
+    expect(await settleRefusal(await forbidden('TENANT_TRIAL_EXPIRED'), load)).toEqual({ block: 'trial-expired' })
+    expect(load).not.toHaveBeenCalled()
+  })
+
+  it('returns any other failure as it is', async () => {
+    const error = new Error('bug')
+    expect(await settleRefusal(error, vi.fn())).toEqual({ error })
+  })
+
+  it('asks once more after 5 s: a member reactivated in the meantime gets the context', async () => {
+    vi.useFakeTimers()
+    const load = vi.fn(async () => ctx)
+    const settled = settleRefusal(await forbidden('DENY_MEMBER_SUSPENDED'), load)
+    await vi.advanceTimersByTimeAsync(4_999)
+    expect(load).not.toHaveBeenCalled()
+    await vi.advanceTimersByTimeAsync(1)
+    expect(await settled).toEqual({ context: ctx })
+  })
+
+  it('takes the second answer: still refused, now another state, or another failure', async () => {
+    const again = async (e: unknown) => settleRefusal(await forbidden('DENY_UNRESOLVABLE_SUBJECT'), () => Promise.reject(e), { delayMs: 0 })
+    expect(await again(await forbidden('MEMBER_SUSPENDED'))).toEqual({ block: 'member-paused' })
+    const outage = await problem(503)
+    expect(await again(outage)).toEqual({ error: outage })
+  })
+
+  it('stops on a sign-out without asking again', async () => {
+    const stop = new AbortController()
+    stop.abort()
+    const first = await forbidden('MEMBER_SUSPENDED')
+    const load = vi.fn<() => Promise<SessionContext>>()
+    expect(await settleRefusal(first, load, { signal: stop.signal })).toEqual({ error: first })
+    expect(load).not.toHaveBeenCalled()
   })
 })

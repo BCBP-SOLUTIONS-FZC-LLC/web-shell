@@ -48,10 +48,11 @@ import {
   showSessionEnded,
   showSignedOut,
   showWorkspaceNotFound,
+  showWorkspaceUnavailable,
   showWrongWorkspace,
 } from '../layouts/sessionScreens'
 import { hideScreen } from '../layouts/screen'
-import { createStore, isTransient, retrySessionContext } from '../../application/use-cases/loadSessionContext'
+import { blockedWorkspace, createStore, isTransient, retrySessionContext, settleRefusal } from '../../application/use-cases/loadSessionContext'
 import { ShellRoot } from '../providers/ShellRoot'
 import { registerShellMessages } from '../../infrastructure/i18n/shellMessages'
 // Self-hosted fonts (Fontsource, SIL OFL 1.1): served from /assets/, as the platform CSP requires
@@ -209,6 +210,19 @@ async function start(cfg: RuntimeConfig, report: { otlpBaseUrl: string }): Promi
     }),
   )
   if (signedOut()) return
+  // IAM refuses this user the workspace (trial ended, suspended, access paused, not a member): the app
+  // is never rendered and the shell remembers nothing (no rememberWorkspace, no /t/<slug>/ move); sign
+  // out or switch. A membership refusal is asked once more first: IAM's caches may lag a change.
+  if (firstError !== undefined) {
+    const settled = await settleRefusal(firstError, loadSessionContextOnce, { signal: signedOutDuringBoot.signal })
+    if (signedOut()) return
+    if ('block' in settled) {
+      showWorkspaceUnavailable(settled.block, idp, signInUseCases)
+      return
+    }
+    if ('context' in settled) context.set(settled.context)
+    else firstError = settled.error
+  }
   const applyContext = () => {
     const c = context.get()
     setAuthzSubject(c && { roles: c.roles, tenantId: c.tenantId })
@@ -271,10 +285,21 @@ async function start(cfg: RuntimeConfig, report: { otlpBaseUrl: string }): Promi
   // the subject, flags and provider get the context. A sign-out stops the retries. A final answer
   // (401, 403, 404: P-35 missing in this environment) is not asked again.
   if (!context.get() && isTransient(firstError)) {
+    let late: ReturnType<typeof blockedWorkspace>
     const retried = await retrySessionContext(loadSessionContextOnce, {
       signal: signedOutDuringBoot.signal,
-      onError: (error, attempt) => getLogger().warn('session context unavailable', { error, attempt }),
+      onError: (error, attempt) => {
+        getLogger().warn('session context unavailable', { error, attempt })
+        late = blockedWorkspace(error) ?? late
+      },
     })
+    // A retry answered with a workspace state: replace the deny-all app with that screen.
+    if (late && !signedOut()) {
+      app?.unmount()
+      app = undefined
+      showWorkspaceUnavailable(late, idp, signInUseCases)
+      return
+    }
     if (retried && !signedOut()) {
       context.set(retried)
       applyContext()

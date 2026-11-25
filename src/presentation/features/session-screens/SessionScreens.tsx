@@ -6,6 +6,7 @@ import type { SessionState, Workspace } from '@bcbp-solutions-fzc-llc/frontend-s
 import type { SignInUseCases } from '../../../application/signIn'
 import { WorkspaceNotFoundError } from '../../../domain/errors'
 import { isEmailIdentifier } from '../../../domain/rules/identifier'
+import type { WorkspaceBlock } from '../../../domain/rules/workspaceAccess'
 import LoginPage from '../../pages/login/LoginPage'
 import { shellText, useShellText, type ShellKey } from '../../../shared/i18n'
 
@@ -128,6 +129,29 @@ export function SessionEndedDialog({ state, onSignIn }: { state: Extract<Session
     <Dialog title="session.ended.title" role="alertdialog">
       <Text id={text} />
       <Button onClick={onSignIn} label="common.signIn" />
+    </Dialog>
+  )
+}
+
+const UNAVAILABLE: Record<WorkspaceBlock, { title: ShellKey; text: ShellKey }> = {
+  'trial-expired': { title: 'session.trialExpired.title', text: 'session.trialExpired.text' },
+  'tenant-unavailable': { title: 'session.workspaceUnavailable.title', text: 'session.workspaceUnavailable.text' },
+  'member-paused': { title: 'session.accessPaused.title', text: 'session.accessPaused.text' },
+  'no-access': { title: 'session.noAccess.title', text: 'session.noAccess.text' },
+}
+
+/**
+ * IAM refuses this user the workspace (spec A6 trial ended, A8 workspace unavailable or access
+ * paused): the app is not rendered. Sign out, or switch to another workspace. No retry: the answer is
+ * final until someone changes the workspace or the membership.
+ */
+export function WorkspaceUnavailableDialog({ block, onSignOut, onSwitch }: { block: WorkspaceBlock; onSignOut: () => void; onSwitch: () => void }) {
+  const { title, text } = UNAVAILABLE[block]
+  return (
+    <Dialog title={title} role="alertdialog">
+      <Text id={text} />
+      <Button onClick={onSignOut} label="common.signOut" />
+      <Button onClick={onSwitch} label="session.wrongWorkspace.switch" />
     </Dialog>
   )
 }

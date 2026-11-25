@@ -10,7 +10,7 @@ graph LR
     widgets(["presentation/widgets"])
     comps(["presentation/components\nBrandLogo, PageLinks"])
     usecases(["application/use-cases\nresolveWorkspace, requestPasswordReset,\nloadSessionContext"])
-    domain(["domain/\nRememberedEmailRepository, WorkspaceNotFoundError,\nrules/permissions, rules/identifier"])
+    domain(["domain/\nRememberedEmailRepository, WorkspaceNotFoundError,\nrules/permissions, rules/identifier, rules/workspaceAccess"])
     iam(["infrastructure/api/iam.ts"])
     reset(["infrastructure/auth/passwordReset.ts"])
     remember(["infrastructure/storage/rememberedEmail.ts\n(localStorage)"])
@@ -37,6 +37,7 @@ graph LR
     root -. types .-> usecases
     root --> sdk
     host --> screens
+    host -. types .-> usecases
     host --> screen
     screens --> login
     screens -. types, signIn.ts .-> usecases

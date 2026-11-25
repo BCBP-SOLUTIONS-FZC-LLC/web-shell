@@ -63,5 +63,13 @@
   "session.ended.default": "Your session has ended.",
   "session.wrongWorkspace.title": "You signed in to a different workspace",
   "session.wrongWorkspace.text": "The account you used belongs to another workspace than the one you were invited to.",
-  "session.wrongWorkspace.switch": "Switch workspace"
+  "session.wrongWorkspace.switch": "Switch workspace",
+  "session.trialExpired.title": "Your trial has ended",
+  "session.trialExpired.text": "This workspace's free trial is over. To keep using it, the account owner needs to upgrade it. If that isn't you, ask your account owner.",
+  "session.workspaceUnavailable.title": "Workspace unavailable",
+  "session.workspaceUnavailable.text": "This workspace isn't available right now. Contact your administrator.",
+  "session.accessPaused.title": "Your access is paused",
+  "session.accessPaused.text": "Your access to this workspace is paused — contact your administrator.",
+  "session.noAccess.title": "You don't have access to this workspace",
+  "session.noAccess.text": "Your access to this workspace was removed or paused. Contact your administrator, or switch to another workspace."
 }
