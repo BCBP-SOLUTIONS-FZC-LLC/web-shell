@@ -29,6 +29,9 @@ export const DRAFTING_REMOTE = 'drafting'
 /** The remote that renders the workflow designer (mfe-workflow-designer), as named in /remotes/manifest.json. */
 export const WORKFLOWS_REMOTE = 'workflows'
 
+/** The remote that renders workspace administration (mfe-admin), as named in /remotes/manifest.json. */
+export const ADMIN_REMOTE = 'admin'
+
 /** The shell's own name in error logs and web-error metrics (the dashboard reports as `dashboard`). */
 export const SHELL_MFE = 'web-shell'
 
@@ -70,6 +73,13 @@ function Drafting() {
   useRouteTemplate('/t/:slug/drafting')
   const text = useShellText()
   return <RemoteBoundary remote={DRAFTING_REMOTE} module="./App" fallback={<Loading>{text('app.loadingDrafting')}</Loading>} />
+}
+
+/** The admin remote (mfe-admin), under /t/<slug>/admin/*. Same basename rule as the other remotes; no props. */
+function Admin() {
+  useRouteTemplate('/t/:slug/admin')
+  const text = useShellText()
+  return <RemoteBoundary remote={ADMIN_REMOTE} module="./App" fallback={<Loading>{text('app.loadingAdmin')}</Loading>} />
 }
 
 function Workflows() {
@@ -172,6 +182,7 @@ export default function App({
               <Route path="/tenders/*" element={<Tenders />} />
               <Route path="/drafting/*" element={<Drafting />} />
               <Route path="/workflows/*" element={<Workflows />} />
+              <Route path="/admin/*" element={<Admin />} />
               <Route path="*" element={<Navigate to="/dashboard" replace />} />
             </Routes>
           </div>

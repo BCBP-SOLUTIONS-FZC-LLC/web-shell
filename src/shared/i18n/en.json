@@ -4,6 +4,7 @@
   "app.loadingTenders": "Loading tenders…",
   "app.loadingDrafting": "Loading drafting…",
   "app.loadingWorkflows": "Loading workflows…",
+  "app.loadingAdmin": "Loading admin…",
   "app.readOnly": "Workspace is read-only (subscription ended)",
   "app.readOnlyUntil": "Workspace is read-only (subscription ended). Access ends on {date}.",
   "app.banner.trialDays": "{days} days left in your trial",
