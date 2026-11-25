@@ -25,7 +25,7 @@ web-shell is the **shell**, not a domain microfrontend. Per the constitution's M
 | Observability | ✅ ADR 0003 | OpenTelemetry tracing, logging, metrics, correlation ids, error boundaries (`RemoteBoundary` for the remote; `MFEErrorBoundary` around the shell's own routes since #51) from the SDK; the SDK's `PlatformProvider` is the `TelemetryProvider` |
 | Accessibility (WCAG 2.1 AA) | ✅ | axe-core (happy-dom) on every screen; axe colour contrast in Chromium, Firefox, WebKit |
 | Security | ✅ | Production CSP with Trusted Types enforced by the browser suite; no secrets; tokens in memory only |
-| Internationalisation | ✅ (was ❌) | Every user-facing word is a key of the SDK `/i18n` `shell` namespace since #48 (89 keys today), guarded by a syntax-tree test. Was: about 30 hard-coded user-facing strings; the SDK's `/i18n` (the platform localisation framework) is initialised but not used for the shell's text (V4) |
+| Internationalisation | ✅ (was ❌) | Every user-facing word is a key of the SDK `/i18n` `shell` namespace since #48 (103 keys today), guarded by a syntax-tree test. Was: about 30 hard-coded user-facing strings; the SDK's `/i18n` (the platform localisation framework) is initialised but not used for the shell's text (V4) |
 | Testing | ✅ | Vitest unit/integration (100% coverage), React Testing Library, Playwright in three engines, contract tests (SDK contract cases from IAM's swagger; the real dashboard build) |
 | Deployment: S3 + CloudFront, build once | ⚠️ ADR 0007 | Interim nginx image until CloudFront (next month); the release tarball is the S3 artefact; one build per environment is now possible (V5) |
 
@@ -113,7 +113,7 @@ Enforced in CI with ESLint `no-restricted-imports` per layer (#47) and the arch-
 | `domain/` | nothing but SDK types (ports) | React, browser APIs, SDK runtime, `application/`, `infrastructure/`, `presentation/` |
 | `application/` | `domain/`, SDK types and pure helpers (`/problem` errors) | React, `presentation/`, `infrastructure/` (injected) |
 | `infrastructure/` | `domain/`, `shared/i18n`, SDK subpaths | `presentation/`, `application/` |
-| `presentation/` | pages: components, `domain/`, `application/` types (use cases passed in), `shared/`; features (the session screens): pages, components, `domain/`, `application/` types, `shared/i18n`, SDK `/auth` types; components: `shared/` only; widgets: `shared/i18n` only | `infrastructure/`, `app/`, the SDK (as enforced: presentation gets its words through `shared/i18n` and its state as props, never an SDK hook), `fetch`, storage, `location`, `history`, `navigator` |
+| `presentation/` | pages: components, `domain/`, `application/` types (use cases passed in), `shared/`; features (the session screens): pages, components, `domain/`, `application/` types, `shared/i18n`, SDK `/auth` types; components: `shared/` only; widgets: `shared/i18n`, components | `infrastructure/`, `app/`, the SDK (as enforced: presentation gets its words through `shared/i18n` and its state as props, never an SDK hook), `fetch`, storage, `location`, `history`, `navigator` |
 | `app/` | every layer except presentation and `shared/constants` (`bootstrap.tsx`); routes, providers and layouts only what they render or provide | — |
 
 The SDK's lint plugin keeps its rules (public subpaths, no raw storage, no identity headers, no unsafe HTML). No npm dependency is added or removed by the restructure. `react-router-dom` stays (routes); no TanStack Query or Zustand (ADR 0002).

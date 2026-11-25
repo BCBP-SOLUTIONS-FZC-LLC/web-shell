@@ -46,9 +46,11 @@ const loadContext = vi.fn()
 const loadTenant = vi.fn()
 const loadSeats = vi.fn()
 let appNotices: { get(): { banners: unknown[]; readOnlyUntil?: string } } | undefined
+let appRemotes: ReadonlySet<string> | undefined
+const killed = new Set<string>()
 const resolve = vi.fn<(id: string) => Promise<Workspace | undefined>>()
 const logger = { warn: vi.fn(), error: vi.fn() }
-const loadManifest = vi.fn(async () => ({}))
+const loadManifest = vi.fn(async (): Promise<Record<string, unknown>> => ({}))
 const loadRuntimeConfig = vi.fn(async () => cfg)
 const initializeCore = vi.fn()
 const i18nOptions: { detect?: () => string | undefined }[] = []
@@ -76,6 +78,7 @@ vi.mock('@bcbp-solutions-fzc-llc/frontend-sdk/flags', () => ({
   setFlagProvider: record('setFlagProvider'),
   runtimeConfigFlagProvider: () => 'runtime-flags',
   sessionContextFlagProvider: () => 'context-flags',
+  isRemoteKilled: (name: string) => killed.has(name),
 }))
 vi.mock('@bcbp-solutions-fzc-llc/frontend-sdk/auth', () => ({
   createOidcProvider: (...a: unknown[]) => (calls.push('createOidcProvider'), void a, idp),
@@ -137,9 +140,10 @@ const routerNavigate = vi.fn()
 vi.mock('../../src/app/routes/App', async () => {
   const { useEffect } = await import('react')
   return {
-    default: function App({ basename, onRouter, notices }: { basename?: string; onRouter?: (n: typeof routerNavigate) => void; notices?: unknown }) {
+    default: function App({ basename, onRouter, notices, remotes }: { basename?: string; onRouter?: (n: typeof routerNavigate) => void; notices?: unknown; remotes?: ReadonlySet<string> }) {
       useEffect(() => onRouter?.(routerNavigate), [onRouter])
       appNotices = notices as typeof appNotices
+      appRemotes = remotes
       return <main>app at {basename ?? '(root)'}</main>
     },
   }
@@ -180,6 +184,8 @@ beforeEach(() => {
   granted.clear()
   welcomeSeen.value = false
   appNotices = undefined
+  appRemotes = undefined
+  killed.clear()
   chooseWorkspace.mockResolvedValue(undefined)
   isWrongWorkspace.mockReturnValue(false)
   loadManifest.mockResolvedValue({})
@@ -376,6 +382,33 @@ describe('bootstrap, signed in', () => {
     await act(() => bootstrap())
     expect(logger.error).toHaveBeenCalledWith('manifest load failed', { error: expect.any(Error) })
     expect(screen.getByRole('main')).toBeInTheDocument()
+    // No remote can load: the header links to none.
+    expect(appRemotes).toEqual(new Set())
+  })
+
+  it("drops a remote from the header when a late context's tenant flags switch it off", async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout'] })
+    const entry = { entry: '/remotes/x/remoteEntry.js', version: '1.0.0', ownerDomain: 'portal' }
+    loadManifest.mockResolvedValue({ dashboard: entry, tenders: entry })
+    // The tenant's flags come with the context (sessionContextFlagProvider), here once the retry answers.
+    loadContext.mockRejectedValueOnce(new NetworkError(false, 'req-1')).mockImplementation(async () => {
+      killed.add('tenders')
+      return { tenantId: 't-1', slug: 'acme', roles: ['member'] }
+    })
+    const started = bootstrap()
+    await act(() => vi.advanceTimersByTimeAsync(0))
+    expect(appRemotes).toEqual(new Set(['dashboard', 'tenders']))
+    await act(() => vi.advanceTimersByTimeAsync(1_000))
+    await act(() => started)
+    expect(appRemotes).toEqual(new Set(['dashboard']))
+  })
+
+  it("gives the header the manifest's remotes, less those switched off (killSwitch or remote.<name>.disabled)", async () => {
+    const entry = { entry: '/remotes/x/remoteEntry.js', version: '1.0.0', ownerDomain: 'portal' }
+    loadManifest.mockResolvedValue({ dashboard: entry, tenders: entry, admin: entry })
+    killed.add('tenders')
+    await act(() => bootstrap())
+    expect(appRemotes).toEqual(new Set(['dashboard', 'admin']))
   })
 
   it('wires sign-out and workspace switching into the shell context', async () => {
@@ -979,7 +1012,7 @@ describe('bootstrap, workspace banners (IAM P-1, P-27) and the upgrade welcome (
   it("loads P-1 for the context's tenant after render, and gives a member the trial banner (no P-27)", async () => {
     loadTenant.mockResolvedValue({ name: 'Acme', status: 'trial', trialEndsAt: new Date(Date.now() + 3 * DAY + 60_000).toISOString() })
     await act(() => bootstrap())
-    await waitFor(() => expect(notices()).toEqual({ banners: [{ kind: 'trial', days: 3 }] }))
+    await waitFor(() => expect(notices()).toEqual({ banners: [{ kind: 'trial', days: 3 }], workspaceName: 'Acme' }))
     expect(loadTenant).toHaveBeenCalledWith('t-1')
     expect(loadSeats).not.toHaveBeenCalled()
   })
@@ -1035,13 +1068,13 @@ describe('bootstrap, workspace banners (IAM P-1, P-27) and the upgrade welcome (
     vi.setSystemTime(Date.parse('2026-11-24T12:00:00Z'))
     loadTenant.mockResolvedValue({ name: 'Acme', status: 'trial', trialEndsAt: '2026-11-25T12:30:00Z' })
     await act(() => bootstrap())
-    await waitFor(() => expect(notices()).toEqual({ banners: [{ kind: 'trial', days: 1 }] }))
+    await waitFor(() => expect(notices()).toEqual({ banners: [{ kind: 'trial', days: 1 }], workspaceName: 'Acme' }))
     await act(() => vi.advanceTimersByTimeAsync(3_600_000))
-    expect(notices()).toEqual({ banners: [{ kind: 'trial', days: 0 }] })
+    expect(notices()).toEqual({ banners: [{ kind: 'trial', days: 0 }], workspaceName: 'Acme' })
     // An expiry stops it.
     act(() => subscriber!({ status: 'expired', idle: false } as SessionState))
     await act(() => vi.advanceTimersByTimeAsync(2 * 86_400_000))
-    expect(notices()).toEqual({ banners: [{ kind: 'trial', days: 0 }] })
+    expect(notices()).toEqual({ banners: [{ kind: 'trial', days: 0 }], workspaceName: 'Acme' })
   })
 
   it('stops working the banners out on a sign-out', async () => {
@@ -1049,10 +1082,10 @@ describe('bootstrap, workspace banners (IAM P-1, P-27) and the upgrade welcome (
     vi.setSystemTime(Date.parse('2026-11-24T12:00:00Z'))
     loadTenant.mockResolvedValue({ name: 'Acme', status: 'trial', trialEndsAt: '2026-11-25T12:30:00Z' })
     await act(() => bootstrap())
-    await waitFor(() => expect(notices()).toEqual({ banners: [{ kind: 'trial', days: 1 }] }))
+    await waitFor(() => expect(notices()).toEqual({ banners: [{ kind: 'trial', days: 1 }], workspaceName: 'Acme' }))
     act(() => subscriber!({ status: 'anonymous', reason: 'signed-out' }))
     await act(() => vi.advanceTimersByTimeAsync(2 * 86_400_000))
-    expect(notices()).toEqual({ banners: [{ kind: 'trial', days: 1 }] })
+    expect(notices()).toEqual({ banners: [{ kind: 'trial', days: 1 }], workspaceName: 'Acme' })
   })
 
   it('loads the banners when a late session context arrives', async () => {
