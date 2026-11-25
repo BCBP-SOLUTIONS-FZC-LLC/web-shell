@@ -1,7 +1,7 @@
 graph LR
     subgraph shell["web-shell (identity: portal / web-shell / environment from runtime.json)"]
         boot["bootstrap.tsx\ninitializeTracing · initializeLogging · initializeMetrics\ninstallGlobalErrorHandlers · startWebVitals"]
-        logs["shell logs\nmanifest load failed (error)\nthe app could not start (error)\nsession context unavailable (warn: stays in the page under v1 consent)\nworkspace status unavailable (warn: stays in the page)"]
+        logs["shell logs\nmanifest load failed (error)\nthe app could not start (error)\nsession context unavailable (warn: stays in the page under v1 consent)\nsession context refresh failed (warn: stays in the page)\nworkspace status unavailable (warn: stays in the page)"]
         bnd["Error boundaries (SDK)\nRemoteBoundary: dashboard, tenders,\ndrafting, workflows\nMFEErrorBoundary: web-shell routes → AppError"]
     end
     subgraph sdk["SDK, for the shell and every remote"]

@@ -20,7 +20,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { act, fireEvent, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mockProblem } from '@bcbp-solutions-fzc-llc/frontend-sdk/testing'
 import { PlatformProblemTypes } from '@bcbp-solutions-fzc-llc/frontend-sdk/problem'
 import { FakeBroadcastChannel, FakeKeycloak, IDP } from '../fixtures/keycloak'
@@ -115,11 +115,26 @@ async function otherModule(name: string): Promise<{ default: ComponentType }> {
   return { default: Remote }
 }
 
-/** The document goes: every root unmounted, the body emptied. */
+/**
+ * The window `focus` listeners a page added (the shell's session-context refresh): a page load drops them,
+ * so unload() removes them, and a focus fired in one test reaches only that test's page.
+ */
+const focusListeners: EventListenerOrEventListenerObject[] = []
+const addToWindow = window.addEventListener.bind(window)
+window.addEventListener = ((type: string, listener: EventListenerOrEventListenerObject | null, o?: AddEventListenerOptions | boolean) => {
+  if (listener && type === 'focus') focusListeners.push(listener)
+  if (listener) addToWindow(type, listener, o)
+}) as typeof window.addEventListener
+afterAll(() => {
+  window.addEventListener = addToWindow
+})
+
+/** The document goes: every root unmounted, the page's focus listeners removed, the body emptied. */
 async function unload(): Promise<void> {
   await act(async () => {
     for (const r of roots.splice(0)) r.unmount()
   })
+  for (const listener of focusListeners.splice(0)) window.removeEventListener('focus', listener)
   document.body.replaceChildren()
 }
 
@@ -325,6 +340,25 @@ describe('the shell, end to end', () => {
     await screen.findByRole('heading', { name: `${name} for Ada Lovelace in acme` }, { timeout: 5_000 })
     expect(window.location.pathname).toBe(path)
     expect(injected).toEqual([otherEntry(name)])
+  })
+
+  it('a role given elsewhere reaches the remote on focus after a minute, without a reload (P-35 asked again)', async () => {
+    roles = ['member']
+    await signInByEmail()
+    expect(screen.queryByRole('button', { name: 'Invite' })).toBeNull()
+    expect(net.sent('/api/v1/me/session-context')).toHaveLength(1)
+
+    roles = ['member', 'tenant_admin'] // another admin promoted this user
+    const now = Date.now
+    const ahead = vi.spyOn(Date, 'now').mockImplementation(() => now() + 61_000)
+    try {
+      act(() => void window.dispatchEvent(new Event('focus')))
+      await screen.findByRole('button', { name: 'Invite' }, { timeout: 5_000 })
+    } finally {
+      ahead.mockRestore()
+    }
+    expect(net.sent('/api/v1/me/session-context')).toHaveLength(2)
+    expect(assigned).toEqual([]) // no page load, no sign-in round trip
   })
 
   it("gives the remote the role map's permissions: an owner may invite, a member may only view", async () => {
