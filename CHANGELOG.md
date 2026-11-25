@@ -10,6 +10,14 @@ Pull requests that change the shell, its dependencies, or the image add an entry
 
 ## [Unreleased]
 
+### Changed (2026-11-25 — CI actions)
+
+- **Three GitHub Actions bumped** (Dependabot #70, #71, #72), in `ci.yml` and `release.yml`: `docker/login-action` 4.7.0 → 4.8.0, `github/codeql-action/upload-sarif` 4.39.1 → 4.39.4, `sigstore/cosign-installer` 4.1.2 → 4.1.3. Patch and minor releases; no workflow inputs change. The Dashboard contract job's `mfe-dashboard` checkout now passes `CI_REPO_READ_TOKEN`, since that repository is private.
+
+### Added (2026-11-24 — IAM screens: the read-only notice)
+
+**A read-only workspace says so (IAM screen spec §7.10, handoff item 9).** While the SDK's `useReadOnly()` is true (P-35 `read_only`, or a `DENY_TENANT_READ_ONLY` answer seen on the page), `App` shows "Workspace is read-only (subscription ended)" at the bottom (`src/presentation/widgets/ReadOnlyNotice.tsx`, key `app.readOnly`). It has no action. It shares one bottom stack with the missing-permissions notice, so the two never overlap. The spec's wrapper that disables IAM mutation controls is not here: those controls are in the remotes, and the shell exposes nothing to them (handoff §3.3b). The grace end date needs P-1 (handoff item 8). Tests: `test/integration/app.test.tsx` (the notice, no action, the shared stack), `test/e2e/shell.test.tsx` (P-35 `read_only: true` shows it; a writable workspace does not). `test/browser/shell.spec.ts`: it shows under the production CSP in all three engines with a contrast ratio of at least 4.5, measured in the page, because axe cannot be injected into the signed-in page under its CSP. README, ARCHITECTURE (layer diagram, module table, session-context row, tests), the LLD (§2, §3, §6.6b, §12), CONTRIBUTING and `.claude/` updated. *(Previously: P-35 `read_only` reached remotes through `useReadOnly()`, but the shell showed nothing.)*
+
 ### Changed (2026-11-24 — IAM screens: UI permissions and the identifier-first sign-in)
 
 **The role map carries the IAM screens' UI permissions (IAM screen spec v0.1 §4.3).** `src/domain/rules/permissions.ts`: `manage:admin-roles` and `manage:tenant-settings` for `tenant_owner`; `manage:sso`, `manage:delegation-policy` and `read:audit` for `tenant_admin` and `tenant_owner`; `manage:tender-access` for `tender_admin` and above. The spec's `manage:roles:admin` is named `manage:admin-roles`: the SDK's `roleMapAuthorizer` accepts one colon only and would throw at start-up. Granting admin roles is owner only (HLD §6.4) until IAM-FE-Q14 is answered. Remotes read them with `useHasPermission` / `<Can>`; no remote uses them yet. Tests: `test/unit/platform-misc.test.tsx` checks each grant per role and that the map builds. *(Previously: `tenant_owner` had exactly `tenant_admin`'s grants, and only `read:members` / `manage:members` existed for IAM.)*
@@ -24,6 +32,7 @@ Pull requests that change the shell, its dependencies, or the image add an entry
 - **Dependabot's npm job fails** until the organisation Dependabot secret `PACKAGES_READ_TOKEN` exists (LLD §15 #13; needs an org admin).
 - **Official Privacy, Terms, Trust & Security and Help URLs** are not published (LLD §15 #1); the links stay hidden until they are set in `src/shared/constants/links.ts`.
 - **The IAM screens' role-map grants are UI hints ahead of their screens** (IAM spec §4.3). `manage:admin-roles` is owner only, following the HLD, until IAM-FE-Q14 says whether `tenant_admin` may grant admin roles; `manage:sso` also needs the plan flag, which the screens must check.
+- **The read-only wrapper for IAM mutations (spec §7.10) has no home**: the controls are in the remotes, and the shell exposes nothing to them. It needs an SDK component in platform-reactcommon (handoff §3.3b). The shell's notice says why actions are refused; the grace end date needs P-1.
 - **PUB-1's `429` shows the same text as not found**, without the spec's "try again later" (§6 A2): the shell deliberately never tells the cases apart, and IAM has not given the format of the gateway's 429.
 - **`tender_admin`'s tender permissions are provisional** in the role map (`src/domain/rules/permissions.ts`) until Tender Service confirms them (LLD §15 #8).
 - **Keycloak SMTP and "Forgot password"** are unconfirmed in the realms (LLD §15 #10).

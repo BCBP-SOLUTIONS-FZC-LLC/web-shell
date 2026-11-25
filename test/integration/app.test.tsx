@@ -5,11 +5,13 @@ const routeTemplate = vi.fn()
 const boundaryProps = vi.fn()
 let context: unknown = { roles: ['member'] }
 const appUpdate = { available: false, reload: vi.fn() }
+let readOnly = false
 vi.mock('@bcbp-solutions-fzc-llc/frontend-sdk/react', async (original) => ({
   ...(await original<object>()), // the real useT, for the shell's text
   useRouteTemplate: (t: string) => routeTemplate(t),
   useSessionContext: () => context,
   useAppUpdate: () => appUpdate,
+  useReadOnly: () => readOnly,
   RemoteBoundary: (p: { remote: string; module: string; fallback: unknown; props?: unknown }) => {
     boundaryProps(p.props)
     return (
@@ -73,6 +75,36 @@ describe('App', () => {
     window.history.replaceState({}, '', '/t/acme/dashboard')
     render(<App basename="/t/acme" />)
     expect(screen.queryByRole('status')).toBeNull()
+  })
+
+  it('says the workspace is read-only while the SDK says so (spec §7.10), with no action', () => {
+    window.history.replaceState({}, '', '/t/acme/dashboard')
+    readOnly = true
+    try {
+      render(<App basename="/t/acme" />)
+      expect(screen.getByRole('status')).toHaveTextContent('Workspace is read-only (subscription ended)')
+      expect(screen.queryByRole('button')).toBeNull()
+    } finally {
+      readOnly = false
+    }
+  })
+
+  it('stacks the read-only and missing-permissions notices instead of overlapping them', () => {
+    window.history.replaceState({}, '', '/t/acme/dashboard')
+    readOnly = true
+    context = undefined
+    try {
+      render(<App basename="/t/acme" />)
+      const notices = screen.getAllByRole('status')
+      expect(notices.map((n) => n.textContent)).toEqual([
+        'Workspace is read-only (subscription ended)',
+        expect.stringContaining("We couldn't load your permissions"),
+      ])
+      expect(notices[0]!.parentElement).toBe(notices[1]!.parentElement)
+    } finally {
+      readOnly = false
+      context = { roles: ['member'] }
+    }
   })
 
   it('offers a reload when a new version is live, and only then', () => {

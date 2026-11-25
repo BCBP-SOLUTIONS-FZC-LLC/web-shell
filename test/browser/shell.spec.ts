@@ -115,6 +115,39 @@ test('a deploy without its runtime config shows the unavailable page and reports
     .toContain('the app could not start')
 })
 
+/** WCAG 2 contrast ratio of an element's text on its background, read in the page (a canvas turns any CSS colour, oklch included, into sRGB). */
+async function contrastRatio(page: Page, selector: string): Promise<number> {
+  const [fg, bg] = await page.locator(selector).evaluate((el) => {
+    const ctx = document.createElement('canvas').getContext('2d', { willReadFrequently: true })!
+    const rgb = (c: string) => {
+      ctx.clearRect(0, 0, 1, 1)
+      ctx.fillStyle = c
+      ctx.fillRect(0, 0, 1, 1)
+      return [...ctx.getImageData(0, 0, 1, 1).data.slice(0, 3)]
+    }
+    const style = getComputedStyle(el)
+    return [rgb(style.color), rgb(style.backgroundColor)]
+  })
+  const luminance = (c: number[]) =>
+    c.map((v) => v / 255).map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4)).reduce((l, v, i) => l + v * [0.2126, 0.7152, 0.0722][i]!, 0)
+  const [hi, lo] = [luminance(fg!), luminance(bg!)].sort((a, b) => b - a)
+  return (hi! + 0.05) / (lo! + 0.05)
+}
+
+test('the read-only notice shows under the production CSP with AA contrast', async ({ page }) => {
+  await page.route('**/api/v1/me/session-context', async (route) => {
+    const response = await route.fetch()
+    if (!response.ok()) return route.fulfill({ response })
+    return route.fulfill({ response, json: { ...(await response.json()), read_only: true } })
+  })
+  await signIn(page)
+  const notice = page.getByRole('status')
+  await expect(notice).toHaveText('Workspace is read-only (subscription ended)')
+  // axe cannot be injected into the signed-in page (it keeps its CSP), so the ratio is measured here.
+  expect(await contrastRatio(page, '[role="status"]')).toBeGreaterThanOrEqual(4.5)
+  expect(await violations(page)).toEqual([])
+})
+
 test.describe('colour contrast (axe, WCAG 2 AA)', () => {
   // axe is injected as a script, which the production CSP (and WebKit's Trusted Types even under
   // bypassCSP) rightly refuses: this one test serves the page without its CSP. The others keep it.

@@ -9,7 +9,7 @@ export function ContextUnavailable({ onReload }: { onReload: () => void }) {
   return (
     <div
       role="status"
-      className="fixed inset-x-0 bottom-0 z-40 flex flex-wrap items-center justify-center gap-3 bg-amber-50 px-4 py-2 text-center font-sans text-sm text-amber-900 shadow"
+      className="flex flex-wrap items-center justify-center gap-3 bg-amber-50 px-4 py-2 text-center font-sans text-sm text-amber-900 shadow"
     >
       <span>{text('app.contextUnavailable')}</span>
       <button

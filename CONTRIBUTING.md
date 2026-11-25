@@ -57,7 +57,7 @@ src/
     pages/login/         ← LoginPage, useEmailSignIn (the remembered-email repository is passed in)
     features/session-screens/ ← Sign-in, signed out, session ended, device clock, wrong workspace (components)
     components/          ← BrandLogo, PageLinks
-    widgets/             ← Update notice, missing-permissions notice (state passed in)
+    widgets/             ← Update notice, read-only notice, missing-permissions notice (state passed in, or mounted only while it holds)
   application/           ← Use cases (no React, no browser APIs): resolveWorkspace, requestPasswordReset, loadSessionContext; signIn.ts
   domain/                ← Contracts, errors, rules: RememberedEmailRepository, WorkspaceNotFoundError, permissions (role map), identifier (sign-in box)
   infrastructure/
@@ -144,7 +144,7 @@ docs/lld/web-shell-lld.md ← Low-level design (the contract)
 
 ### Adding a widget or component
 
-1. `src/presentation/widgets/` for a piece of the signed-in app that takes state and actions as props (`UpdateAvailable`, `ContextUnavailable`, `AppError`); `src/presentation/components/` for a reusable piece (`BrandLogo`, `PageLinks`). Neither imports the SDK, `infrastructure/` or `app/`.
+1. `src/presentation/widgets/` for a piece of the signed-in app that takes its state and actions as props, or is mounted only while that state holds (`UpdateAvailable`, `ContextUnavailable`, `ReadOnlyNotice`, `AppError`); `src/presentation/components/` for a reusable piece (`BrandLogo`, `PageLinks`). Neither imports the SDK, `infrastructure/` or `app/`.
 2. The route (`src/app/routes/App.tsx`) reads SDK hooks and passes plain props down.
 3. Tailwind classes for styling. A `style` prop only for a value computed at run time (`BrandLogo`'s size, `LoginPage`'s `--hero-shift`): React sets it through the CSSOM, which the CSP allows. No `<style>` element, no style attribute in HTML, no runtime CSS-in-JS (the CSP has no `unsafe-inline`).
 
