@@ -145,8 +145,8 @@ async function until(done: () => boolean, what: string): Promise<void> {
 
 // A page load boots the real SDK before the email screen shows: allow it the suite's 5 s, not
 // Testing Library's default 1 s (a slow CI runner took just over 1 s once).
-const emailBox = () => screen.findByRole('textbox', { name: /work email address/i }, { timeout: 5_000 })
-const continueButton = () => screen.getByRole('button', { name: /continue with email/i })
+const emailBox = () => screen.findByRole('textbox', { name: /work email or workspace name/i }, { timeout: 5_000 })
+const continueButton = () => screen.getByRole('button', { name: /^continue$/i })
 const bearerOf = (r: Request) => r.headers.get('authorization')
 const storedValues = () =>
   [localStorage, sessionStorage].flatMap((s) => Object.keys(s).map((k) => `${k}=${s.getItem(k)}`)).join('\n')
@@ -268,7 +268,7 @@ describe('the shell, end to end', () => {
   it('a deep link to /t/<slug>/ skips the email screen and returns to the page after sign-in', async () => {
     await load('/t/acme/dashboard')
     await until(() => assigned.length > 0, 'the redirect to Keycloak')
-    expect(screen.queryByRole('textbox', { name: /work email address/i })).toBeNull()
+    expect(screen.queryByRole('textbox', { name: /work email or workspace name/i })).toBeNull()
     expect(new URL(net.sent('/api/v1/public/tenants/resolve')[0]!.url).searchParams.get('identifier')).toBe('acme')
 
     await approveLogin()
@@ -422,7 +422,32 @@ describe('the shell, end to end', () => {
     await load('/')
     await userEvent.type(await emailBox(), 'nobody@else.test')
     await userEvent.click(continueButton())
-    await screen.findByText('We could not find a workspace for that email.', {}, { timeout: 5_000 })
+    await screen.findByText(/We couldn't find a workspace for that\./, {}, { timeout: 5_000 })
+    expect(assigned).toEqual([])
+  })
+
+  it.each([
+    ['a workspace name', ' Acme '],
+    ['a pasted workspace URL', 'https://app.example.test/t/acme/dashboard/members'],
+    ['a pasted workspace URL without its scheme', 'app.example.test/t/acme'],
+    ['a pasted workspace URL with an @ in it', 'https://app.example.test/t/acme/members/ada@acme.test'],
+  ])('%s → PUB-1 with the slug → Keycloak without a login_hint', async (_, typed) => {
+    await load('/')
+    await userEvent.type(await emailBox(), typed)
+    await userEvent.click(continueButton())
+    await until(() => assigned.length > 0, 'the redirect to Keycloak')
+    expect(net.sent('/api/v1/public/tenants/resolve').map((r) => new URL(r.url).searchParams.get('identifier'))).toEqual(['acme'])
+    const authorize = new URL(assigned[0]!)
+    expect(authorize.pathname).toBe('/realms/tenant-acme/protocol/openid-connect/auth')
+    expect(authorize.searchParams.has('login_hint')).toBe(false)
+  })
+
+  it('a pasted URL with no workspace in it asks PUB-1 nothing and shows the generic message', async () => {
+    await load('/')
+    await userEvent.type(await emailBox(), 'https://app.example.test/dashboard')
+    await userEvent.click(continueButton())
+    await screen.findByText(/We couldn't find a workspace for that\./, {}, { timeout: 5_000 })
+    expect(net.sent('/api/v1/public/tenants/resolve')).toEqual([])
     expect(assigned).toEqual([])
   })
 })

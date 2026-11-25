@@ -55,11 +55,11 @@ src/
     layouts/             ← screen.tsx (full-screen host), sessionScreens.tsx (mounts the session screens)
   presentation/
     pages/login/         ← LoginPage, useEmailSignIn (the remembered-email repository is passed in)
-    features/session-screens/ ← Email sign-in, signed out, session ended, device clock, wrong workspace (components)
+    features/session-screens/ ← Sign-in, signed out, session ended, device clock, wrong workspace (components)
     components/          ← BrandLogo, PageLinks
     widgets/             ← Update notice, missing-permissions notice (state passed in)
   application/           ← Use cases (no React, no browser APIs): resolveWorkspace, requestPasswordReset, loadSessionContext; signIn.ts
-  domain/                ← Contracts, errors, rules: RememberedEmailRepository, WorkspaceNotFoundError, permissions (role map)
+  domain/                ← Contracts, errors, rules: RememberedEmailRepository, WorkspaceNotFoundError, permissions (role map), identifier (sign-in box)
   infrastructure/
     api/iam.ts           ← PUB-1 resolver and P-35 session context (the SDK's /auth ports)
     auth/passwordReset.ts ← Keycloak reset-credentials URL for a workspace
@@ -287,7 +287,7 @@ A new folder or module: add it to a component (or a new one, with its deps) in t
 
 - Do not re-implement what the platform SDK exports. `test/unit/no-sdk-duplicates.test.ts` fails on a module-level name that is an SDK export and on hand-built problem responses in tests (use `mockProblem`). The shell's remaining copies of unpublished platform code are listed in LLD §1.2.
 - Leave `.env` and `docker.local.env` untracked. Both are gitignored. Never commit `NODE_AUTH_TOKEN`; the image takes it as the BuildKit secret `npm_token` only.
-- Never write a token to storage. Use the SDK's `storage(appId)` for anything per workspace. `bcbp.loginEmail` (the typed email) is the one raw `localStorage` value, because it is needed before a workspace is known.
+- Never write a token to storage. Use the SDK's `storage(appId)` for anything per workspace. `bcbp.loginEmail` (the typed email or bare workspace name, never a URL) is the one raw `localStorage` value, because it is needed before a workspace is known.
 - Take remote entries from the manifest only. Do not take a remote URL from the query string or any other untrusted input. The remote executes in this origin.
 - Call platform APIs through the SDK's `ApiClient` with route templates (`/v1/me/session-context`), never a hand-built URL, and never send identity headers.
 - Keep Keycloak Admin API calls in `scripts/` for the local realm seed.

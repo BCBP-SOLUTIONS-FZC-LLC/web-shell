@@ -8,7 +8,7 @@ Current release: `v0.4.0` (remotes `dashboard` and `tenders`, SDK alpha.6); `v0.
 
 | This shell owns | Lives elsewhere |
 |---|---|
-| The SDK start-up sequence, the email sign-in page, the session screens | Passwords, MFA, registration, token issuance (Keycloak). PKCE, token handling, refresh and idle timeout (the SDK's `/auth`) |
+| The SDK start-up sequence, the sign-in page (email, workspace name or URL), the session screens | Passwords, MFA, registration, token issuance (Keycloak). PKCE, token handling, refresh and idle timeout (the SDK's `/auth`) |
 | The IAM ports: PUB-1 resolver and P-35 session context | The IAM APIs, tenant membership, authorization decisions (IAM services, the gateway) |
 | Federation host `shell` and the shared map from `@bcbp-solutions-fzc-llc/webpack-preset` | Dashboard screens (`mfe-dashboard`, loaded as `dashboard`); tender screens (`mfe-tender`, loaded as `tenders`) |
 | The shell value remotes read through SDK hooks (`user`, `signOut`, `workspace`, `context`) | Each environment's `/config/runtime.json` and `/remotes/manifest.json` (deploy pipeline, CloudFront) |
@@ -46,7 +46,7 @@ graph TD
     end
 
     subgraph domain["domain/"]
-        dom["repositories, errors,\nrules/permissions (role map)"]
+        dom["repositories, errors,\nrules/permissions (role map), rules/identifier"]
     end
 
     subgraph infrastructure["infrastructure/ — implements domain contracts"]
@@ -113,7 +113,7 @@ graph LR
     widgets(["presentation/widgets"])
     comps(["presentation/components\nBrandLogo, PageLinks"])
     usecases(["application/use-cases\nresolveWorkspace, requestPasswordReset,\nloadSessionContext"])
-    domain(["domain/\nRememberedEmailRepository, WorkspaceNotFoundError,\nrules/permissions"])
+    domain(["domain/\nRememberedEmailRepository, WorkspaceNotFoundError,\nrules/permissions, rules/identifier"])
     iam(["infrastructure/api/iam.ts"])
     reset(["infrastructure/auth/passwordReset.ts"])
     remember(["infrastructure/storage/rememberedEmail.ts\n(localStorage)"])
@@ -146,7 +146,7 @@ graph LR
     screens --> domain
     screens --> text
     login --> comps
-    login -. types .-> domain
+    login --> domain
     login --> text
     comps --> links
     comps --> text
@@ -157,7 +157,7 @@ graph LR
     widgets --> text
     usecases --> domain
     usecases -. types, /problem .-> sdk
-    remember -. types .-> domain
+    remember --> domain
     iam --> sdk
     reset --> sdk
     msgs --> text
@@ -169,7 +169,7 @@ graph LR
 
 | Module | May import |
 |---|---|
-| `domain/` (contracts, errors, `rules/permissions.ts`) | Nothing but SDK types |
+| `domain/` (contracts, errors, `rules/permissions.ts`, `rules/identifier.ts`) | Nothing but SDK types |
 | `application/` (use cases) | `domain/`, SDK types and the `/problem` error classes. No React, no browser APIs (ports injected) |
 | `infrastructure/` | `domain/`, `shared/i18n`, SDK subpaths. `storage/rememberedEmail.ts` implements `RememberedEmailRepository` over `localStorage`; `i18n/shellMessages.ts` (`registerNamespace` + `setLocale`) changes the page's locale, so only the bootstrap calls it |
 | `presentation/pages` | `components`, `domain/`, `application/` types, `shared/` (their words from `shared/i18n`). Never `infrastructure/`, `app/`, the SDK, `application/` values, storage, the network or navigation: the repository, use cases and state come in as props |
@@ -223,7 +223,7 @@ sequenceDiagram
         else none or login-required
             Boot->>SDK: workspace from the failed attempt, or chooseWorkspace
             opt no known workspace
-                Boot->>Screens: askForWorkspace (email → PUB-1)
+                Boot->>Screens: askForWorkspace (email, name or URL → PUB-1)
             end
             Boot->>SDK: idp.login(workspace, loginHint)
         end
@@ -285,18 +285,19 @@ sequenceDiagram
     participant KC as Keycloak
 
     Boot->>Screens: askForWorkspace(signInUseCases)
-    User->>Login: submit work email
+    User->>Login: submit work email, workspace name or /t/<slug> URL
     Login->>Login: rememberedEmail.save (injected repository)
-    Login->>Screens: onContinue(email)
-    Screens->>UC: resolveWorkspace(email)
-    UC->>IAM: GET /v1/public/tenants/resolve?identifier=email (no token)
-    alt not found, rate-limited or unreachable
+    Login->>Screens: onContinue(identifier)
+    Screens->>UC: resolveWorkspace(identifier)
+    Note over UC: toIdentifier: email as typed,<br/>name lower-cased, URL to its slug
+    UC->>IAM: GET /v1/public/tenants/resolve?identifier=email or slug (no token)
+    alt not found, rate-limited, unreachable or no workspace in the URL
         UC-->>Screens: WorkspaceNotFoundError
         Screens-->>Login: generic "could not find a workspace" message
     else realm resolved
         IAM-->>UC: realm, strategy
         UC-->>Screens: workspace
-        Screens-->>Boot: onChosen(workspace, loginHint=email)
+        Screens-->>Boot: onChosen(workspace, loginHint only for an email)
         Boot->>SDK: idp.login(workspace, loginHint)
         Note over SDK: verifier, S256 challenge, state<br/>location to the realm's authorize URL
         SDK->>KC: GET /realms/{realm}/.../auth?code_challenge_method=S256&login_hint
@@ -312,17 +313,17 @@ Which workspace a signed-out visit uses, in order:
 
 1. The workspace a failed silent attempt named (`reason: 'login-required'`).
 2. `chooseWorkspace`: the `/t/<slug>` in the URL (cached or resolved), otherwise the most recently cached workspace.
-3. The email screen (`askForWorkspace`). It resolves the email through PUB-1 and returns the workspace with the email as `loginHint`.
+3. The sign-in screen (`askForWorkspace`). It takes a work email, a workspace name or a pasted workspace URL (`toIdentifier` reduces a URL to its `/t/<slug>`), resolves it through PUB-1 and returns the workspace, with `loginHint` only when the user typed an email.
 
-A known workspace goes straight to Keycloak, with the remembered email as `login_hint` when there is one. After `reason: 'signed-out'` or `'device-clock'` the bootstrap shows a dialog and waits for a click: an automatic login after a logout would ride the live SSO session and undo it.
+A known workspace goes straight to Keycloak, with the remembered email as `login_hint` when there is one (a remembered workspace name is not sent). After `reason: 'signed-out'` or `'device-clock'` the bootstrap shows a dialog and waits for a click: an automatic login after a logout would ride the live SSO session and undo it.
 
 PUB-1 → `Workspace`: strategy `shared` is the trial realm, with `tenant_id` as `tenantIdHint` and a slug only when the identifier was one. A dedicated realm's slug is the realm after `auth.paidRealmPrefix` (`tenant-`). The SDK refuses to cache a workspace whose slug and realm disagree, so a paid realm must be named `tenant-<slug>`; the local realm is `tenant-bcbp` for that reason.
 
 The redirect URI is `{origin}{auth.redirectPath}` (`/auth/callback`). The local realm allows `http://localhost:5001/*` and `http://127.0.0.1:5001/*`. PKCE, `state`, the token exchange, refresh, the idle timeout and the cross-tab broadcast are the SDK's (`/auth`); this repo does not implement any of them.
 
-"Not found", a 429 and an unreachable resolver all show one message ("We could not find a workspace for that email."), so the screen never says which input failed.
+"Not found", a 429, an unreachable resolver and a pasted URL that names no workspace all show one message ("We couldn't find a workspace for that. Try your workspace name — it's the part after /t/ in your workspace link — or ask your administrator."), so the screen never says which input failed.
 
-**Forgot your password?** needs the typed email: the realm decides where the reset happens. The screen resolves it through PUB-1 (same generic message on failure) and sends the browser to `{auth.idpOrigin}/realms/{realm}/login-actions/reset-credentials?client_id={auth.clientId}` (`infrastructure/auth/passwordReset.ts`); Keycloak e-mails the reset link. Without an email the page asks for one first. The SDK has no reset helper, so this is the shell's.
+**Forgot your password?** needs the typed email or workspace name (or a pasted URL): the realm decides where the reset happens. The screen resolves it through PUB-1 (same generic message on failure) and sends the browser to `{auth.idpOrigin}/realms/{realm}/login-actions/reset-credentials?client_id={auth.clientId}` (`infrastructure/auth/passwordReset.ts`); Keycloak e-mails the reset link. With an empty field the page asks for one first. The SDK has no reset helper, so this is the shell's.
 
 **Help and legal links** (`shared/constants/links.ts`) render only when their URL is set, so the page has no dead links; none is published yet.
 
@@ -414,11 +415,11 @@ sequenceDiagram
 
 Before sign-in the browser has no token and no realm. PUB-1 answers one question for it: which Keycloak realm the sign-in redirect goes to.
 
-- **Only when needed.** The bootstrap first asks the SDK's `chooseWorkspace`. A cached workspace (`localStorage` `…:workspaces`: the URL's `/t/<slug>/`, or with no slug the most recent) skips PUB-1 and the email screen; an uncached slug in the URL is resolved through PUB-1 without the email screen. A failed silent sign-in names its own workspace.
+- **Only when needed.** The bootstrap first asks the SDK's `chooseWorkspace`. A cached workspace (`localStorage` `…:workspaces`: the URL's `/t/<slug>/`, or with no slug the most recent) skips PUB-1 and the sign-in screen; an uncached slug in the URL is resolved through PUB-1 without the sign-in screen. A failed silent sign-in names its own workspace.
 - **No token.** `GET /api/v1/public/tenants/resolve?identifier=<email or slug>` with `auth: false`; PUB-1 is public and rate-limited per IP.
 - **Mapping (`toWorkspace`).** `strategy: "shared"` is the trial realm, and the slug is known only when the identifier was the slug. `tenant_id` becomes `tenantIdHint`. `"dedicated"` is a paid realm: the slug is the realm without `auth.paidRealmPrefix` (`tenant-`). `found: false`, or a missing realm, is no workspace.
-- **One message for every failure.** `resolveWorkspaceUseCase` turns not found, 429, unreachable and malformed alike into `WorkspaceNotFoundError`; the screen shows "We could not find a workspace for that email." It never says whether the email or the workspace was wrong.
-- **No shell cache, no retry loop.** One request per submit; the ApiClient's own retries apply to 429 and 502–504. An email resolved on the email screen is cached only after a successful sign-in (`rememberWorkspace`, with the slug from P-35). A slug from the URL that PUB-1 resolves is cached by `chooseWorkspace` at once, after the SDK checks that realm and slug match.
+- **One message for every failure.** `resolveWorkspaceUseCase` turns not found, 429, unreachable, malformed and a URL with no workspace alike into `WorkspaceNotFoundError`; the screen shows "We couldn't find a workspace for that. Try your workspace name — it's the part after /t/ in your workspace link — or ask your administrator." It never says which input failed (email, workspace name or URL).
+- **No shell cache, no retry loop.** One request per submit; the ApiClient's own retries apply to 429 and 502–504. An email or workspace name resolved on the sign-in screen is cached only after a successful sign-in (`rememberWorkspace`, with the slug from P-35). A slug from the URL that PUB-1 resolves is cached by `chooseWorkspace` at once, after the SDK checks that realm and slug match.
 
 > Source: [`docs/architecture/mermaid/pub1-resolution-flow.mmd`](docs/architecture/mermaid/pub1-resolution-flow.mmd)
 
@@ -440,23 +441,24 @@ sequenceDiagram
         SDK->>PUB: resolve(slug) through workspaceResolver
         PUB-->>SDK: realm
         SDK->>Cache: write it at once (realm and slug must match)
-        SDK-->>Boot: Workspace (or none: ask for the email)
+        SDK-->>Boot: Workspace (or none: ask on the sign-in screen)
     else no slug and nothing cached
         Boot->>Screen: askForWorkspace(signInUseCases)
         loop until a workspace is found
-            Screen->>UC: resolveWorkspace(email)
-            UC->>Port: resolve(email)
+            Screen->>UC: resolveWorkspace(identifier)
+            Note over UC: toIdentifier: email, name lower-cased, URL to its slug<br/>no workspace in a URL: no PUB-1 call, not found
+            UC->>Port: resolve(email or slug)
             Port->>PUB: GET /api/v1/public/tenants/resolve?identifier= (auth false, no token)
             PUB-->>Port: 200 found, realm, strategy, tenant_id
             Port->>Port: toWorkspace (shared is the trial realm, dedicated is realm minus paidRealmPrefix)
             alt found
                 UC-->>Screen: Workspace
-            else not found, 429, unreachable, malformed
+            else not found, 429, unreachable, malformed, no workspace in the URL
                 UC-->>Screen: WorkspaceNotFoundError
-                Screen->>Screen: "We could not find a workspace for that email." (the user can try again)
+                Screen->>Screen: one generic message (the user can try again)
             end
         end
-        Screen-->>Boot: Workspace and the email (onChosen)
+        Screen-->>Boot: Workspace, and loginHint only when an email was typed (onChosen)
     end
     Boot->>SDK: idp.login(workspace, loginHint)
     Note over SDK: after sign-in rememberWorkspace caches it with the slug from P-35
@@ -474,7 +476,7 @@ Roles, plan and flags are not in the token. After sign-in the bootstrap loads th
 | Success | `setAuthzSubject({ roles, tenantId })`; `setFlagProvider(sessionContextFlagProvider(context))`; `rememberWorkspace({ …workspace, slug })` moves the URL under `/t/<slug>/`; the IAM `locale` feeds `initializeI18n` |
 | Failure | Warning `session context unavailable`; the authorizer denies all and only platform flags apply; `App` shows the missing-permissions notice with Reload |
 | Background retry | Only after a transient failure (`isTransient`): 3 tries after 1 s, 2 s, 4 s, one request each (`loadSessionContextOnce`, `retry: false`). A success updates the subject, the flags and the `PlatformProvider` live, and re-renders the router if the URL moved. A sign-out aborts it |
-| Role map | `domain/rules/permissions.ts`: keys are IAM's closed set (`member`, `tenant_owner`, `tenant_admin`, `tender_admin`); `roleMapAuthorizer` turns roles into `action:resource` UI permissions. Department levels are never roles. UI hints only: the services enforce |
+| Role map | `domain/rules/permissions.ts`: keys are IAM's closed set (`member`, `tenant_owner`, `tenant_admin`, `tender_admin`); `roleMapAuthorizer` turns roles into `action:resource` UI permissions (one colon each, or it throws), including the IAM screens' `manage:admin-roles`, `manage:tenant-settings` (owner), `manage:sso`, `manage:delegation-policy`, `read:audit` (admin) and `manage:tender-access` (tender admin). Department levels are never roles. UI hints only: the services enforce |
 
 ---
 
@@ -522,9 +524,9 @@ Tokens are never written to storage. A reload restores the session from Keycloak
 
 | Key | Store | Written by | Purpose |
 |---|---|---|---|
-| `@bcbp-solutions-fzc-llc/frontend-sdk:workspaces` | `localStorage` | SDK, `rememberWorkspace` | Cached workspaces (realm, slug), so a return visit skips the email screen |
+| `@bcbp-solutions-fzc-llc/frontend-sdk:workspaces` | `localStorage` | SDK, `rememberWorkspace` | Cached workspaces (realm, slug), so a return visit skips the sign-in screen |
 | `@bcbp-solutions-fzc-llc/frontend-sdk:session-id`, `:auth:last-activity`, `:auth:last-user` | `localStorage` | SDK | Telemetry session id, idle timeout across tabs, user change detection |
-| `bcbp.rememberEmail`, `bcbp.loginEmail` | `localStorage` | `infrastructure/storage/rememberedEmail.ts` (behind the domain's `RememberedEmailRepository`) | "Remember Email" only. Needed before a workspace is known, so it does not use the SDK's per-workspace `storage()`. Every access is wrapped in `try`; blocked storage just forgets |
+| `bcbp.rememberEmail`, `bcbp.loginEmail` | `localStorage` | `infrastructure/storage/rememberedEmail.ts` (behind the domain's `RememberedEmailRepository`) | "Remember Email" only: an email or a bare workspace name only, never a URL (a pasted link may carry a token or code; `isRememberableIdentifier`). Needed before a workspace is known, so it does not use the SDK's per-workspace `storage()`. Every access is wrapped in `try`; blocked storage just forgets |
 
 Remotes that need storage use `storage(appId)` from `/storage`, which is namespaced per workspace and refuses token-like keys.
 
@@ -568,8 +570,8 @@ classDiagram
         permissions: Record~Role, Permission[]~
     }
     class SignInUseCases {
-        resolveWorkspace(email): Workspace
-        requestPasswordReset(email)
+        resolveWorkspace(identifier): Workspace
+        requestPasswordReset(identifier)
         rememberedEmail: RememberedEmailRepository
     }
     class RememberedEmailRepository {
@@ -610,8 +612,8 @@ flowchart TD
         h3["/api, /otel, /csp-report: never served by the image (404); routed to their services"]
     end
     subgraph browser["In the browser"]
-        b1["SDK workspace cache: localStorage @bcbp-solutions-fzc-llc/frontend-sdk:workspaces\nrealm + slug, up to 20; skips the email screen on return\nwritten by chooseWorkspace (URL slug) and rememberWorkspace (after sign-in)"]
-        b2["Remembered email: localStorage bcbp.rememberEmail / bcbp.loginEmail\nonly when the box is checked"]
+        b1["SDK workspace cache: localStorage @bcbp-solutions-fzc-llc/frontend-sdk:workspaces\nrealm + slug, up to 20; skips the sign-in screen on return\nwritten by chooseWorkspace (URL slug) and rememberWorkspace (after sign-in)"]
+        b2["Remembered email or workspace name: localStorage bcbp.rememberEmail / bcbp.loginEmail\nonly when the box is checked; never a URL"]
         b3["Session context (P-35): in memory only (createStore), per page load\nreplaced live when the background retry succeeds"]
         b4["Tokens: SDK memory only, never storage; reload restores from Keycloak SSO (prompt=none)"]
         b5["Text catalogue en.json: in the entry chunk, registered before the first screen"]
@@ -714,7 +716,7 @@ A browser shell has no locks, but it has races: an async start-up that a sign-ou
 |---|---|---|---|
 | Identity and runtime config | `/config/runtime.json` | stop | "The app is unavailable right now." with Try again. Logged as the essential error `the app could not start` (to the collector, default `/otel`); alert in [the runbook](docs/runbook-startup-failure.md) |
 | Silent restore | Keycloak SSO session | degrade | `anonymous`; the sign-in flow runs |
-| Resolve the email | PUB-1 | stop on that screen | One generic message. The user can retry |
+| Resolve the email or workspace name | PUB-1 | stop on that screen | One generic message. The user can retry |
 | Leave for Keycloak | Browser navigation | stop | The shell is gone until Keycloak redirects back |
 | Session context | P-35 | degrade, then recover | Warning log. Deny-all permissions and platform flags until it answers; after a transient failure (a network failure while online, a timeout, 429, 502, 503 or 504 (the SDK ApiClient's own rule)) it is retried after 1 s, 2 s, 4 s, one request per attempt, and applied live (any other answer, offline included, is final) (the router moves under `/t/<slug>/` then). A notice with Reload says some actions are hidden |
 | Remote manifest | `/remotes/manifest.json` | degrade | Error log. The app renders; `RemoteBoundary` shows its error |
@@ -810,7 +812,7 @@ Vitest 5, happy-dom at `http://localhost:5001/`, Testing Library. `vitest.config
 
 | Layer | Path | What it locks |
 |---|---|---|
-| Unit | `test/unit/` | PUB-1 and P-35 mappings and the port calls, the entry point's fatal path, remember-email with blocked storage, the screen host, `BrandLogo`, the session-context retry and store, the navigator adapter |
+| Unit | `test/unit/` | PUB-1 and P-35 mappings and the port calls, the identifier rule (email, name, URL forms, 254 characters) and the role map's grants, the entry point's fatal path, remember-email with blocked storage, the screen host, `BrandLogo`, the session-context retry and store, the navigator adapter |
 | Integration | `test/integration/` | The login page and the carousel, every session screen, `App` routes and props, and the bootstrap: the exact initialisation order, each anonymous reason, wrong workspace, missing context and its background retry, sign-out during boot, i18n `detect`, navigator registration, start-up failure reporting, manifest failure, expiry and sign-out events; axe-core over every shell screen (`accessibility.test.tsx`) |
 | End to end | `test/e2e/` | The real bootstrap and SDK (inlined by Vitest, fresh per simulated page load) against a fake Keycloak and network: PKCE sign-in, `/t/<slug>/`, the remote's SDK hooks and permissions, deny-all, an IAM outage that recovers in the background, a failing remote, global sign-out (form POST), the device clock |
 | Browser | `test/browser/`, CI `browser` | The production build in Chromium, Firefox and WebKit under the production CSP and Trusted Types, over HTTPS, with a fake Keycloak on a second origin: self-hosted fonts and hashed images, PKCE sign-in, the remote's entry with integrity and the share scope, `navigate()` without a reload, the sign-out form POST under `form-action`, the start-up failure reaching `/otel`, colour contrast (axe) |
@@ -884,7 +886,7 @@ Each row is a mechanism in this repo or in the SDK it relies on.
 | Repudiation | A sign-in or logout has no server-side audit record here | this repo | Keycloak holds the login audit. Browser logs carry `trace_id` and `session_id` once telemetry is consented |
 | Information disclosure | An XSS reads tokens from storage | SDK `/auth` | Nothing to read in storage. XSS can still act as the user while the page is open; the CSP and Trusted Types are the defence |
 | Information disclosure | Runtime config values are public | `/config/runtime.json` | They are public configuration. A secret placed there ships to every browser |
-| Information disclosure | The remembered email is readable later on the same browser | `bcbp.loginEmail` | Written only when the user checks the box |
+| Information disclosure | The remembered email or workspace name is readable later on the same browser | `bcbp.loginEmail` | Written only when the user checks the box, and never a URL, whose query or fragment may carry a token or code (`isRememberableIdentifier`) |
 | Information disclosure | The previous user's data stays on screen after a sign-out | `bootstrap.tsx` | The app is unmounted before "You are signed out" is shown |
 | Denial of service | The email screen hammers PUB-1 | `SessionScreens.tsx` | One request per submit; PUB-1 is rate-limited per IP |
 | Denial of service | A slow or huge remote blocks the page | SDK `/mfe` | `remotes.loadTimeoutMs` and `retries`; the boundary shows its error and the shell keeps running |
@@ -917,9 +919,9 @@ The login page's "Trouble logging in?" link is not rendered until its official U
 
 3. **TypeScript 6, not 7.** `typescript-eslint` supports `<6.1.0`, and TypeScript 7 (the native port) does not offer the JavaScript API its parser uses. The SDK builds on 6. Revisit when `typescript-eslint` supports 7.
 
-4. **The email screen is the existing login page.** `askForWorkspace` renders `LoginPage` and resolves the email through PUB-1, instead of the SDK example's slug-or-email form. The email doubles as `login_hint`.
+4. **The sign-in screen is the existing login page.** `askForWorkspace` renders `LoginPage`, which takes an email, a workspace name or a pasted workspace URL (IAM spec §6 A2), and resolves it through PUB-1, instead of the SDK example's slug-or-email form. Only an email doubles as `login_hint`.
 
-5. **Remember-email uses `localStorage` directly.** The SDK's `storage()` is per workspace and ignores writes before sign-in, which is exactly when this value is needed. It holds the typed email only.
+5. **Remember-email uses `localStorage` directly.** The SDK's `storage()` is per workspace and ignores writes before sign-in, which is exactly when this value is needed. It holds the typed email or bare workspace name only, never a pasted URL.
 
 6. **Screens mount outside the app root.** `app/layouts/screen.tsx` renders into a fixed, full-screen `#shell-screen` host that is hidden when empty, so a dialog can sit over a running app and the sign-in page is visible while `#app` is still empty.
 

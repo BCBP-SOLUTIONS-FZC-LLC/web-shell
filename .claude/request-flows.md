@@ -18,13 +18,13 @@ After render: `registerNavigator` (router under the basename; other paths load i
 |---|---|
 | `signed-out` | "You are signed out", waits for a click |
 | `device-clock` | "Check your device's clock", waits for a click |
-| `none`, `login-required` | Workspace: failed attempt's → `chooseWorkspace` (URL slug, cache) → email screen (PUB-1, no token). Then `idp.login({ workspace, loginHint? })` |
+| `none`, `login-required` | Workspace: failed attempt's → `chooseWorkspace` (URL slug, cache) → sign-in screen (email, workspace name or `/t/<slug>` URL; PUB-1, no token). Then `idp.login({ workspace, loginHint? })`, the hint only for an email |
 
 The SDK builds the authorize URL (`{idpOrigin}/realms/{realm}/protocol/openid-connect/auth`, S256, `state`, `nonce`, `login_hint`), adds `prompt=login` after a sign-out, and defaults `returnUrl` to the current page. The shell passes neither.
 
 ## Forgot password
 
-Typed email → PUB-1 (generic message on failure) → `location.assign({idpOrigin}/realms/{realm}/login-actions/reset-credentials?client_id={clientId})`. No sign-in starts. Empty email → "Enter your work email first…".
+Typed email, workspace name or URL (`toIdentifier`) → PUB-1 (generic message on failure) → `location.assign({idpOrigin}/realms/{realm}/login-actions/reset-credentials?client_id={clientId})`. No sign-in starts. Empty field → "Enter your work email or workspace name first…".
 
 ## Callback and restore
 
@@ -34,7 +34,7 @@ Typed email → PUB-1 (generic message on failure) → `location.assign({idpOrig
 
 | Event | Shell |
 |---|---|
-| `expired` | "Session ended" over the app (text: `serverEnded`, `idle`, other); Sign in → `signInAgain` with the email screen as `ask` |
+| `expired` | "Session ended" over the app (text: `serverEnded`, `idle`, other); Sign in → `signInAgain` with the sign-in screen as `ask` |
 | `anonymous` / `signed-out` (here or another tab) | Unmount `#app`, then "You are signed out"; Sign in → `idp.login({ workspace })` |
 | New `/version.json` | "A new version is available." with Reload (`useAppUpdate`); never forced |
 | `switchWorkspace(id)` | PUB-1 → not found: "Workspace not found"; else `idp.switchWorkspace` |

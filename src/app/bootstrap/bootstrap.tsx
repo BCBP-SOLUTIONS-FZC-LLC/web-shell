@@ -36,6 +36,7 @@ import App from '../routes/App'
 import type { SignInUseCases } from '../../application/signIn'
 import { requestPasswordResetUseCase } from '../../application/use-cases/requestPasswordReset'
 import { resolveWorkspaceUseCase } from '../../application/use-cases/resolveWorkspace'
+import { isEmailIdentifier } from '../../domain/rules/identifier'
 import { loadSessionContextOnce, sessionContextSource, workspaceResolver } from '../../infrastructure/api/iam'
 import { passwordResetUrl } from '../../infrastructure/auth/passwordReset'
 import { localStorageRememberedEmail } from '../../infrastructure/storage/rememberedEmail'
@@ -124,7 +125,7 @@ async function start(cfg: RuntimeConfig, report: { otlpBaseUrl: string }): Promi
 
   // Composition root: the sign-in use cases, built from infrastructure (PUB-1 port, the reset URL,
   // the remembered email in localStorage, browser navigation) and given to the screens.
-  const resolveWorkspace = resolveWorkspaceUseCase(workspaceResolver)
+  const resolveWorkspace = resolveWorkspaceUseCase(workspaceResolver, { slugFromPath: (pathname) => slugFromPath(pathname, cfg.auth) })
   const signInUseCases: SignInUseCases = {
     resolveWorkspace,
     requestPasswordReset: requestPasswordResetUseCase({
@@ -148,7 +149,11 @@ async function start(cfg: RuntimeConfig, report: { otlpBaseUrl: string }): Promi
       const known: Workspace | undefined =
         (session.reason === 'login-required' ? session.workspace : undefined) ??
         (await chooseWorkspace({ pathname: window.location.pathname, resolver: workspaceResolver, cfg: cfg.auth }))
-      const choice = known ? { workspace: known, loginHint: signInUseCases.rememberedEmail.get() } : await askForWorkspace(signInUseCases)
+      // The remembered value may be a workspace name: only an email becomes login_hint.
+      const remembered = signInUseCases.rememberedEmail.get()
+      const choice = known
+        ? { workspace: known, ...(isEmailIdentifier(remembered) ? { loginHint: remembered } : {}) }
+        : await askForWorkspace(signInUseCases)
       // returnUrl defaults to the current page in the SDK.
       await idp.login({ workspace: choice.workspace, ...(choice.loginHint ? { loginHint: choice.loginHint } : {}) })
     }

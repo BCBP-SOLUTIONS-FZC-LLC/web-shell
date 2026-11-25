@@ -29,8 +29,8 @@ test.afterEach(async ({ page }) => {
 
 async function signIn(page: Page): Promise<void> {
   await page.goto(`${APP}/`)
-  await page.getByRole('textbox', { name: /work email address/i }).fill(EMAIL)
-  await page.getByRole('button', { name: /continue with email/i }).click()
+  await page.getByRole('textbox', { name: /work email or workspace name/i }).fill(EMAIL)
+  await page.getByRole('button', { name: /^continue$/i }).click()
   await expect(page.getByRole('heading', { level: 1, name: 'Dashboard' })).toBeVisible()
 }
 

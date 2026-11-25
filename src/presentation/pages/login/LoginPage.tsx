@@ -12,6 +12,7 @@ import image7 from '../../../shared/ui/assets/images/image7.jpg'
 import image8 from '../../../shared/ui/assets/images/image8.jpg'
 import image9 from '../../../shared/ui/assets/images/image9.jpg'
 import { ForgotPasswordButton, HelpLink, LegalFooter } from '../../components/PageLinks'
+import { MAX_IDENTIFIER_LENGTH } from '../../../domain/rules/identifier'
 import { useShellText, type ShellKey } from '../../../shared/i18n'
 
 const FEATURES = [
@@ -228,12 +229,16 @@ export default function LoginPage({ onContinue, onForgotPassword, rememberedEmai
             ) : null}
             <label className="mb-5 block">
               <span className="mb-2 block text-[0.65rem] font-semibold uppercase tracking-[0.16em] text-gray-500">
-                {text('login.email')}
+                {text('login.identifier')}
               </span>
               <input
-                type="email"
-                name="email"
-                autoComplete="email"
+                type="text"
+                name="identifier"
+                inputMode="email"
+                autoComplete="username"
+                autoCapitalize="none"
+                spellCheck={false}
+                maxLength={MAX_IDENTIFIER_LENGTH}
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}

@@ -10,7 +10,39 @@ Pull requests that change the shell, its dependencies, or the image add an entry
 
 ## [Unreleased]
 
-Nothing yet.
+### Changed (2026-11-24 — IAM screens: UI permissions and the identifier-first sign-in)
+
+**The role map carries the IAM screens' UI permissions (IAM screen spec v0.1 §4.3).** `src/domain/rules/permissions.ts`: `manage:admin-roles` and `manage:tenant-settings` for `tenant_owner`; `manage:sso`, `manage:delegation-policy` and `read:audit` for `tenant_admin` and `tenant_owner`; `manage:tender-access` for `tender_admin` and above. The spec's `manage:roles:admin` is named `manage:admin-roles`: the SDK's `roleMapAuthorizer` accepts one colon only and would throw at start-up. Granting admin roles is owner only (HLD §6.4) until IAM-FE-Q14 is answered. Remotes read them with `useHasPermission` / `<Can>`; no remote uses them yet. Tests: `test/unit/platform-misc.test.tsx` checks each grant per role and that the map builds. *(Previously: `tenant_owner` had exactly `tenant_admin`'s grants, and only `read:members` / `manage:members` existed for IAM.)*
+
+**The sign-in box takes a work email, a workspace name or a pasted workspace URL (spec §6 A2).** Label "Work email or workspace name", button "Continue". `toIdentifier` (`src/domain/rules/identifier.ts`) trims the input, lower-cases a workspace name and reduces a URL (with or without its scheme) to the slug the SDK's `slugFromPath` reads from `/t/<slug>`; `resolveWorkspaceUseCase` gets `slugFromPath` from the bootstrap. The input is `type="text"` with `inputMode="email"` and `maxLength` 254, and the use case refuses longer input without calling PUB-1. Only an email (one `@`, no whitespace, `/`, `?` or `#`: a URL containing `@` is still a URL) becomes Keycloak's `login_hint`, both from the screen and from a remembered value (`isEmailIdentifier`). "Remember Email" stores only an email or a bare workspace name (`isRememberableIdentifier`), never a pasted URL, whose query or fragment may carry a token or code; ticked with a URL, it forgets the stored value. Every miss, 429 and unreachable answer, and a URL without a workspace, shows the spec's one generic text. Tests: `test/unit/use-cases.test.ts` (the rule, URL forms, 254 characters), `test/e2e/shell.test.tsx` (a name and two URL forms reach PUB-1 as `acme` and log in without `login_hint`; a URL without a workspace asks PUB-1 nothing), `test/integration/bootstrap.test.tsx` (a remembered workspace name is not a hint), `test/unit/platform-misc.test.tsx` (a URL or over-long value is never stored). README, ARCHITECTURE (role map, sign-in and PUB-1 text; the sign-in, PUB-1, bootstrap, data-model, cache, layer and dependency diagrams), the LLD (§1, §2, §3, §4.3, §6.1, §8, §9, §12, revision history), ADR 0001, CONTRIBUTING and `.claude/` updated. *(Previously: an email-only `type="email"` field, "Continue with Email", and "We could not find a workspace for that email.")*
+
+### Known gaps
+
+- **Each deployed `runtime.json` must name its `environment`** (LLD §15 #12). Until every one does, the shell keeps the build-time fallback (`__ENVIRONMENT__`), the constitution's open violation V5.
+- **No CloudFront until next month** (LLD §15 #9). Each environment routes `/api`, `/otel`, `/csp-report`, `/remotes/dashboard/` (and `/remotes/tenders/` once mfe-tender is released) at its ingress and mounts the CSP (with the IdP in `form-action`) and HSTS ([docs/hosting-without-cloudfront.md](docs/hosting-without-cloudfront.md)).
+- **`tenders` has a route but no release or contract run** (LLD §15 #18): `npm run test-contract` serves only the dashboard; mfe-tender runs its own router (react-router-dom is not shared), so a shell-router navigation into `/tenders/…` does not re-render it; theme and CSS ownership when embedded is open.
+- **Dependabot's npm job fails** until the organisation Dependabot secret `PACKAGES_READ_TOKEN` exists (LLD §15 #13; needs an org admin).
+- **Official Privacy, Terms, Trust & Security and Help URLs** are not published (LLD §15 #1); the links stay hidden until they are set in `src/shared/constants/links.ts`.
+- **The IAM screens' role-map grants are UI hints ahead of their screens** (IAM spec §4.3). `manage:admin-roles` is owner only, following the HLD, until IAM-FE-Q14 says whether `tenant_admin` may grant admin roles; `manage:sso` also needs the plan flag, which the screens must check.
+- **PUB-1's `429` shows the same text as not found**, without the spec's "try again later" (§6 A2): the shell deliberately never tells the cases apart, and IAM has not given the format of the gateway's 429.
+- **`tender_admin`'s tender permissions are provisional** in the role map (`src/domain/rules/permissions.ts`) until Tender Service confirms them (LLD §15 #8).
+- **Keycloak SMTP and "Forgot password"** are unconfirmed in the realms (LLD §15 #10).
+- **The `WebShellStartupFailures` alert** is an example rule; it must be deployed to the Loki ruler (LLD §15 #11).
+- **Tier 1 `platform_web_*` metrics** record nothing until governance ratifies them; v1 consent exports only errors and essential warnings.
+- **`isTransient` copies the SDK ApiClient's retry rule**, because the SDK does not export it; a test fails if they diverge. Shell helpers copied from `examples/shell` (`retrySessionContext`, `createStore`, `ShellRoot`) and the realm URL in `passwordReset.ts` wait for platform-reactcommon exports (LLD §1.2).
+- **Deliberate departures from the constitution** (no TanStack Query or Zustand, the SDK's i18n, shell-local UI, the nginx image, tests in `test/`) are recorded in ADRs 0002, 0005–0008: accepted, with the exceptions awaiting Architecture Review.
+- **No cluster deploy** (LLD §15 #7). A tag publishes a signed image; an operator rolls it and serves that environment's runtime config and manifest.
+
+### Current architecture notes
+
+- A static browser app: the production process is nginx on 8080 (uid 101). No backend, database or message bus in this repository.
+- `src/` follows the Frontend Architecture Constitution's folders (`app/`, `presentation/`, `application/`, `domain/`, `infrastructure/`, `shared/`); `eslint.config.js` and `npm run arch-lint` enforce the layers in CI.
+- Only `PLATFORM_ENVIRONMENT` (a fallback now) and `BUILD_VERSION` are compiled in. Everything else is `/config/runtime.json`, validated strictly by the SDK.
+- Every user-facing word is a key of the SDK `/i18n` `shell` namespace (`src/shared/i18n/en.json`), loaded before the first screen.
+- The access token goes only to the page's own origin, by the SDK's `ApiClient`; the browser never sends identity headers. Tokens are never stored.
+- Error boundaries: `RemoteBoundary` for `dashboard` and `tenders`, `MFEErrorBoundary` (`web-shell`) for the shell's own routes.
+- Coverage is gated at 95% (100% today). `COVERAGE_THRESHOLD` can override the gate locally; no workflow sets it.
+- Claude Code: `.claude/settings.json` hooks, the `invariant-reviewer` and `doc-sync-reviewer` subagents, the `/sdk-upgrade` and `/stack-sync` skills.
 
 ## [0.4.0] - 2026-11-11
 
@@ -31,32 +63,6 @@ Details below.
 ### Removed (2026-11-11 — a known gap: the IAM endpoints)
 
 - **PUB-1 and P-35 are confirmed behind `/api` in every environment.** IAM (iam-org-membership) replied on 2026-11-10 that `GET /api/v1/public/tenants/resolve` and `GET /api/v1/me/session-context` reach IAM in dev, staging and prod, as the shell's request of 2026-11-05 asked. IAM's own 4xx and 5xx answers on both are `application/problem+json` (RFC 9457); the reply does not give the format of the gateway's own answers, such as PUB-1's 429. Neither needs CORS or redirects. PUB-1 is unauthenticated and rate-limited per IP at the gateway. P-35 accepts tokens from every `tenant-*` realm and `trial`, and the gateway strips inbound `x-user-id`, `x-tenant-id` and `x-tenant-roles`. IAM added the missing `Cache-Control: no-store` to P-35's 200. LLD §15 #6 is closed. Recorded from IAM's reply; not yet checked from a deployed shell host (the shell is not deployed). *(Previously: unconfirmed outside dev, where `npm run dev` stubs them; listed in `[0.3.0]` Known gaps and LLD §15 #6.)*
-
-### Known gaps
-
-- **Each deployed `runtime.json` must name its `environment`** (LLD §15 #12). Until every one does, the shell keeps the build-time fallback (`__ENVIRONMENT__`), the constitution's open violation V5.
-- **No CloudFront until next month** (LLD §15 #9). Each environment routes `/api`, `/otel`, `/csp-report`, `/remotes/dashboard/` (and `/remotes/tenders/` once mfe-tender is released) at its ingress and mounts the CSP (with the IdP in `form-action`) and HSTS ([docs/hosting-without-cloudfront.md](docs/hosting-without-cloudfront.md)).
-- **`tenders` has a route but no release or contract run** (LLD §15 #18): `npm run test-contract` serves only the dashboard; mfe-tender runs its own router (react-router-dom is not shared), so a shell-router navigation into `/tenders/…` does not re-render it; theme and CSS ownership when embedded is open.
-- **Dependabot's npm job fails** until the organisation Dependabot secret `PACKAGES_READ_TOKEN` exists (LLD §15 #13; needs an org admin).
-- **Official Privacy, Terms, Trust & Security and Help URLs** are not published (LLD §15 #1); the links stay hidden until they are set in `src/shared/constants/links.ts`.
-- **`tender_admin`'s tender permissions are provisional** in the role map (`src/domain/rules/permissions.ts`) until Tender Service confirms them (LLD §15 #8).
-- **Keycloak SMTP and "Forgot password"** are unconfirmed in the realms (LLD §15 #10).
-- **The `WebShellStartupFailures` alert** is an example rule; it must be deployed to the Loki ruler (LLD §15 #11).
-- **Tier 1 `platform_web_*` metrics** record nothing until governance ratifies them; v1 consent exports only errors and essential warnings.
-- **`isTransient` copies the SDK ApiClient's retry rule**, because the SDK does not export it; a test fails if they diverge. Shell helpers copied from `examples/shell` (`retrySessionContext`, `createStore`, `ShellRoot`) and the realm URL in `passwordReset.ts` wait for platform-reactcommon exports (LLD §1.2).
-- **Deliberate departures from the constitution** (no TanStack Query or Zustand, the SDK's i18n, shell-local UI, the nginx image, tests in `test/`) are recorded in ADRs 0002, 0005–0008: accepted, with the exceptions awaiting Architecture Review.
-- **No cluster deploy** (LLD §15 #7). A tag publishes a signed image; an operator rolls it and serves that environment's runtime config and manifest.
-
-### Current architecture notes
-
-- A static browser app: the production process is nginx on 8080 (uid 101). No backend, database or message bus in this repository.
-- `src/` follows the Frontend Architecture Constitution's folders (`app/`, `presentation/`, `application/`, `domain/`, `infrastructure/`, `shared/`); `eslint.config.js` and `npm run arch-lint` enforce the layers in CI.
-- Only `PLATFORM_ENVIRONMENT` (a fallback now) and `BUILD_VERSION` are compiled in. Everything else is `/config/runtime.json`, validated strictly by the SDK.
-- Every user-facing word is a key of the SDK `/i18n` `shell` namespace (`src/shared/i18n/en.json`), loaded before the first screen.
-- The access token goes only to the page's own origin, by the SDK's `ApiClient`; the browser never sends identity headers. Tokens are never stored.
-- Error boundaries: `RemoteBoundary` for `dashboard` and `tenders`, `MFEErrorBoundary` (`web-shell`) for the shell's own routes.
-- Coverage is gated at 95% (100% today). `COVERAGE_THRESHOLD` can override the gate locally; no workflow sets it.
-- Claude Code: `.claude/settings.json` hooks, the `invariant-reviewer` and `doc-sync-reviewer` subagents, the `/sdk-upgrade` and `/stack-sync` skills.
 
 ## [0.3.0] - 2026-11-06
 

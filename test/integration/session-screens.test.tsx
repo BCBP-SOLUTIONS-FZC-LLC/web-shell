@@ -34,8 +34,8 @@ afterEach(() => {
 
 async function typeEmail(email: string) {
   const user = userEvent.setup()
-  await user.type(await screen.findByRole('textbox', { name: /work email address/i }), email)
-  await user.click(screen.getByRole('button', { name: /continue with email/i }))
+  await user.type(await screen.findByRole('textbox', { name: /work email or workspace name/i }), email)
+  await user.click(screen.getByRole('button', { name: /^continue$/i }))
 }
 
 describe('askForWorkspace', () => {
@@ -53,7 +53,7 @@ describe('askForWorkspace', () => {
     expect(await screen.findByText(en['session.ended.default'])).toBeInTheDocument()
     await typeEmail('ada@acme.com')
     expect(await screen.findByText(en[screens.WORKSPACE_NOT_FOUND])).toBeInTheDocument()
-    await userEvent.setup().click(screen.getByRole('button', { name: /continue with email/i }))
+    await userEvent.setup().click(screen.getByRole('button', { name: /^continue$/i }))
     await waitFor(() => expect(resolve).toHaveBeenCalledTimes(2))
     expect(screen.getByText(en[screens.WORKSPACE_NOT_FOUND])).toBeInTheDocument()
     // Announced to screen readers, as is the bootstrap's notice.
@@ -64,7 +64,7 @@ describe('askForWorkspace', () => {
     resolve.mockResolvedValueOnce(acme).mockResolvedValueOnce(undefined)
     void screens.askForWorkspace(useCases)
     const user = userEvent.setup()
-    await user.type(await screen.findByRole('textbox', { name: /work email address/i }), 'ada@acme.com')
+    await user.type(await screen.findByRole('textbox', { name: /work email or workspace name/i }), 'ada@acme.com')
     await user.click(screen.getByRole('button', { name: 'Forgot your password?' }))
     await waitFor(() => expect(opened).toHaveBeenCalledWith('https://idp.test/realms/tenant-acme/login-actions/reset-credentials'))
     expect(resolve).toHaveBeenCalledWith('ada@acme.com')
@@ -74,7 +74,7 @@ describe('askForWorkspace', () => {
     resolve.mockResolvedValueOnce(undefined)
     void screens.askForWorkspace(useCases)
     const user = userEvent.setup()
-    await user.type(await screen.findByRole('textbox', { name: /work email address/i }), 'nobody@else.com')
+    await user.type(await screen.findByRole('textbox', { name: /work email or workspace name/i }), 'nobody@else.com')
     await user.click(screen.getByRole('button', { name: 'Forgot your password?' }))
     expect(await screen.findByText(en[screens.WORKSPACE_NOT_FOUND])).toBeInTheDocument()
     expect(opened).not.toHaveBeenCalled()
@@ -90,7 +90,7 @@ describe('askForWorkspace, other failures', () => {
       },
     })
     const user = userEvent.setup()
-    await user.type(await screen.findByRole('textbox', { name: /work email address/i }), 'ada@acme.com')
+    await user.type(await screen.findByRole('textbox', { name: /work email or workspace name/i }), 'ada@acme.com')
     await user.click(screen.getByRole('button', { name: 'Forgot your password?' }))
     expect(await screen.findByText(en['login.error.passwordReset'])).toBeInTheDocument()
     expect(screen.queryByText(/upstream said/)).toBeNull()
@@ -105,8 +105,8 @@ describe('askForWorkspace, other failures', () => {
       },
     })
     const user = userEvent.setup()
-    await user.type(await screen.findByRole('textbox', { name: /work email address/i }), 'ada@acme.com')
-    await user.click(screen.getByRole('button', { name: 'Continue with Email' }))
+    await user.type(await screen.findByRole('textbox', { name: /work email or workspace name/i }), 'ada@acme.com')
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
     expect(await screen.findByText(en['login.error.signIn'])).toBeInTheDocument()
     expect(screen.queryByText('Failed to fetch')).toBeNull()
   })

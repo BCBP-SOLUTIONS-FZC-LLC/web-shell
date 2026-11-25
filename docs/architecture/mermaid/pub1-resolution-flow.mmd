@@ -15,23 +15,24 @@ sequenceDiagram
         SDK->>PUB: resolve(slug) through workspaceResolver
         PUB-->>SDK: realm
         SDK->>Cache: write it at once (realm and slug must match)
-        SDK-->>Boot: Workspace (or none: ask for the email)
+        SDK-->>Boot: Workspace (or none: ask on the sign-in screen)
     else no slug and nothing cached
         Boot->>Screen: askForWorkspace(signInUseCases)
         loop until a workspace is found
-            Screen->>UC: resolveWorkspace(email)
-            UC->>Port: resolve(email)
+            Screen->>UC: resolveWorkspace(identifier)
+            Note over UC: toIdentifier: email, name lower-cased, URL to its slug<br/>no workspace in a URL: no PUB-1 call, not found
+            UC->>Port: resolve(email or slug)
             Port->>PUB: GET /api/v1/public/tenants/resolve?identifier= (auth false, no token)
             PUB-->>Port: 200 found, realm, strategy, tenant_id
             Port->>Port: toWorkspace (shared is the trial realm, dedicated is realm minus paidRealmPrefix)
             alt found
                 UC-->>Screen: Workspace
-            else not found, 429, unreachable, malformed
+            else not found, 429, unreachable, malformed, no workspace in the URL
                 UC-->>Screen: WorkspaceNotFoundError
-                Screen->>Screen: "We could not find a workspace for that email." (the user can try again)
+                Screen->>Screen: one generic message (the user can try again)
             end
         end
-        Screen-->>Boot: Workspace and the email (onChosen)
+        Screen-->>Boot: Workspace, and loginHint only when an email was typed (onChosen)
     end
     Boot->>SDK: idp.login(workspace, loginHint)
     Note over SDK: after sign-in rememberWorkspace caches it with the slug from P-35

@@ -15,7 +15,7 @@ The browser shell for the BCBP micro-frontend platform. It runs the platform SDK
 | This shell owns | Lives elsewhere |
 |---|---|
 | The SDK bootstrap (`src/app/bootstrap/bootstrap.tsx`) and the routes of the signed-in app: `/t/<slug>/dashboard/*` renders the dashboard remote, `/t/<slug>/tenders/*` the tenders remote | Dashboard pages, navigation inside the dashboard and dashboard data (`mfe-dashboard`, loaded as `dashboard`); tender screens (`mfe-tender`, loaded as `tenders`) |
-| The email sign-in page and the session screens. The SDK does Authorization Code + PKCE against the workspace's Keycloak realm and keeps tokens in memory | Credentials, password policy, MFA and token issuance (Keycloak). This repo ships a local realm and theme for development |
+| The sign-in page (email, workspace name or URL) and the session screens. The SDK does Authorization Code + PKCE against the workspace's Keycloak realm and keeps tokens in memory | Credentials, password policy, MFA and token issuance (Keycloak). This repo ships a local realm and theme for development |
 | The IAM ports: PUB-1 (email or slug → realm) and P-35 (session context), over the SDK's `ApiClient` | The IAM APIs themselves, tenant membership, roles and audit |
 | The shell value remotes read through SDK hooks: the user, workspace, session context and sign-out (`PlatformProvider`) | Any other remote. `dashboard` and `tenders` are in the local manifest |
 | Static hosting of `index.html`, hashed `/assets/`, `/config/runtime.json`, `/remotes/manifest.json`, `/version.json` and `GET /healthz` | Cluster deploy and each environment's runtime config and remote manifest. Publishing a tag pushes an image; it does not roll a cluster |
@@ -63,12 +63,12 @@ After sign-in the SDK moves the URL under `/t/<slug>/` (`rememberWorkspace`), an
 
 1. `src/app/bootstrap/index.ts` imports `src/app/bootstrap/bootstrap.tsx` behind the async boundary Module Federation needs.
 2. The bootstrap loads `/config/runtime.json` and calls the SDK's `idp.init()`. A reload with a live Keycloak session is restored silently (`prompt=none`).
-3. Signed out with a known workspace (the `/t/<slug>` in the URL, or the SDK's workspace cache): straight to that realm's authorize endpoint, with the remembered email as `login_hint`.
-4. Otherwise the login page asks for the work email. `GET /api/v1/public/tenants/resolve?identifier=<email>` (PUB-1) returns the realm. "Not found" and "unreachable" show the same generic message.
+3. Signed out with a known workspace (the `/t/<slug>` in the URL, or the SDK's workspace cache): straight to that realm's authorize endpoint, with the remembered email as `login_hint` (a remembered workspace name is never sent as one).
+4. Otherwise the login page asks for a work email or workspace name (a pasted workspace URL works too: its `/t/<slug>` is used). `GET /api/v1/public/tenants/resolve?identifier=<email or slug>` (PUB-1) returns the realm. "Not found", 429 and "unreachable" show the same generic message.
 5. Keycloak redirects to `{origin}/auth/callback`. The SDK checks `state`, exchanges the code with the PKCE verifier, and keeps the tokens in memory.
 6. The bootstrap loads the session context (`GET /api/v1/me/session-context`, P-35), sets permissions and flags, caches the workspace, loads `/remotes/manifest.json`, and renders.
 
-**Forgot your password?** resolves the typed email the same way and opens Keycloak's reset page for that realm (`/realms/{realm}/login-actions/reset-credentials`). Help and legal links appear only once their official URLs are set in `src/shared/constants/links.ts`. When a new deployment is live, "A new version is available." offers a reload.
+**Forgot your password?** resolves what was typed (email, workspace name or URL) the same way and opens Keycloak's reset page for that realm (`/realms/{realm}/login-actions/reset-credentials`). Help and legal links appear only once their official URLs are set in `src/shared/constants/links.ts`. When a new deployment is live, "A new version is available." offers a reload.
 
 Sign-out is global by default: the Keycloak session ends, every tab drops its tokens, the app unmounts, and "You are signed out" waits for a click. A session that expires during use shows "Session ended". The shell never redirects on its own.
 
@@ -101,7 +101,7 @@ The container listens on **8080** as uid **101**.
 
 ## Input validation and error handling
 
-The shell has one form (the work email) and reads three files it does not own (`/config/runtime.json`, `/remotes/manifest.json`, `/version.json`). Everything it shows the user comes from its own catalogue (`src/shared/i18n/en.json`), never from a server's message.
+The shell has one form (the work email or workspace name) and reads three files it does not own (`/config/runtime.json`, `/remotes/manifest.json`, `/version.json`). Everything it shows the user comes from its own catalogue (`src/shared/i18n/en.json`), never from a server's message.
 
 Errors from the platform's APIs are RFC 9457 problem responses. The SDK's `ApiClient` turns one into a `ProblemError` (`status`, `typeId`, `errorCode`, `requestId`). For example, a rate-limited PUB-1 call answers with the platform's type `platform/rate-limit-exceeded` (the SDK's `contracts/problem-types.json`):
 
@@ -122,8 +122,8 @@ The shell never shows `title` or `detail`: the sign-in screen maps every failure
 
 | Rule | Enforcement |
 |---|---|
-| The email is required and must look like an email | `<input type="email" required>`; the value is trimmed before PUB-1 |
-| PUB-1 never reveals whether an email or a workspace exists | Not found, 429, unreachable and a malformed answer all become `WorkspaceNotFoundError` → "We could not find a workspace for that email." (`resolveWorkspaceUseCase`) |
+| The identifier is required: an email, a workspace name or a workspace URL, up to 254 characters | `<input type="text" inputMode="email" maxLength=254 required>`; `toIdentifier` trims it, lower-cases a name and reduces a URL to its slug before PUB-1. Only an email becomes `login_hint` |
+| PUB-1 never reveals whether an email or a workspace exists | Not found, 429, unreachable and a malformed answer all become `WorkspaceNotFoundError` → "We couldn't find a workspace for that. Try your workspace name — it's the part after /t/ in your workspace link — or ask your administrator." (`resolveWorkspaceUseCase`) |
 | No error message from a server is shown | The session screens map every failure to `login.workspaceNotFound`, `login.error.signIn` or `login.error.passwordReset`; the error page (`AppError`) shows only a reference id |
 | `/config/runtime.json` is validated strictly | The SDK refuses an unknown key, an invalid value, or an `environment` outside the platform's vocabulary: the page shows "The app is unavailable right now." and logs `the app could not start`. Smoke `live` fails a file that names another environment than the deployment's |
 | Remote entries are trusted only when pinned | `/remotes/manifest.json` entries load only from the page's origin or `remotes.allowedOrigins`, with `integrity` required outside `local`, `dev`, `test`; a mismatch fails as a chunk-load error inside the remote's boundary |
@@ -145,7 +145,7 @@ web-shell/
 │   │   └── layouts/             # Full-screen host and the session-screen mounting
 │   ├── presentation/            # pages/login, features/session-screens, components, widgets
 │   ├── application/             # Use cases: resolve workspace, password reset, session context retry
-│   ├── domain/                  # Contracts, errors, the role map
+│   ├── domain/                  # Contracts, errors, the role map, the identifier rule
 │   ├── infrastructure/          # api (PUB-1, P-35), auth (password reset), storage (remember email), federation (navigator), i18n
 │   └── shared/                  # i18n (the shell's text), constants (links), ui (images, theme, CSS), types
 ├── .dependency-cruiser.cjs      # Architecture lint: components and their allowed dependencies
@@ -193,7 +193,7 @@ The full component map is in CONTRIBUTING (§ Architecture lint); `test/unit/lay
 | Key or channel | Store | Purpose |
 |---|---|---|
 | `@bcbp-solutions-fzc-llc/frontend-sdk:*` | `localStorage` | SDK metadata: workspace cache (up to 20), session id, last activity, last user. No tokens |
-| `bcbp.rememberEmail`, `bcbp.loginEmail` | `localStorage` | "Remember Email" on the login form only (`infrastructure/storage/rememberedEmail.ts`, the one raw-storage file) |
+| `bcbp.rememberEmail`, `bcbp.loginEmail` | `localStorage` | "Remember Email" on the login form only: an email or a bare workspace name, never a URL (`infrastructure/storage/rememberedEmail.ts`, the one raw-storage file) |
 | `BroadcastChannel` `platform-auth` | Browser | SDK: sign-out and workspace switches reach every tab |
 | Session context, tokens | Memory | Per page; tokens are never written to storage |
 
@@ -309,11 +309,11 @@ With Keycloak and the dev server running (`mfe-dashboard` too for the sign-out r
 | Flow | How |
 |---|---|
 | Sign in | Open http://localhost:5001, enter the seeded user's email (the seed script prints it; its password is set in `scripts/seed-keycloak-user.mjs`), continue to Keycloak |
-| Silent restore | Reload the page: the SDK restores the session from Keycloak's SSO cookie (`prompt=none`) without the email screen |
+| Silent restore | Reload the page: the SDK restores the session from Keycloak's SSO cookie (`prompt=none`) without the sign-in screen |
 | Sign-out, no silent sign-in | Sign out from the dashboard: "You are signed out" waits; the next sign-in asks for credentials (`prompt=login`) |
 | Cross-tab sign-out | Open two tabs, sign out in one: the other shows "You are signed out" |
 | Session expiry | Set `auth.idleTimeoutMs` to `60000` (the SDK's minimum; lower values are refused) in `config/runtime.local.json` and leave the tab idle: "Session ended" appears over the app |
-| Missing permissions | Sign in once without it (that caches the workspace), then restart with `DEV_API_URL=http://localhost:9 npm run dev` (nothing listens there) and reload: P-35 gets a 503 problem, the amber notice says some actions are hidden, and the background retry runs. PUB-1 is proxied too, so the email screen cannot resolve while it is set |
+| Missing permissions | Sign in once without it (that caches the workspace), then restart with `DEV_API_URL=http://localhost:9 npm run dev` (nothing listens there) and reload: P-35 gets a 503 problem, the amber notice says some actions are hidden, and the background retry runs. PUB-1 is proxied too, so the sign-in screen cannot resolve while it is set |
 | A different role | `DEV_ROLES=member,tenant_admin npm run dev` |
 | Remote down | Stop `mfe-dashboard`: `/t/bcbp/dashboard` shows the boundary's error, the shell keeps running |
 
@@ -415,7 +415,7 @@ REMOTE_DIST=../mfe-dashboard/dist npm run test-contract
 |---|---|---|
 | Unit | `test/unit/` | PUB-1 and P-35 mappings and ports, the entry point, remember-email, the screen host, `BrandLogo`, the session-context retry (and its agreement with the SDK ApiClient), the navigator adapter, the dev server's platform middleware, the layer rules and arch-lint firing, the text catalogue and the hard-coded-text guard, the no-SDK-duplicates guard, metrics-check, the use cases, the links, the password reset URL |
 | Integration | `test/integration/` | The login page and the carousel, the session screens, `App` routes, and the bootstrap's order and branches; axe-core over every shell screen (`accessibility.test.tsx`) |
-| End to end | `test/e2e/` | The real bootstrap, screens, `App` and SDK against a fake Keycloak (PKCE) and network: email → PUB-1 → sign-in → the `dashboard` remote under `/t/<slug>/`, deep links (one to `/t/<slug>/tenders/…` loads only the tenders entry), role-map permissions in the remote, deny-all, a failing remote, global sign-out, the device clock |
+| End to end | `test/e2e/` | The real bootstrap, screens, `App` and SDK against a fake Keycloak (PKCE) and network: email → PUB-1 → sign-in → the `dashboard` remote under `/t/<slug>/`, a workspace name or pasted URL reaching PUB-1 as the slug with no `login_hint` (and a URL with no workspace asking nothing), deep links (one to `/t/<slug>/tenders/…` loads only the tenders entry), role-map permissions in the remote, deny-all, a failing remote, global sign-out, the device clock |
 | Smoke | `test/smoke/` | `npm run test-smoke` against the served image (CI) or a deployment: the SPA rule, Cache-Control, script integrity, 404s, and the runtime files validated by the SDK. See [test/smoke/README.md](./test/smoke/README.md) |
 | Browser | `test/browser/` | `npm run test-browser` after a build: the production bundle in Chromium, Firefox and WebKit under the production CSP and Trusted Types, with a fake Keycloak on a second origin: fonts, PKCE sign-in, the remote with integrity, `navigate()`, the sign-out form POST, the start-up failure report, colour contrast |
 | Dashboard contract | `test/browser/dashboard.spec.ts`, CI `dashboard-contract` | The real mfe-dashboard build (`REMOTE_DIST`) in this shell, three engines, production CSP: integrity, share scope and CSS, the role map reaching it, its navigation, its Logout through the shell's form POST. Informational in CI |
@@ -492,7 +492,7 @@ The image takes `PLATFORM_ENVIRONMENT`, `BUILD_VERSION` and `SOURCE_DATE_EPOCH` 
 | Topic | Guidance |
 |---|---|
 | **Public client** | No client secret. The possession proof is the PKCE verifier |
-| **Token storage** | Tokens live in memory only, never in storage. "Remember Email" stores the email only |
+| **Token storage** | Tokens live in memory only, never in storage. "Remember Email" stores the email or bare workspace name only, never a pasted URL |
 | **Redirect** | The SDK checks `state` before the code is exchanged. The redirect URI is `{origin}{auth.redirectPath}` |
 | **API calls** | The SDK's `ApiClient` sends the token to the page's own origin only and never sends identity headers. The ESLint plugin enforces subpath imports, no identity headers, no raw `window.*Storage`, no unsafe HTML |
 | **Remote code** | Remotes execute in this origin. Entries load only from the page's origin or `remotes.allowedOrigins`, pinned by `integrity` outside local, dev and test |
@@ -653,7 +653,7 @@ Plus, until CloudFront: `nginx/security.d/csp.conf.example` (with that environme
 
 | Call | When |
 |---|---|
-| `GET /api/v1/public/tenants/resolve?identifier=` (PUB-1) | The email sign-in screen, and workspace switching. No token |
+| `GET /api/v1/public/tenants/resolve?identifier=` (PUB-1) | The sign-in screen, and workspace switching. No token |
 | `GET /api/v1/me/session-context` (P-35) | Once after sign-in (with the SDK's own retries); after a network failure while online, a timeout, 429, 502, 503 or 504 (the SDK ApiClient's own rule), again after 1 s, 2 s, 4 s, one request each. Until it answers the app renders with deny-all permissions |
 
 #### Dashboard remote (`dashboard`)

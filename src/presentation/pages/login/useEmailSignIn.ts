@@ -4,15 +4,15 @@ import { useShellText, type ShellKey } from '../../../shared/i18n'
 
 export type LoginPageProps = {
   /**
-   * Resolves the email to a workspace and redirects to Keycloak. Rejects with a message the page
+   * Resolves the typed email, workspace name or workspace URL to a workspace and redirects to Keycloak. Rejects with a message the page
    * shows when no workspace matches or the resolver is unreachable.
    */
-  onContinue: (email: string) => Promise<void>
+  onContinue: (identifier: string) => Promise<void>
   /**
    * Sends the user to their workspace's password reset (Keycloak). Rejects with a message the page
    * shows. Without it, "Forgot your password?" is not shown.
    */
-  onForgotPassword?: (email: string) => Promise<void>
+  onForgotPassword?: (identifier: string) => Promise<void>
   /** A message from the bootstrap (a catalogue key), e.g. why the last sign-in did not complete. */
   notice?: ShellKey | null
   /** "Remember Email": given by the composition root (the page never touches storage itself). */

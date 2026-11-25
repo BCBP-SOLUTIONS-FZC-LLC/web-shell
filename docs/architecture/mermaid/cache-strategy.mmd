@@ -5,8 +5,8 @@ flowchart TD
         h3["/api, /otel, /csp-report: never served by the image (404); routed to their services"]
     end
     subgraph browser["In the browser"]
-        b1["SDK workspace cache: localStorage @bcbp-solutions-fzc-llc/frontend-sdk:workspaces\nrealm + slug, up to 20; skips the email screen on return\nwritten by chooseWorkspace (URL slug) and rememberWorkspace (after sign-in)"]
-        b2["Remembered email: localStorage bcbp.rememberEmail / bcbp.loginEmail\nonly when the box is checked"]
+        b1["SDK workspace cache: localStorage @bcbp-solutions-fzc-llc/frontend-sdk:workspaces\nrealm + slug, up to 20; skips the sign-in screen on return\nwritten by chooseWorkspace (URL slug) and rememberWorkspace (after sign-in)"]
+        b2["Remembered email or workspace name: localStorage bcbp.rememberEmail / bcbp.loginEmail\nonly when the box is checked; never a URL"]
         b3["Session context (P-35): in memory only (createStore), per page load\nreplaced live when the background retry succeeds"]
         b4["Tokens: SDK memory only, never storage; reload restores from Keycloak SSO (prompt=none)"]
         b5["Text catalogue en.json: in the entry chunk, registered before the first screen"]

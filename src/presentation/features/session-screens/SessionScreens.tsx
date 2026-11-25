@@ -5,15 +5,16 @@ import { useEffect, useRef, type ReactNode } from 'react'
 import type { SessionState, Workspace } from '@bcbp-solutions-fzc-llc/frontend-sdk/auth'
 import type { SignInUseCases } from '../../../application/signIn'
 import { WorkspaceNotFoundError } from '../../../domain/errors'
+import { isEmailIdentifier } from '../../../domain/rules/identifier'
 import LoginPage from '../../pages/login/LoginPage'
 import { shellText, useShellText, type ShellKey } from '../../../shared/i18n'
 
-/** Generic on purpose: never says whether the email or the workspace was the problem. */
+/** Generic on purpose: one text for every miss (email, workspace name, URL, 429), never saying which. */
 export const WORKSPACE_NOT_FOUND: ShellKey = 'login.workspaceNotFound'
 
 export interface SignInChoice {
   workspace: Workspace
-  /** The email the user typed, passed to Keycloak as login_hint. */
+  /** The email the user typed, passed to Keycloak as login_hint; absent for a workspace name or URL. */
   loginHint?: string
 }
 
@@ -82,10 +83,12 @@ export function SignInScreen({ useCases, notice, onChosen }: { useCases: SignInU
     <LoginPage
       notice={notice ?? null}
       rememberedEmail={useCases.rememberedEmail}
-      onContinue={async (email) => {
-        onChosen({ workspace: await withPageMessage(useCases.resolveWorkspace(email), 'login.error.signIn'), loginHint: email })
+      onContinue={async (identifier) => {
+        const workspace = await withPageMessage(useCases.resolveWorkspace(identifier), 'login.error.signIn')
+        // A workspace name or URL is not a login: only an email becomes Keycloak's login_hint.
+        onChosen({ workspace, ...(isEmailIdentifier(identifier) ? { loginHint: identifier } : {}) })
       }}
-      onForgotPassword={(email) => withPageMessage(useCases.requestPasswordReset(email), 'login.error.passwordReset')}
+      onForgotPassword={(identifier) => withPageMessage(useCases.requestPasswordReset(identifier), 'login.error.passwordReset')}
     />
   )
 }
