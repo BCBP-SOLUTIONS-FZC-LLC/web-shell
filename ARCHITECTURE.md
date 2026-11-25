@@ -4,7 +4,7 @@ This document describes the internal structure, dependency direction, browser fl
 
 `web-shell` is a **private Rsbuild application** (`github.com/BCBP-SOLUTIONS-FZC-LLC/web-shell`, Node.js 26, React 19.3) built on the platform SDK (`@bcbp-solutions-fzc-llc/frontend-sdk` `1.0.0-alpha.10`). The npm package name is `web-shell` and `"private": true`. Nothing installs it. What ships is a static bundle: the SDK bootstrap, the sign-in and session screens, and a Module Federation host (`shell`) that renders the `dashboard`, `tenders`, `drafting`, `workflows`, `admin` and `me` remotes under its header. The production process is nginx on port **8080**, uid **101**. There is no API server, database, or message bus in this repository.
 
-Current release: `v0.4.0` (remotes `dashboard` and `tenders`, SDK alpha.6); `v0.3.0` (remote `dashboard` only) is its rollback; `v0.2.0` and `v0.1.0` (remote `app2`) are superseded. `package.json` `version` matches the latest tag. Image tags, the SemVer contract, and how to cut a release are in [VERSIONING.md](./VERSIONING.md).
+Current release: `v0.5.0` (SDK alpha.10; the header, IAM's workspace screens, live roles; routes for six remotes); `v0.4.0` (remotes `dashboard` and `tenders`, SDK alpha.6) is its rollback; `v0.3.0`, `v0.2.0` and `v0.1.0` (remote `app2`) are superseded. `package.json` `version` matches the latest tag. Image tags, the SemVer contract, and how to cut a release are in [VERSIONING.md](./VERSIONING.md).
 
 | This shell owns | Lives elsewhere |
 |---|---|
@@ -872,7 +872,7 @@ CloudFront arrives next month. Until then every environment serves the image beh
 | Rule | Why |
 |---|---|
 | A tag publishes; nothing deploys | Operators choose when an environment moves |
-| Deploy in pairs with the dashboard (LLD §15) | `0.4.0` + mfe-dashboard `0.3.0` (remote `dashboard`) and, once released, mfe-tender (remote `tenders`), mfe-drafting (`drafting`) and mfe-workflow-designer (`workflows`); rollback web-shell `0.3.0` with the same dashboard (no tenders route). mfe-dashboard `0.4.0` (alpha.6) needs web-shell `0.3.0` or later. A remote must not be built against a newer SDK than the shell's |
+| Deploy in pairs with the dashboard (LLD §15) | `0.5.0` + mfe-dashboard `0.4.0` (contract suite 12/12) or `0.3.0` (remote `dashboard`) and, once released, mfe-tender (remote `tenders`), mfe-drafting (`drafting`), mfe-workflow-designer (`workflows`), mfe-admin (`admin`) and mfe-me (`me`); rollback web-shell `0.4.0` with the same dashboard. mfe-dashboard `0.4.0` (alpha.6) needs web-shell `0.3.0` or later; a remote on SDK alpha.10 needs web-shell `0.5.0`. A remote must not be built against a newer SDK than the shell's |
 | Shell before remotes on an SDK upgrade | A remote built on a newer SDK requires that version from the shell's shared scope (e.g. `^1.0.0-alpha.6`) and does not load in an older shell |
 | The image ships no `environment` in `runtime.json` | Each deployment writes its own; smoke `live` fails a file that names none or another |
 | `index.html`, config, manifest are `no-cache`; assets are immutable | A rollback takes effect on the next load. The image serves only its own `/assets/`, so an open tab of the rolled-back build that requests a chunk the older image lacks gets a 404, and the SDK reloads it once |
