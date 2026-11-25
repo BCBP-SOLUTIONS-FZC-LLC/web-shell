@@ -586,7 +586,7 @@ E2E seams (`test/fixtures/`): `FakeKeycloak` (authorize via `approve()`, token e
 | `ci.yml` `build-image` | Hadolint, Buildx cache build `web-shell-ci-test` |
 | `ci.yml` `trivy` | Unfixed CRITICAL/HIGH/UNKNOWN fail; SBOM artifact |
 | `ci.yml` `smoke` | `smoke-tests.sh`: ≤ 200 MB, startup gate, then `npm run test-smoke` (`SMOKE_MODE=image`) against the container, then the per-environment CSP and HSTS (none by default; added by mounted `security.d/csp.conf` and `hsts.conf`) |
-| `ci.yml` `dashboard-contract` | Builds mfe-dashboard (`vars.DASHBOARD_REF`, default `main`), then `REMOTE_DIST=… npm run test-contract`. Informational: does not gate `push` |
+| `ci.yml` `dashboard-contract` | Builds mfe-dashboard (`vars.DASHBOARD_REF`, default `main`; private, checked out with `CI_REPO_READ_TOKEN`, which needs read access to it), then `REMOTE_DIST=… npm run test-contract`. Informational: does not gate `push` |
 | `ci.yml` `browser` | Playwright browsers, `npm run build`, `npm run test-browser` (Chromium, Firefox, WebKit). Gates `push` |
 | `ci.yml` `push` | `main`/`master`: GHCR branch and `sha-<short>` tags, Cosign keyless sign |
 | `changelog-check.yml` | `CHANGELOG.md` required when `src/`, `package*.json`, `Dockerfile`, `nginx/`, `rsbuild.config.ts`, `config/**`, `public/config/**` or `index.html` change |
