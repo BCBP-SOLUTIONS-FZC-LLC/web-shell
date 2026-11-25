@@ -24,6 +24,7 @@ import {
   rememberWorkspace,
   signInAgain,
   slugFromPath,
+  type SessionContext,
   type Workspace,
 } from '@bcbp-solutions-fzc-llc/frontend-sdk/auth'
 import { setTokenSource } from '@bcbp-solutions-fzc-llc/frontend-sdk/http'
@@ -42,6 +43,7 @@ import { loadSessionContextOnce, sessionContextSource, workspaceResolver, worksp
 import { upgradeWelcomeStorage } from '../../infrastructure/storage/upgradeWelcome'
 import { loadWorkspaceStatus } from '../../application/use-cases/loadWorkspaceStatus'
 import { readOnlyUntil, recentlyUpgraded, workspaceBanners } from '../../domain/rules/workspaceBanners'
+import { isPageWorkspace } from '../../domain/rules/workspaceAccess'
 import { passwordResetUrl } from '../../infrastructure/auth/passwordReset'
 import { localStorageRememberedEmail } from '../../infrastructure/storage/rememberedEmail'
 import { shellNavigator } from '../../infrastructure/federation/navigator'
@@ -90,6 +92,11 @@ function credentialsFor(w: Workspace): { prompt?: 'login' } {
 
 /** How often the banners are worked out again from the loaded P-1 and P-27 (the trial's days left). */
 const BANNER_REFRESH_MS = 3_600_000
+/**
+ * The session context (P-35) is asked again when the page gets focus, at most this often, so a role or
+ * plan change made elsewhere (another tab, another admin) reaches the hints without a reload.
+ */
+export const CONTEXT_REFRESH_MS = 60_000
 
 /** Where the platform's telemetry goes when the runtime config could not be read (its default). */
 const DEFAULT_OTLP_BASE_URL = '/otel'
@@ -216,6 +223,17 @@ async function start(cfg: RuntimeConfig, report: { otlpBaseUrl: string }): Promi
   // mounting the app for a user who is gone (checked after every await).
   const signedOutDuringBoot = new AbortController()
   const signedOut = () => signedOutDuringBoot.signal.aborted
+  // Every P-35 request after the first load is numbered, and its answer remembers its number: a context is
+  // applied only when no later request's answer has been applied already, so an answer that arrives late
+  // (the focus refresh and the background retry overlap) never undoes a newer one.
+  let asked = 0
+  const askedAs = new WeakMap<SessionContext, number>()
+  const loadOrdered = async (signal?: AbortSignal): Promise<SessionContext> => {
+    const n = ++asked
+    const c = await loadSessionContextOnce(signal)
+    askedAs.set(c, n)
+    return c
+  }
   // Set once the session expired during use: "Session ended" is up and nothing may replace it.
   let expired = false
   // Set once a refusal screen replaced the app or the boot (A6/A8, wrong workspace, not loaded): it stays.
@@ -272,7 +290,7 @@ async function start(cfg: RuntimeConfig, report: { otlpBaseUrl: string }): Promi
     // A membership refusal's second ask waits 5 s: say so, without anything of the session. A tenant state
     // settles at once, so its screen comes with no loading screen before it.
     if (refusalIsReasked(firstError)) showWorkspaceLoading()
-    const settled = await settleRefusal(firstError, loadSessionContextOnce, { signal: signedOutDuringBoot.signal })
+    const settled = await settleRefusal(firstError, loadOrdered, { signal: signedOutDuringBoot.signal })
     if (stopped()) return
     if ('block' in settled) {
       refuse(() => showWorkspaceUnavailable(settled.block, idp, signInUseCases))
@@ -283,13 +301,14 @@ async function start(cfg: RuntimeConfig, report: { otlpBaseUrl: string }): Promi
   }
   // A transient failure (the ApiClient's own rule: online network error, timeout, 429, 502-504) is
   // retried 3 times (1 s, 2 s, 4 s), one request each (loadSessionContextOnce). A sign-out stops the
-  // retries. A final answer (401, 403, 404: P-35 missing in this environment) is not asked again, except
-  // on a trial's check (`anyFailure`: offline, 500 and 404 too). A retry answered with a workspace state
+  // retries. A final answer (401, 403, 404: P-35 missing in this environment) is not retried here, except
+  // on a trial's check (`anyFailure`: offline, 500 and 404 too); the focus refresh asks again, at most once a
+  // minute, so a deny-all page can still recover (LLD §6.6e). A retry answered with a workspace state
   // (A6/A8) ends the retries and is returned as `refusal`.
-  const retryContext = async (anyFailure = false) => {
+  const retryContext = async (anyFailure = false, signal = signedOutDuringBoot.signal) => {
     let refusal: unknown
-    const retried = await retrySessionContext(loadSessionContextOnce, {
-      signal: signedOutDuringBoot.signal,
+    const retried = await retrySessionContext(loadOrdered, {
+      signal,
       ...(anyFailure ? { retryable: (e: unknown) => blockedWorkspace(e) === undefined } : {}),
       onError: (error, attempt) => {
         getLogger().warn('session context unavailable', { error, attempt })
@@ -313,7 +332,7 @@ async function start(cfg: RuntimeConfig, report: { otlpBaseUrl: string }): Promi
       if (stopped()) return
       // Settled like the first load's refusal: a membership refusal is asked once more after 5 s.
       if (tried.refusal !== undefined) {
-        const settled = await settleRefusal(tried.refusal, loadSessionContextOnce, { signal: signedOutDuringBoot.signal })
+        const settled = await settleRefusal(tried.refusal, loadOrdered, { signal: signedOutDuringBoot.signal })
         if (stopped()) return
         if ('block' in settled) {
           refuse(() => showWorkspaceUnavailable(settled.block, idp, signInUseCases))
@@ -457,10 +476,122 @@ async function start(cfg: RuntimeConfig, report: { otlpBaseUrl: string }): Promi
   render()
   startNotices()
 
+  // The background retry (below) ends once a focus refresh has applied a context, or a refusal replaced the
+  // app; a sign-out ends it too.
+  const backgroundRetry = new AbortController()
+  signedOutDuringBoot.signal.addEventListener('abort', () => backgroundRetry.abort(), { once: true })
+  let applied = 0
+  // A context that changed: the subject, flags and provider get it, then the banners (once) and the router
+  // (rememberWorkspace may have moved the URL under /t/<slug>/). Rendered again either way, so the header
+  // drops a remote the tenant's flags switch off. Shared by the background retry and the focus refresh.
+  // False when a later request's answer is already applied: this one is older.
+  const takeContext = (next: SessionContext): boolean => {
+    // Every context that reaches here came through loadOrdered (the background retry, the focus refresh).
+    const n = askedAs.get(next)!
+    if (n < applied) return false
+    applied = n
+    context.set(next)
+    applyContext()
+    startNotices()
+    basename = routerBasename()
+    render()
+    return true
+  }
+  // A refusal received after render: the app goes (its data must not stay under the screen; a sign-out already
+  // unmounted it), then the refusal's screen, unless "Session ended" or "You are signed out" is up.
+  const unmountApp = () => {
+    backgroundRetry.abort()
+    app?.unmount()
+    app = undefined
+  }
+  const refuseApp = (show: () => void) => {
+    unmountApp()
+    if (!stopped()) refuse(show)
+  }
+
+  // The focus refresh: on focus or when the tab becomes visible, at most once a minute, P-35 is asked again
+  // (one request, no retries: the next focus tries again). A changed context is applied; the same one changes
+  // nothing. A refusal is settled as on the first load (a membership refusal asked once more after 5 s), then
+  // its screen replaces the app; a context for another workspace shows the wrong-workspace screen. A failure
+  // keeps the context the page has. Never after a sign-out, an expiry or a refusal.
+  // Once a refresh has applied a context, the background retry ends: an answer it then gets may have been
+  // read before a role change the refresh already shows.
+  let refreshed = false
+  const applyRefreshed = (next: SessionContext) => {
+    if (!takeContext(next)) return
+    refreshed = true
+    backgroundRetry.abort()
+  }
+
+  let lastAsked = Date.now()
+  let refreshing = false
+  const refreshContext = async () => {
+    if (refreshing || Date.now() - lastAsked < CONTEXT_REFRESH_MS) return
+    refreshing = true
+    lastAsked = Date.now()
+    try {
+      let next: SessionContext | undefined
+      try {
+        next = await loadOrdered(signedOutDuringBoot.signal)
+      } catch (error) {
+        // As the background retry: a refusal received after an expiry still unmounts the app (not asked
+        // again), and "Session ended" stays on top; after a sign-out or a refusal screen, nothing.
+        if (stopped()) {
+          if (blockedWorkspace(error) !== undefined) unmountApp()
+          return
+        }
+        if (blockedWorkspace(error) === undefined) {
+          getLogger().warn('session context refresh failed', { error })
+          return
+        }
+        const settled = await settleRefusal(error, loadOrdered, { signal: signedOutDuringBoot.signal })
+        if ('block' in settled) {
+          const { block } = settled
+          refuseApp(() => showWorkspaceUnavailable(block, idp, signInUseCases))
+          return
+        }
+        if (stopped()) return
+        if (!('context' in settled)) {
+          getLogger().warn('session context refresh failed', { error: settled.error })
+          return
+        }
+        next = settled.context
+      }
+      if (stopped()) return
+      const current = context.get()
+      // The workspace this page is for: never rebind it to another one (isPageWorkspace).
+      if (!isPageWorkspace(next, current, w)) {
+        refuseApp(() => showWrongWorkspace(idp, signInUseCases))
+        return
+      }
+      if (JSON.stringify(next) !== JSON.stringify(current)) applyRefreshed(next)
+    } finally {
+      refreshing = false
+    }
+  }
+  const onFocus = () => {
+    if (stopped()) {
+      window.removeEventListener('focus', onFocus)
+      document.removeEventListener('visibilitychange', onVisible)
+      return
+    }
+    void refreshContext()
+  }
+  const onVisible = () => {
+    if (document.visibilityState === 'visible') onFocus()
+  }
+  window.addEventListener('focus', onFocus)
+  document.addEventListener('visibilitychange', onVisible)
+  signedOutDuringBoot.signal.addEventListener('abort', () => {
+    window.removeEventListener('focus', onFocus)
+    document.removeEventListener('visibilitychange', onVisible)
+  }, { once: true })
+
   // The background retry (retryContext above; never a trial with a slug, whose P-35 was awaited): on
   // success the subject, flags and provider get the context.
   if (!context.get() && isTransient(firstError)) {
-    const tried = await retryContext()
+    const tried = await retryContext(false, backgroundRetry.signal)
+    if (refreshed) return
     let { retried } = tried
     // A refusal is settled like the first load's (a membership refusal is asked once more after 5 s;
     // the deny-all app stays meanwhile), then a workspace state replaces the app with its screen.
@@ -468,7 +599,8 @@ async function start(cfg: RuntimeConfig, report: { otlpBaseUrl: string }): Promi
     if (tried.refusal !== undefined) {
       if (stopped()) late = blockedWorkspace(tried.refusal)
       else {
-        const settled = await settleRefusal(tried.refusal, loadSessionContextOnce, { signal: signedOutDuringBoot.signal })
+        const settled = await settleRefusal(tried.refusal, loadOrdered, { signal: backgroundRetry.signal })
+        if (refreshed) return
         if ('block' in settled) late = settled.block
         else if ('context' in settled) retried = settled.context
       }
@@ -476,20 +608,10 @@ async function start(cfg: RuntimeConfig, report: { otlpBaseUrl: string }): Promi
     // A refusal received unmounts the app (a sign-out already did). After an expiry "Session ended" stays on
     // top, with nothing of the workspace under it: its Sign in leaves the page, and the next load meets the
     // refusal again. Otherwise the refusal's own screen replaces the app.
-    if (late && !signedOut()) {
-      app?.unmount()
-      app = undefined
-      if (!stopped()) refuse(() => showWorkspaceUnavailable(late, idp, signInUseCases))
+    if (late) {
+      refuseApp(() => showWorkspaceUnavailable(late, idp, signInUseCases))
       return
     }
-    if (retried && !stopped()) {
-      context.set(retried)
-      applyContext()
-      startNotices()
-      // rememberWorkspace may have moved the URL under /t/<slug>/: route from there. Rendered again either
-      // way, so the header drops a remote the tenant's flags switch off.
-      basename = routerBasename()
-      render()
-    }
+    if (retried && !stopped()) takeContext(retried)
   }
 }

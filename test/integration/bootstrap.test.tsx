@@ -194,6 +194,9 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  // The page goes: a sign-out stops that test's boot and removes its focus listeners (the focus refresh),
+  // so a later test's focus events reach only its own bootstrap.
+  if (subscriber) act(() => subscriber!({ status: 'anonymous', reason: 'signed-out' } as SessionState))
   vi.useRealTimers()
   act(() => resetScreen())
   vi.clearAllMocks()
@@ -857,6 +860,380 @@ describe('bootstrap, signed in', () => {
     expect(screen.getByRole('alertdialog', { name: /different workspace/ })).toBeInTheDocument()
     expect(screen.queryByRole('main')).not.toBeInTheDocument()
     expect(calls).not.toContain('loadManifest')
+  })
+})
+
+describe('bootstrap, the session-context refresh on focus', () => {
+  const MINUTE = 60_000
+  const focus = () => act(() => void window.dispatchEvent(new Event('focus')))
+  const later = (ms: number) => vi.setSystemTime(Date.now() + ms)
+  /** Lets the refresh's awaits settle. */
+  const settle = () => act(() => vi.advanceTimersByTimeAsync(0))
+  let subjects: unknown[]
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'setInterval', 'clearInterval', 'Date'] })
+    subjects = []
+    sdk.setAuthzSubject = (s) => subjects.push(s)
+  })
+  afterEach(() => {
+    delete sdk.setAuthzSubject
+  })
+
+  it('asks P-35 again on focus at most once a minute, and applies a changed context', async () => {
+    await act(() => bootstrap())
+    expect(loadContext).toHaveBeenCalledOnce()
+    later(30_000)
+    focus()
+    await settle()
+    expect(loadContext).toHaveBeenCalledOnce()
+    loadContext.mockResolvedValue({ tenantId: 't-1', slug: 'acme', roles: ['member', 'tenant_admin'] })
+    later(MINUTE)
+    focus()
+    focus() // a second event while the first runs is dropped
+    await settle()
+    expect(loadContext).toHaveBeenCalledTimes(2)
+    expect(subjects.at(-1)).toEqual({ roles: ['member', 'tenant_admin'], tenantId: 't-1' })
+    expect(screen.getByRole('main')).toHaveTextContent('app at /t/acme')
+    // Within the minute after: nothing.
+    focus()
+    await settle()
+    expect(loadContext).toHaveBeenCalledTimes(2)
+  })
+
+  it('changes nothing when the context is the same', async () => {
+    await act(() => bootstrap())
+    const applied = subjects.length
+    later(MINUTE)
+    focus()
+    await settle()
+    expect(loadContext).toHaveBeenCalledTimes(2)
+    expect(subjects).toHaveLength(applied)
+  })
+
+  it('asks again when the tab becomes visible, not when it is hidden', async () => {
+    await act(() => bootstrap())
+    const visibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden')
+    later(MINUTE)
+    act(() => void document.dispatchEvent(new Event('visibilitychange')))
+    await settle()
+    expect(loadContext).toHaveBeenCalledOnce()
+    visibility.mockReturnValue('visible')
+    act(() => void document.dispatchEvent(new Event('visibilitychange')))
+    await settle()
+    expect(loadContext).toHaveBeenCalledTimes(2)
+    visibility.mockRestore()
+  })
+
+  it('keeps the context the page has when the refresh fails, and tries again on a later focus', async () => {
+    await act(() => bootstrap())
+    const applied = subjects.length
+    loadContext.mockRejectedValueOnce(new NetworkError(false, 'req-1'))
+    later(MINUTE)
+    focus()
+    await settle()
+    expect(logger.warn).toHaveBeenCalledWith('session context refresh failed', { error: expect.any(NetworkError) })
+    expect(subjects).toHaveLength(applied)
+    expect(screen.getByRole('main')).toBeInTheDocument()
+    later(MINUTE)
+    focus()
+    await settle()
+    expect(loadContext).toHaveBeenCalledTimes(3)
+  })
+
+  it('replaces the app with the screen when IAM now refuses the workspace (A6/A8)', async () => {
+    await act(() => bootstrap())
+    loadContext.mockRejectedValue(await parseProblemResponse(mockProblem(PlatformProblemTypes.Forbidden, { errorCode: 'TENANT_TRIAL_EXPIRED' })))
+    later(MINUTE)
+    focus()
+    await settle()
+    expect(screen.getByRole('alertdialog', { name: 'Your trial has ended' })).toBeInTheDocument()
+    expect(screen.queryByRole('main')).not.toBeInTheDocument()
+    // Refused: no more refreshes.
+    later(MINUTE)
+    focus()
+    await settle()
+    expect(loadContext).toHaveBeenCalledTimes(2)
+  })
+
+  it('asks a membership refusal once more after 5 s, and keeps the app when the context then comes', async () => {
+    await act(() => bootstrap())
+    loadContext.mockRejectedValueOnce(await parseProblemResponse(mockProblem(PlatformProblemTypes.Forbidden, { errorCode: 'MEMBER_SUSPENDED' })))
+    later(MINUTE)
+    focus()
+    await settle()
+    expect(screen.getByRole('main')).toBeInTheDocument()
+    await act(() => vi.advanceTimersByTimeAsync(5_000))
+    expect(loadContext).toHaveBeenCalledTimes(3)
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    expect(screen.getByRole('main')).toBeInTheDocument()
+  })
+
+  it('keeps the context when the second ask of a membership refusal fails otherwise', async () => {
+    await act(() => bootstrap())
+    loadContext
+      .mockRejectedValueOnce(await parseProblemResponse(mockProblem(PlatformProblemTypes.Forbidden, { errorCode: 'MEMBER_SUSPENDED' })))
+      .mockRejectedValueOnce(new Error('500'))
+    later(MINUTE)
+    focus()
+    await act(() => vi.advanceTimersByTimeAsync(5_000))
+    expect(logger.warn).toHaveBeenCalledWith('session context refresh failed', { error: expect.any(Error) })
+    expect(screen.getByRole('main')).toBeInTheDocument()
+  })
+
+  it("never rebinds the page: a context for another workspace shows the wrong-workspace screen", async () => {
+    await act(() => bootstrap())
+    loadContext.mockResolvedValue({ tenantId: 't-2', slug: 'globex', roles: ['member'] })
+    later(MINUTE)
+    focus()
+    await settle()
+    expect(screen.getByRole('alertdialog', { name: 'You signed in to a different workspace' })).toBeInTheDocument()
+    expect(screen.queryByRole('main')).not.toBeInTheDocument()
+  })
+
+  it('does nothing after the session expired: "Session ended" stays', async () => {
+    await act(() => bootstrap())
+    act(() => subscriber!({ status: 'expired', idle: false } as SessionState))
+    later(MINUTE)
+    focus()
+    await settle()
+    expect(loadContext).toHaveBeenCalledOnce()
+    expect(screen.getByRole('alertdialog', { name: 'Session ended' })).toBeInTheDocument()
+  })
+
+  it('applies nothing that answers after the session expired', async () => {
+    await act(() => bootstrap())
+    const applied = subjects.length
+    let answer!: (c: unknown) => void
+    loadContext.mockImplementationOnce(() => new Promise((r) => (answer = r)))
+    later(MINUTE)
+    focus()
+    act(() => subscriber!({ status: 'expired', idle: false } as SessionState))
+    answer({ tenantId: 't-1', slug: 'acme', roles: ['member', 'tenant_admin'] })
+    await settle()
+    expect(subjects).toHaveLength(applied)
+    expect(screen.getByRole('alertdialog', { name: 'Session ended' })).toBeInTheDocument()
+  })
+
+  it('stops when the user signs out during the second ask of a membership refusal', async () => {
+    await act(() => bootstrap())
+    loadContext.mockRejectedValue(await parseProblemResponse(mockProblem(PlatformProblemTypes.Forbidden, { errorCode: 'MEMBER_SUSPENDED' })))
+    later(MINUTE)
+    focus()
+    await settle()
+    act(() => subscriber!({ status: 'anonymous', reason: 'signed-out' } as SessionState))
+    await act(() => vi.advanceTimersByTimeAsync(5_000))
+    expect(logger.warn).not.toHaveBeenCalledWith('session context refresh failed', expect.anything())
+    expect(screen.queryByRole('alertdialog', { name: 'Your access is paused' })).not.toBeInTheDocument()
+  })
+
+  it('a deny-all page gets its permissions on a later focus (a P-35 answer that is never retried in the background)', async () => {
+    loadContext.mockRejectedValueOnce(new Error('403'))
+    await act(() => bootstrap())
+    expect(subjects).toEqual([undefined])
+    later(MINUTE)
+    focus()
+    await settle()
+    expect(subjects.at(-1)).toEqual({ roles: ['member'], tenantId: 't-1' })
+    expect(calls).toContain('rememberWorkspace')
+    expect(screen.getByRole('main')).toHaveTextContent('app at /t/acme')
+  })
+
+  it('a trial page without a slug (an invitation email) takes the slug P-35 names', async () => {
+    initResult = { status: 'authenticated', user, workspace: { realm: 'trial', trial: true }, expiresAt: Date.now() + 60_000 }
+    loadContext.mockRejectedValueOnce(new Error('403'))
+    await act(() => bootstrap())
+    loadContext.mockResolvedValue({ tenantId: 't-9', slug: 'beta', roles: ['member'] })
+    later(MINUTE)
+    focus()
+    await settle()
+    expect(subjects.at(-1)).toEqual({ roles: ['member'], tenantId: 't-9' })
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+  })
+
+  it('keeps the page when a P-35 body has no slug: nothing to compare (LLD §4.2)', async () => {
+    await act(() => bootstrap())
+    loadContext.mockResolvedValue({ tenantId: 't-1', roles: ['member', 'tenant_admin'] })
+    later(MINUTE)
+    focus()
+    await settle()
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    expect(subjects.at(-1)).toEqual({ roles: ['member', 'tenant_admin'], tenantId: 't-1' })
+  })
+
+  it('a refusal that answers after an expiry unmounts the app, and "Session ended" stays on top', async () => {
+    await act(() => bootstrap())
+    let reject!: (e: unknown) => void
+    loadContext.mockImplementationOnce(() => new Promise((_, r) => (reject = r)))
+    later(MINUTE)
+    focus()
+    act(() => subscriber!({ status: 'expired', idle: false } as SessionState))
+    reject(await parseProblemResponse(mockProblem(PlatformProblemTypes.Forbidden, { errorCode: 'TENANT_SUSPENDED' })))
+    await settle()
+    expect(screen.queryByRole('main')).not.toBeInTheDocument()
+    expect(screen.getByRole('alertdialog', { name: 'Session ended' })).toBeInTheDocument()
+    expect(loadContext).toHaveBeenCalledTimes(2) // not asked again
+  })
+
+  it('a failure that answers after an expiry is dropped: no warning, the page as it is under "Session ended"', async () => {
+    await act(() => bootstrap())
+    let reject!: (e: unknown) => void
+    loadContext.mockImplementationOnce(() => new Promise((_, r) => (reject = r)))
+    later(MINUTE)
+    focus()
+    act(() => subscriber!({ status: 'expired', idle: false } as SessionState))
+    reject(new NetworkError(false, 'req-1'))
+    await settle()
+    expect(logger.warn).not.toHaveBeenCalledWith('session context refresh failed', expect.anything())
+    expect(screen.getByRole('alertdialog', { name: 'Session ended' })).toBeInTheDocument()
+  })
+
+  it('a refusal confirmed after an expiry (the second ask) unmounts the app too', async () => {
+    await act(() => bootstrap())
+    loadContext.mockRejectedValue(await parseProblemResponse(mockProblem(PlatformProblemTypes.Forbidden, { errorCode: 'MEMBER_SUSPENDED' })))
+    later(MINUTE)
+    focus()
+    await settle()
+    act(() => subscriber!({ status: 'expired', idle: false } as SessionState))
+    await act(() => vi.advanceTimersByTimeAsync(5_000))
+    expect(screen.queryByRole('main')).not.toBeInTheDocument()
+    expect(screen.getByRole('alertdialog', { name: 'Session ended' })).toBeInTheDocument()
+  })
+
+  it('ends the background retry once a refresh applied a context: its older answer never overwrites it', async () => {
+    let answer!: (c: unknown) => void
+    loadContext
+      .mockRejectedValueOnce(new NetworkError(false, 'req-1')) // the first load: retried in the background
+      .mockImplementationOnce(() => new Promise((r) => (answer = r))) // the retry's request, slow
+      .mockResolvedValueOnce({ tenantId: 't-1', slug: 'acme', roles: ['member', 'tenant_admin'] }) // the refresh
+    const started = bootstrap()
+    await act(() => vi.advanceTimersByTimeAsync(1_000))
+    expect(loadContext).toHaveBeenCalledTimes(2)
+    later(MINUTE)
+    focus()
+    await settle()
+    expect(subjects.at(-1)).toEqual({ roles: ['member', 'tenant_admin'], tenantId: 't-1' })
+    // The retry's request was sent before the role change: its answer is dropped, and nothing is asked again.
+    answer({ tenantId: 't-1', slug: 'acme', roles: ['member'] })
+    await act(() => vi.advanceTimersByTimeAsync(10_000))
+    await act(() => started)
+    expect(subjects.at(-1)).toEqual({ roles: ['member', 'tenant_admin'], tenantId: 't-1' })
+    expect(loadContext).toHaveBeenCalledTimes(3)
+  })
+
+  it("ends the background retry's second ask of a membership refusal once a refresh applied a context", async () => {
+    loadContext
+      .mockRejectedValueOnce(new NetworkError(false, 'req-1'))
+      .mockRejectedValueOnce(await parseProblemResponse(mockProblem(PlatformProblemTypes.Forbidden, { errorCode: 'MEMBER_SUSPENDED' })))
+      .mockResolvedValueOnce({ tenantId: 't-1', slug: 'acme', roles: ['member'] })
+    const started = bootstrap()
+    await act(() => vi.advanceTimersByTimeAsync(1_000)) // the retry meets the refusal and waits 5 s to ask again
+    later(MINUTE)
+    focus()
+    await settle()
+    expect(subjects.at(-1)).toEqual({ roles: ['member'], tenantId: 't-1' })
+    await act(() => vi.advanceTimersByTimeAsync(5_000))
+    await act(() => started)
+    expect(loadContext).toHaveBeenCalledTimes(3) // the second ask never went out
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    expect(screen.getByRole('main')).toHaveTextContent('app at /t/acme')
+  })
+
+  it('keeps the page when P-35 sends slug null for this tenant (a paid workspace)', async () => {
+    await act(() => bootstrap())
+    loadContext.mockResolvedValue({ tenantId: 't-1', slug: null, roles: ['member', 'tenant_admin'] })
+    later(MINUTE)
+    focus()
+    await settle()
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    expect(subjects.at(-1)).toEqual({ roles: ['member', 'tenant_admin'], tenantId: 't-1' })
+  })
+
+  it('shows the wrong-workspace screen for another tenant even without a slug', async () => {
+    await act(() => bootstrap())
+    loadContext.mockResolvedValue({ tenantId: 't-2', roles: ['member'] })
+    later(MINUTE)
+    focus()
+    await settle()
+    expect(screen.getByRole('alertdialog', { name: 'You signed in to a different workspace' })).toBeInTheDocument()
+    expect(screen.queryByRole('main')).not.toBeInTheDocument()
+  })
+
+  it('a trial with a slug: a refresh without that slug shows the wrong-workspace screen, as the first load would', async () => {
+    initResult = { status: 'authenticated', user, workspace: { realm: 'trial', trial: true, slug: 'beta' }, expiresAt: Date.now() + 60_000 }
+    loadContext.mockResolvedValue({ tenantId: 't-9', slug: 'beta', roles: ['member'] })
+    await act(() => bootstrap())
+    expect(screen.getByRole('main')).toBeInTheDocument()
+    loadContext.mockResolvedValue({ tenantId: 't-9', roles: ['member', 'tenant_admin'] })
+    later(MINUTE)
+    focus()
+    await settle()
+    expect(screen.getByRole('alertdialog', { name: 'You signed in to a different workspace' })).toBeInTheDocument()
+  })
+
+  it('a refresh answer older than one the background retry applied is dropped', async () => {
+    let refreshAnswer!: (c: unknown) => void
+    let retryAnswer!: (c: unknown) => void
+    loadContext
+      .mockRejectedValueOnce(new NetworkError(false, 'req-1')) // the first load: retried in the background
+      .mockRejectedValueOnce(new NetworkError(false, 'req-2')) // the retry's first attempt (after 1 s)
+      .mockImplementationOnce(() => new Promise((r) => (refreshAnswer = r))) // the refresh, sent first
+      .mockImplementationOnce(() => new Promise((r) => (retryAnswer = r))) // the retry's second attempt, sent later
+    const started = bootstrap()
+    await act(() => vi.advanceTimersByTimeAsync(1_000))
+    later(MINUTE)
+    focus()
+    await settle()
+    await act(() => vi.advanceTimersByTimeAsync(2_000))
+    expect(loadContext).toHaveBeenCalledTimes(4)
+    // The later request answers first, with the role change; the earlier one answers last, without it.
+    retryAnswer({ tenantId: 't-1', slug: 'acme', roles: ['member', 'tenant_admin'] })
+    await settle()
+    refreshAnswer({ tenantId: 't-1', slug: 'acme', roles: ['member'] })
+    await act(() => vi.advanceTimersByTimeAsync(10_000))
+    await act(() => started)
+    expect(subjects.at(-1)).toEqual({ roles: ['member', 'tenant_admin'], tenantId: 't-1' })
+  })
+
+  it('a refusal the refresh shows ends the background retry: no more P-35 requests', async () => {
+    loadContext
+      .mockRejectedValueOnce(new NetworkError(false, 'req-1'))
+      .mockRejectedValueOnce(new NetworkError(false, 'req-2')) // the retry's first attempt; it backs off 2 s
+      .mockRejectedValueOnce(await parseProblemResponse(mockProblem(PlatformProblemTypes.Forbidden, { errorCode: 'TENANT_TRIAL_EXPIRED' })))
+    const started = bootstrap()
+    await act(() => vi.advanceTimersByTimeAsync(1_000))
+    later(MINUTE)
+    focus()
+    await settle()
+    expect(screen.getByRole('alertdialog', { name: 'Your trial has ended' })).toBeInTheDocument()
+    await act(() => vi.advanceTimersByTimeAsync(10_000))
+    await act(() => started)
+    expect(loadContext).toHaveBeenCalledTimes(3)
+  })
+
+  it('stops listening after a sign-out', async () => {
+    const removed = vi.spyOn(window, 'removeEventListener')
+    await act(() => bootstrap())
+    act(() => subscriber!({ status: 'anonymous', reason: 'signed-out' } as SessionState))
+    expect(removed).toHaveBeenCalledWith('focus', expect.any(Function))
+    later(MINUTE)
+    focus()
+    await settle()
+    expect(loadContext).toHaveBeenCalledOnce()
+    removed.mockRestore()
+  })
+
+  it('a refusal that comes back after a sign-out leaves the signed-out screen alone', async () => {
+    await act(() => bootstrap())
+    let reject!: (e: unknown) => void
+    loadContext.mockImplementationOnce(() => new Promise((_, r) => (reject = r)))
+    later(MINUTE)
+    focus()
+    act(() => subscriber!({ status: 'anonymous', reason: 'signed-out' } as SessionState))
+    reject(await parseProblemResponse(mockProblem(PlatformProblemTypes.Forbidden, { errorCode: 'TENANT_SUSPENDED' })))
+    await settle()
+    expect(screen.getByRole('heading', { name: 'You are signed out' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: /unavailable/i })).not.toBeInTheDocument()
   })
 })
 
