@@ -47,7 +47,7 @@ vi.mock('@bcbp-solutions-fzc-llc/frontend-sdk/react', async (original) => {
   }
 })
 
-const { default: App, ACCOUNT_REMOTE, ADMIN_REMOTE, DASHBOARD_REMOTE, DRAFTING_REMOTE, TENDERS_REMOTE, WORKFLOWS_REMOTE, sectionOf } = await import('../../src/app/routes/App')
+const { default: App, ACCOUNT_REMOTE, ADMIN_REMOTE, DASHBOARD_REMOTE, DRAFTING_REMOTE, TENDERS_REMOTE, WORKFLOWS_REMOTE, sameSection, sectionOf } = await import('../../src/app/routes/App')
 const { createStore } = await import('../../src/application/use-cases/loadSessionContext')
 type AppNotices = import('../../src/app/routes/App').AppNotices
 type RouterNavigate = import('../../src/app/routes/App').RouterNavigate
@@ -408,6 +408,38 @@ describe('App header (app-chrome handoff, option A)', () => {
     await act(async () => navigate('/tenders/T-2'))
     expect(window.location.pathname).toBe('/tenders/T-2')
     expect(remoteMounted).toHaveBeenCalledTimes(2)
+  })
+
+  it('compares sections without case, as the routes match them', async () => {
+    window.history.replaceState({}, '', '/t/acme/admin/settings')
+    let navigate!: RouterNavigate
+    render(<App basename="/t/acme" onRouter={(n) => (navigate = n)} />)
+    await act(async () => navigate('/Admin/users'))
+    expect(window.location.pathname).toBe('/t/acme/Admin/users')
+    expect(remoteMounted).toHaveBeenCalledTimes(2)
+    expect(sameSection('/Admin/users', '/admin/settings')).toBe(true)
+    expect(sameSection('/admin', '/me')).toBe(false)
+  })
+
+  it('falls back to a full page load once the app is gone, as the SDK does without a navigator', () => {
+    const assign = vi.spyOn(window.location, 'assign').mockImplementation(() => {})
+    const replace = vi.spyOn(window.location, 'replace').mockImplementation(() => {})
+    window.history.replaceState({}, '', '/t/acme/admin/settings')
+    let navigate!: RouterNavigate
+    const { unmount } = render(<App basename="/t/acme" onRouter={(n) => (navigate = n)} />)
+    unmount()
+    navigate('/tenders/T-2')
+    navigate('/me', { replace: true })
+    expect(assign).toHaveBeenCalledWith('/t/acme/tenders/T-2')
+    expect(replace).toHaveBeenCalledWith('/t/acme/me')
+    // From the site root (no basename): the path as it is.
+    window.history.replaceState({}, '', '/dashboard')
+    const root = render(<App onRouter={(n) => (navigate = n)} />)
+    root.unmount()
+    navigate('/tenders')
+    expect(assign).toHaveBeenLastCalledWith('/tenders')
+    assign.mockRestore()
+    replace.mockRestore()
   })
 
   it('names a path’s section by its first segment', () => {

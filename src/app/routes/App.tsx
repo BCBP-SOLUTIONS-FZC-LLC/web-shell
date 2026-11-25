@@ -152,12 +152,21 @@ function ReadOnly({ until }: { until: string | undefined }) {
   return useReadOnly() ? <ReadOnlyNotice until={until} /> : null
 }
 
-/** react-router's navigate as the SDK's navigator uses it: a path under the basename, push or replace. */
+/**
+ * react-router's navigate as the SDK's navigator uses it: a path under the basename, push or replace. The
+ * same shape as `RouterNavigate` in infrastructure/federation/navigator.ts (routes may not import
+ * infrastructure); the bootstrap passes this one to `shellNavigator`, so the compiler checks they agree.
+ */
 export type RouterNavigate = (to: string, o?: { replace?: boolean }) => void
 
 /** A router path's section, its first segment: '/tenders/T-1?x' → '/tenders'. */
 export function sectionOf(path: string): string {
   return /^\/[^/?#]*/.exec(path)?.[0] ?? '/'
+}
+
+/** Whether two router paths are in the same section, compared as the routes match them: without case. */
+export function sameSection(a: string, b: string): boolean {
+  return sectionOf(a).toLowerCase() === sectionOf(b).toLowerCase()
 }
 
 /** The address bar's path and query: what a remote's own router shows. */
@@ -171,9 +180,13 @@ const addressBar = () => window.location.pathname + window.location.search
  * the address bar's path or query, remounts the routes (`onVisit`), and the remote's router starts at the new
  * URL. A move to another section mounts that remote anyway; a move that changes nothing (the same path and
  * query, or a hash) remounts nothing, so a remote's state is not lost and a remote that navigates to where it
- * is cannot loop.
+ * is cannot loop. A query change remounts too: a remote keeps a filter or tab in the query with its own
+ * router, never with navigate() (LLD §4.5).
+ *
+ * When the router goes (App unmounted: a sign-out, a refusal screen), the navigator falls back to a full page
+ * load, as the SDK's navigate() does without a navigator, so a late navigate() never drives a dead router.
  */
-function RouterBridge({ onRouter, onVisit }: { onRouter: (navigate: RouterNavigate) => void; onVisit: () => void }) {
+function RouterBridge({ onRouter, onVisit, basename }: { onRouter: (navigate: RouterNavigate) => void; onVisit: () => void; basename: string | undefined }) {
   const navigate = useNavigate()
   // The section the shell's routes show: a remount is needed only when that route element stays. The
   // navigator is registered again on each change (react-router's navigate changes with it anyway).
@@ -182,9 +195,15 @@ function RouterBridge({ onRouter, onVisit }: { onRouter: (navigate: RouterNaviga
     onRouter((to, o) => {
       const before = addressBar()
       void navigate(to, o)
-      if (addressBar() !== before && sectionOf(to) === sectionOf(pathname)) onVisit()
+      if (addressBar() !== before && sameSection(to, pathname)) onVisit()
     })
-  }, [navigate, onRouter, onVisit, pathname])
+    return () =>
+      onRouter((to, o) => {
+        const url = `${basename ?? ''}${to}`
+        if (o?.replace) window.location.replace(url)
+        else window.location.assign(url)
+      })
+  }, [navigate, onRouter, onVisit, pathname, basename])
   return null
 }
 
@@ -249,7 +268,7 @@ function Frame({ basename, remotes, workspaceName, onVisit }: { basename: string
   const mayAdminister = useHasPermission(ADMIN_ENTRY.action, ADMIN_ENTRY.resource)
   const ref = useRef<HTMLDivElement>(null)
   usePublishedHeight(ref, HEADER_HEIGHT_VAR)
-  const inSection = (to: string) => pathname === to || pathname.startsWith(`${to}/`)
+  const inSection = (to: string) => sameSection(to, pathname)
   const link = (id: string, to: string, label: ShellKey): FrameLink => ({
     id,
     to,
@@ -308,7 +327,7 @@ export default function App({
   return (
     <MFEErrorBoundary mfe={SHELL_MFE} fallback={(e) => <AppError reference={e.traceId ?? e.requestId} onRetry={e.retry} />}>
       <BrowserRouter {...(basename ? { basename } : {})}>
-        {onRouter ? <RouterBridge onRouter={onRouter} onVisit={remount} /> : null}
+        {onRouter ? <RouterBridge onRouter={onRouter} onVisit={remount} basename={basename} /> : null}
         <Update />
         <div className="flex min-h-screen flex-col">
           {frame ? <Frame basename={basename} remotes={remotes} workspaceName={workspaceName} onVisit={remount} /> : null}
