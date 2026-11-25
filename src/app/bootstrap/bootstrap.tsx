@@ -416,7 +416,14 @@ async function start(cfg: RuntimeConfig, report: { otlpBaseUrl: string }): Promi
       await idp.switchWorkspace(target, credentialsFor(target))
     },
     signOut: (o?: { global?: boolean }) => idp.logout(o),
+    // A remote's useRefreshSessionContext (SDK alpha.10): defined with the focus refresh below.
+    refreshContext: refreshForRemote,
   }
+  // The refresh's state, declared before anything can call refreshForRemote: the request number of the
+  // context last applied (takeContext), the load in flight, and when the last load started.
+  let applied = 0
+  let running: Promise<boolean | undefined> | undefined
+  let lastAsked = Date.now()
   // The workspace banners and the read-only grace date (IAM P-1, P-27 for owners and tenant admins),
   // loaded once in the background when the context is known: a failure only means no banners.
   const notices = createStore<AppNotices>({ banners: [] })
@@ -480,7 +487,6 @@ async function start(cfg: RuntimeConfig, report: { otlpBaseUrl: string }): Promi
   // app; a sign-out ends it too.
   const backgroundRetry = new AbortController()
   signedOutDuringBoot.signal.addEventListener('abort', () => backgroundRetry.abort(), { once: true })
-  let applied = 0
   // A context that changed: the subject, flags and provider get it, then the banners (once) and the router
   // (rememberWorkspace may have moved the URL under /t/<slug>/). Rendered again either way, so the header
   // drops a remote the tenant's flags switch off. Shared by the background retry and the focus refresh.
@@ -517,57 +523,90 @@ async function start(cfg: RuntimeConfig, report: { otlpBaseUrl: string }): Promi
   // Once a refresh has applied a context, the background retry ends: an answer it then gets may have been
   // read before a role change the refresh already shows.
   let refreshed = false
-  const applyRefreshed = (next: SessionContext) => {
-    if (!takeContext(next)) return
+  const applyRefreshed = (next: SessionContext): boolean => {
+    if (!takeContext(next)) return false
     refreshed = true
     backgroundRetry.abort()
+    return true
   }
 
-  let lastAsked = Date.now()
-  let refreshing = false
-  const refreshContext = async () => {
-    if (refreshing || Date.now() - lastAsked < CONTEXT_REFRESH_MS) return
-    refreshing = true
-    lastAsked = Date.now()
+  // One P-35 load and its outcome, shared by the focus refresh and a remote's refreshContext: true when a
+  // new context was applied; false when nothing changed, the load failed (the context is kept), or the page
+  // was taken over (a refusal or another workspace's screen, a sign-out, an expiry).
+  const reloadContext = async (): Promise<boolean> => {
+    let next: SessionContext | undefined
     try {
-      let next: SessionContext | undefined
-      try {
-        next = await loadOrdered(signedOutDuringBoot.signal)
-      } catch (error) {
-        // As the background retry: a refusal received after an expiry still unmounts the app (not asked
-        // again), and "Session ended" stays on top; after a sign-out or a refusal screen, nothing.
-        if (stopped()) {
-          if (blockedWorkspace(error) !== undefined) unmountApp()
-          return
-        }
-        if (blockedWorkspace(error) === undefined) {
-          getLogger().warn('session context refresh failed', { error })
-          return
-        }
-        const settled = await settleRefusal(error, loadOrdered, { signal: signedOutDuringBoot.signal })
-        if ('block' in settled) {
-          const { block } = settled
-          refuseApp(() => showWorkspaceUnavailable(block, idp, signInUseCases))
-          return
-        }
-        if (stopped()) return
-        if (!('context' in settled)) {
-          getLogger().warn('session context refresh failed', { error: settled.error })
-          return
-        }
-        next = settled.context
+      next = await loadOrdered(signedOutDuringBoot.signal)
+    } catch (error) {
+      // As the background retry: a refusal received after an expiry still unmounts the app (not asked
+      // again), and "Session ended" stays on top; after a sign-out or a refusal screen, nothing.
+      if (stopped()) {
+        if (blockedWorkspace(error) !== undefined) unmountApp()
+        return false
       }
-      if (stopped()) return
-      const current = context.get()
-      // The workspace this page is for: never rebind it to another one (isPageWorkspace).
-      if (!isPageWorkspace(next, current, w)) {
-        refuseApp(() => showWrongWorkspace(idp, signInUseCases))
-        return
+      if (blockedWorkspace(error) === undefined) {
+        getLogger().warn('session context refresh failed', { error })
+        return false
       }
-      if (JSON.stringify(next) !== JSON.stringify(current)) applyRefreshed(next)
-    } finally {
-      refreshing = false
+      const settled = await settleRefusal(error, loadOrdered, { signal: signedOutDuringBoot.signal })
+      if ('block' in settled) {
+        const { block } = settled
+        refuseApp(() => showWorkspaceUnavailable(block, idp, signInUseCases))
+        return false
+      }
+      if (stopped()) return false
+      if (!('context' in settled)) {
+        getLogger().warn('session context refresh failed', { error: settled.error })
+        return false
+      }
+      next = settled.context
     }
+    if (stopped()) return false
+    const current = context.get()
+    // The workspace this page is for: never rebind it to another one (isPageWorkspace).
+    if (!isPageWorkspace(next, current, w)) {
+      refuseApp(() => showWrongWorkspace(idp, signInUseCases))
+      return false
+    }
+    if (JSON.stringify(next) === JSON.stringify(current)) return false
+    return applyRefreshed(next)
+  }
+
+  // At most one load at a time (`running`, `lastAsked`: declared before the shell value). The focus refresh
+  // skips while one runs; a remote's refresh waits for it and then loads afresh, since the running one may
+  // have read P-35 before the change the remote wants to see. Each load restarts the focus refresh's minute.
+  // A load never rejects: a step that throws after it (applying the context, a screen) is logged and gives
+  // undefined (failed), so neither its caller nor one waiting on it sees an error.
+  async function run(): Promise<boolean | undefined> {
+    lastAsked = Date.now()
+    const mine = reloadContext().catch((error: unknown) => {
+      getLogger().warn('session context refresh failed', { error })
+      return undefined
+    })
+    running = mine
+    try {
+      return await mine
+    } finally {
+      running = undefined // the only one: every caller waits for, or skips, one that runs
+    }
+  }
+  const refreshOnFocus = () => {
+    if (running || Date.now() - lastAsked < CONTEXT_REFRESH_MS) return
+    void run()
+  }
+  // The shell value's refreshContext (SDK alpha.10, useRefreshSessionContext): a remote asks after the user
+  // changed their own roles, or after a 403 DENY_ROLE_INSUFFICIENT. Not held to the focus refresh's minute; the
+  // SDK already shares overlapping calls from remotes. Never rejects. True when a new context was applied
+  // while it ran, by its own load or by one it waited for (a focus refresh, the background retry), so a
+  // remote is not told "nothing changed" when its change is already live; false once the shell took over.
+  async function refreshForRemote(): Promise<boolean> {
+    const before = applied
+    // Another call may start a load while this one waits: wait again until none runs.
+    while (running) await running
+    if (stopped()) return false
+    const own = await run()
+    if (own === undefined) return false // its own load failed part-way: report nothing applied
+    return own || (applied > before && !stopped())
   }
   const onFocus = () => {
     if (stopped()) {
@@ -575,7 +614,7 @@ async function start(cfg: RuntimeConfig, report: { otlpBaseUrl: string }): Promi
       document.removeEventListener('visibilitychange', onVisible)
       return
     }
-    void refreshContext()
+    refreshOnFocus()
   }
   const onVisible = () => {
     if (document.visibilityState === 'visible') onFocus()

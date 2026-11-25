@@ -1237,6 +1237,185 @@ describe('bootstrap, the session-context refresh on focus', () => {
   })
 })
 
+describe("bootstrap, refreshContext (a remote's useRefreshSessionContext, SDK alpha.10)", () => {
+  const MINUTE = 60_000
+  const settle = () => act(() => vi.advanceTimersByTimeAsync(0))
+  const refresh = () => (shellProps as { refreshContext: () => Promise<boolean> }).refreshContext()
+  let subjects: unknown[]
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'setInterval', 'clearInterval', 'Date'] })
+    subjects = []
+    sdk.setAuthzSubject = (s) => subjects.push(s)
+  })
+  afterEach(() => {
+    delete sdk.setAuthzSubject
+  })
+
+  it('loads P-35 at once (no minute floor), applies a changed context and resolves true', async () => {
+    await act(() => bootstrap())
+    loadContext.mockResolvedValue({ tenantId: 't-1', slug: 'acme', roles: ['member', 'tenant_admin'] })
+    let applied: boolean | undefined
+    await act(async () => void (applied = await refresh()))
+    expect(applied).toBe(true)
+    expect(loadContext).toHaveBeenCalledTimes(2)
+    expect(subjects.at(-1)).toEqual({ roles: ['member', 'tenant_admin'], tenantId: 't-1' })
+  })
+
+  it('resolves false when nothing changed, and when the load fails (the context is kept)', async () => {
+    await act(() => bootstrap())
+    const applied = subjects.length
+    await expect(act(() => refresh())).resolves.toBe(false)
+    loadContext.mockRejectedValueOnce(new NetworkError(false, 'req-1'))
+    await expect(act(() => refresh())).resolves.toBe(false)
+    expect(logger.warn).toHaveBeenCalledWith('session context refresh failed', { error: expect.any(NetworkError) })
+    expect(subjects).toHaveLength(applied)
+    expect(screen.getByRole('main')).toBeInTheDocument()
+  })
+
+  it('resolves false and shows the screen when IAM refuses the workspace', async () => {
+    await act(() => bootstrap())
+    loadContext.mockRejectedValueOnce(await parseProblemResponse(mockProblem(PlatformProblemTypes.Forbidden, { errorCode: 'TENANT_TRIAL_EXPIRED' })))
+    await expect(act(() => refresh())).resolves.toBe(false)
+    expect(screen.getByRole('alertdialog', { name: 'Your trial has ended' })).toBeInTheDocument()
+    expect(screen.queryByRole('main')).not.toBeInTheDocument()
+    // Refused: a later call asks nothing.
+    await expect(act(() => refresh())).resolves.toBe(false)
+    expect(loadContext).toHaveBeenCalledTimes(2)
+  })
+
+  it('shows the wrong-workspace screen for another tenant', async () => {
+    await act(() => bootstrap())
+    loadContext.mockResolvedValueOnce({ tenantId: 't-2', slug: 'globex', roles: ['member'] })
+    await expect(act(() => refresh())).resolves.toBe(false)
+    expect(screen.getByRole('alertdialog', { name: 'You signed in to a different workspace' })).toBeInTheDocument()
+  })
+
+  it('asks nothing after a sign-out', async () => {
+    await act(() => bootstrap())
+    act(() => subscriber!({ status: 'anonymous', reason: 'signed-out' } as SessionState))
+    await expect(refresh()).resolves.toBe(false)
+    expect(loadContext).toHaveBeenCalledOnce()
+  })
+
+  it('waits for a focus refresh in flight, then loads afresh: that one may predate the change', async () => {
+    await act(() => bootstrap())
+    let focusAnswer!: (c: unknown) => void
+    loadContext
+      .mockImplementationOnce(() => new Promise((r) => (focusAnswer = r)))
+      .mockResolvedValueOnce({ tenantId: 't-1', slug: 'acme', roles: ['member', 'tenant_admin'] })
+    vi.setSystemTime(Date.now() + MINUTE)
+    act(() => void window.dispatchEvent(new Event('focus')))
+    await settle()
+    expect(loadContext).toHaveBeenCalledTimes(2)
+    let applied: boolean | undefined
+    const pending = refresh().then((a) => (applied = a))
+    await settle()
+    expect(loadContext).toHaveBeenCalledTimes(2) // still waiting for the focus refresh
+    focusAnswer({ tenantId: 't-1', slug: 'acme', roles: ['member'] })
+    await act(() => pending)
+    expect(loadContext).toHaveBeenCalledTimes(3)
+    expect(applied).toBe(true)
+    expect(subjects.at(-1)).toEqual({ roles: ['member', 'tenant_admin'], tenantId: 't-1' })
+  })
+
+  it('a focus while its load runs asks nothing more, even past the minute', async () => {
+    await act(() => bootstrap())
+    let remoteAnswer!: (c: unknown) => void
+    loadContext.mockImplementationOnce(() => new Promise((r) => (remoteAnswer = r)))
+    const pending = refresh()
+    await settle()
+    expect(loadContext).toHaveBeenCalledTimes(2)
+    vi.setSystemTime(Date.now() + MINUTE)
+    act(() => void window.dispatchEvent(new Event('focus')))
+    await settle()
+    expect(loadContext).toHaveBeenCalledTimes(2)
+    remoteAnswer({ tenantId: 't-1', slug: 'acme', roles: ['member', 'tenant_admin'] })
+    await expect(act(() => pending)).resolves.toBe(true)
+  })
+
+  it('resolves true when a focus refresh it waited for applied the change, though its own load finds nothing new', async () => {
+    await act(() => bootstrap())
+    const promoted = { tenantId: 't-1', slug: 'acme', roles: ['member', 'tenant_admin'] }
+    let focusAnswer!: (c: unknown) => void
+    loadContext.mockImplementationOnce(() => new Promise((r) => (focusAnswer = r))).mockResolvedValueOnce({ ...promoted })
+    vi.setSystemTime(Date.now() + MINUTE)
+    act(() => void window.dispatchEvent(new Event('focus')))
+    await settle()
+    const pending = refresh()
+    focusAnswer({ ...promoted })
+    await expect(act(() => pending)).resolves.toBe(true)
+    expect(loadContext).toHaveBeenCalledTimes(3)
+  })
+
+  it('resolves true when a newer background-retry answer applied the change and its own older answer is dropped', async () => {
+    let ownAnswer!: (c: unknown) => void
+    let retryAnswer!: (c: unknown) => void
+    loadContext
+      .mockRejectedValueOnce(new NetworkError(false, 'req-1')) // the first load: retried in the background
+      .mockRejectedValueOnce(new NetworkError(false, 'req-2')) // the retry's first attempt (after 1 s)
+      .mockImplementationOnce(() => new Promise((r) => (ownAnswer = r))) // the remote's load
+      .mockImplementationOnce(() => new Promise((r) => (retryAnswer = r))) // the retry's second attempt, sent later
+    const started = bootstrap()
+    await act(() => vi.advanceTimersByTimeAsync(1_000))
+    const pending = refresh()
+    await act(() => vi.advanceTimersByTimeAsync(2_000))
+    expect(loadContext).toHaveBeenCalledTimes(4)
+    retryAnswer({ tenantId: 't-1', slug: 'acme', roles: ['member', 'tenant_admin'] })
+    await settle()
+    ownAnswer({ tenantId: 't-1', slug: 'acme', roles: ['member'] })
+    await expect(act(() => pending)).resolves.toBe(true)
+    await act(() => started)
+    expect(subjects.at(-1)).toEqual({ roles: ['member', 'tenant_admin'], tenantId: 't-1' })
+  })
+
+  it('never rejects: a step that throws after the load is logged, and a call waiting on it still resolves', async () => {
+    await act(() => bootstrap())
+    loadContext.mockResolvedValue({ tenantId: 't-1', slug: 'acme', roles: ['member', 'tenant_admin'] })
+    const boom = new Error('apply failed')
+    sdk.setAuthzSubject = () => {
+      throw boom
+    }
+    const first = refresh()
+    const waiting = refresh()
+    await expect(act(() => first)).resolves.toBe(false)
+    expect(logger.warn).toHaveBeenCalledWith('session context refresh failed', { error: boom })
+    // The waiting call is not handed the first one's error: it loads afresh and resolves (the store took the
+    // new context before the step that threw, so it reports the change).
+    await expect(act(() => waiting)).resolves.toEqual(expect.any(Boolean))
+  })
+
+  it('two calls at once load one after the other, never in parallel', async () => {
+    await act(() => bootstrap())
+    let first!: (c: unknown) => void
+    loadContext
+      .mockImplementationOnce(() => new Promise((r) => (first = r)))
+      .mockResolvedValueOnce({ tenantId: 't-1', slug: 'acme', roles: ['member', 'tenant_admin'] })
+    const a = refresh()
+    const b = refresh()
+    await settle()
+    expect(loadContext).toHaveBeenCalledTimes(2) // the second waits
+    first({ tenantId: 't-1', slug: 'acme', roles: ['member'] })
+    await expect(act(() => a)).resolves.toBe(false)
+    await expect(act(() => b)).resolves.toBe(true)
+    expect(loadContext).toHaveBeenCalledTimes(3)
+  })
+
+  it('a sign-out while it waits for a focus refresh ends it without a load', async () => {
+    await act(() => bootstrap())
+    let focusAnswer!: (c: unknown) => void
+    loadContext.mockImplementationOnce(() => new Promise((r) => (focusAnswer = r)))
+    vi.setSystemTime(Date.now() + MINUTE)
+    act(() => void window.dispatchEvent(new Event('focus')))
+    await settle()
+    const pending = refresh()
+    act(() => subscriber!({ status: 'anonymous', reason: 'signed-out' } as SessionState))
+    focusAnswer({ tenantId: 't-1', slug: 'acme', roles: ['member'] })
+    await expect(act(() => pending)).resolves.toBe(false)
+    expect(loadContext).toHaveBeenCalledTimes(2)
+  })
+})
+
 describe('bootstrap, the environment from runtime.json (SDK alpha.6)', () => {
   const environmentOf = () => (initializeCore.mock.calls.at(-1)?.[0] as { environment: string }).environment
 

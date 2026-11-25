@@ -2,7 +2,7 @@
 
 This document describes the internal structure, dependency direction, browser flows, data, caching, observability, security and deployment of `web-shell`.
 
-`web-shell` is a **private Rsbuild application** (`github.com/BCBP-SOLUTIONS-FZC-LLC/web-shell`, Node.js 26, React 19.3) built on the platform SDK (`@bcbp-solutions-fzc-llc/frontend-sdk` `1.0.0-alpha.9`). The npm package name is `web-shell` and `"private": true`. Nothing installs it. What ships is a static bundle: the SDK bootstrap, the sign-in and session screens, and a Module Federation host (`shell`) that renders the `dashboard`, `tenders`, `drafting`, `workflows`, `admin` and `me` remotes under its header. The production process is nginx on port **8080**, uid **101**. There is no API server, database, or message bus in this repository.
+`web-shell` is a **private Rsbuild application** (`github.com/BCBP-SOLUTIONS-FZC-LLC/web-shell`, Node.js 26, React 19.3) built on the platform SDK (`@bcbp-solutions-fzc-llc/frontend-sdk` `1.0.0-alpha.10`). The npm package name is `web-shell` and `"private": true`. Nothing installs it. What ships is a static bundle: the SDK bootstrap, the sign-in and session screens, and a Module Federation host (`shell`) that renders the `dashboard`, `tenders`, `drafting`, `workflows`, `admin` and `me` remotes under its header. The production process is nginx on port **8080**, uid **101**. There is no API server, database, or message bus in this repository.
 
 Current release: `v0.4.0` (remotes `dashboard` and `tenders`, SDK alpha.6); `v0.3.0` (remote `dashboard` only) is its rollback; `v0.2.0` and `v0.1.0` (remote `app2`) are superseded. `package.json` `version` matches the latest tag. Image tags, the SemVer contract, and how to cut a release are in [VERSIONING.md](./VERSIONING.md).
 
@@ -12,7 +12,7 @@ Current release: `v0.4.0` (remotes `dashboard` and `tenders`, SDK alpha.6); `v0.
 | The IAM ports: PUB-1 resolver, P-35 session context, and P-1/P-27 for the banners | The IAM APIs, tenant membership, authorization decisions (IAM services, the gateway) |
 | Federation host `shell` and the shared map from `@bcbp-solutions-fzc-llc/webpack-preset` | Dashboard screens (`mfe-dashboard`, loaded as `dashboard`); tender screens (`mfe-tender`, loaded as `tenders`); drafting (`mfe-drafting`, `drafting`); the workflow designer (`mfe-workflow-designer`, `workflows`); administration (`mfe-admin`, `admin`) and the user's account (`mfe-me`, `me`), not built yet |
 | The header around every remote: section links to the served remotes, Admin (`manage:members`), the user menu (My account, Switch workspace, Sign out) | Each remote's own section navigation |
-| The shell value remotes read through SDK hooks (`user`, `signOut`, `workspace`, `context`) | Each environment's `/config/runtime.json` and `/remotes/manifest.json` (deploy pipeline, CloudFront) |
+| The shell value remotes read through SDK hooks (`user`, `signOut`, `workspace`, `context`, `refreshContext`) | Each environment's `/config/runtime.json` and `/remotes/manifest.json` (deploy pipeline, CloudFront) |
 | `GET /healthz` and the static files nginx serves | Cluster rollout. A tag publishes an image. It does not deploy |
 
 Only `__ENVIRONMENT__` and `__BUILD_VERSION__` are compiled into the bundle. Everything else is runtime configuration.
