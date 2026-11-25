@@ -114,7 +114,7 @@ jobs:
         run: bash .github/scripts/set-source-date-epoch.sh
 
       - name: Log in to GHCR
-        uses: docker/login-action@v4.7.0
+        uses: docker/login-action@v4.8.0
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -178,7 +178,7 @@ jobs:
           cache-dir: /tmp/trivy-cache
 
       - name: Upload Trivy results to GitHub Security
-        uses: github/codeql-action/upload-sarif@v4.39.1
+        uses: github/codeql-action/upload-sarif@v4.39.4
         if: always()
         continue-on-error: true
         with:
@@ -202,7 +202,7 @@ jobs:
           retention-days: 90
 
       - name: Install Cosign
-        uses: sigstore/cosign-installer@v4.1.2
+        uses: sigstore/cosign-installer@v4.1.3
 
       - name: Export SLSA provenance
         env:
