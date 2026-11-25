@@ -14,6 +14,8 @@ After render: `registerNavigator` (router under the basename; other paths load i
 
 Focus refresh (LLD §6.6e): `focus` or `visibilitychange` → `visible`, at most once per `CONTEXT_REFRESH_MS` (60 s) and one at a time → `loadSessionContextOnce` → same context: nothing; changed: `store.set` + `applyContext()` + banners once + router, and the background retry ends (an older answer never overwrites it); another slug: wrong-workspace screen, app unmounted; a workspace state: `settleRefusal` → app unmounted, its screen; other failure: `warn 'session context refresh failed'`, context kept. Off once `stopped()`; a sign-out removes the listeners.
 
+A remote's `useRefreshSessionContext()` (SDK alpha.10) → shell value `refreshContext()` → the same load at once (no minute floor), after any load in flight (one at a time; a focus during it is skipped) → `true` when a new context was applied while it ran (by its load or one it waited for), else `false` (nothing new, failed, refused, another workspace, stopped). Never rejects. The focus refresh's minute then counts from this load.
+
 ## Sign-in
 
 | Signed-out reason | Shell |

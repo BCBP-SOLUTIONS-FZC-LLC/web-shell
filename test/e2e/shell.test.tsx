@@ -72,7 +72,7 @@ let bootError: unknown
 
 /** The dashboard remote: reads the user, permissions and sign-out from the shell's SDK, gets no props. */
 async function dashboardModule(): Promise<{ default: ComponentType }> {
-  const { useCurrentUser, useHasPermission, useSignOut, useWorkspace } = await import(
+  const { useCurrentUser, useHasPermission, useRefreshSessionContext, useSignOut, useWorkspace } = await import(
     '@bcbp-solutions-fzc-llc/frontend-sdk/react'
   )
   function Dashboard() {
@@ -81,12 +81,15 @@ async function dashboardModule(): Promise<{ default: ComponentType }> {
     const canManage = useHasPermission('manage', 'members')
     const canView = useHasPermission('read', 'members')
     const signOut = useSignOut()
+    // As mfe-admin will after the user's own role change (P-28) or a 403 DENY_ROLE_INSUFFICIENT.
+    const refresh = useRefreshSessionContext()
     return createElement(
       'main',
       null,
       createElement('h1', null, `Dashboard for ${user?.name ?? 'nobody'} in ${workspace?.slug ?? '?'}`),
       canView ? createElement('a', { href: '#members' }, 'User management') : null,
       canManage ? createElement('button', { type: 'button' }, 'Invite') : null,
+      createElement('button', { type: 'button', onClick: () => void refresh() }, 'Refresh permissions'),
       createElement('button', { type: 'button', onClick: () => void signOut() }, 'Sign out'),
     )
   }
@@ -353,6 +356,17 @@ describe('the shell, end to end', () => {
     await screen.findByRole('heading', { name: `${name} for Ada Lovelace in acme` }, { timeout: 5_000 })
     expect(window.location.pathname).toBe(path)
     expect(injected).toEqual([otherEntry(name)])
+  })
+
+  it("a remote's useRefreshSessionContext reloads P-35 at once and the remote follows its new roles, without a reload", async () => {
+    roles = ['member']
+    await signInByEmail()
+    expect(screen.queryByRole('button', { name: 'Invite' })).toBeNull()
+    roles = ['member', 'tenant_admin'] // the user's own role change, made in the remote
+    await userEvent.click(screen.getByRole('button', { name: 'Refresh permissions' }))
+    await screen.findByRole('button', { name: 'Invite' }, { timeout: 5_000 })
+    expect(net.sent('/api/v1/me/session-context')).toHaveLength(2)
+    expect(assigned).toEqual([]) // no page load
   })
 
   it('a role given elsewhere reaches the remote on focus after a minute, without a reload (P-35 asked again)', async () => {
