@@ -47,6 +47,9 @@ const CONTAINER = '__platform_mfe_dashboard'
 const TENDERS_ENTRY = '/remotes/tenders/1.0.0/remoteEntry.js'
 /** The global mfe-tender's remoteEntry.js defines. */
 const TENDERS_CONTAINER = '__platform_mfe_tenders'
+/** mfe-drafting and mfe-workflow-designer: each a remote on the SDK's hooks, named by its manifest key. */
+const OTHER_REMOTES = ['drafting', 'workflows'] as const
+const otherEntry = (name: string) => `/remotes/${name}/1.0.0/remoteEntry.js`
 const TENANT = '7d3c1f9e-2b4a-4c6d-8e0f-1a2b3c4d5e6f'
 const EMAIL = 'ada@acme.test'
 
@@ -101,6 +104,17 @@ async function tendersModule(): Promise<{ default: ComponentType }> {
   return { default: Tenders }
 }
 
+/** A remote (drafting, workflows) that reads the user and the workspace from the shell's SDK. */
+async function otherModule(name: string): Promise<{ default: ComponentType }> {
+  const { useCurrentUser, useWorkspace } = await import('@bcbp-solutions-fzc-llc/frontend-sdk/react')
+  function Remote() {
+    const user = useCurrentUser()
+    const workspace = useWorkspace()
+    return createElement('h1', null, `${name} for ${user?.name ?? 'nobody'} in ${workspace?.slug ?? '?'}`)
+  }
+  return { default: Remote }
+}
+
 /** The document goes: every root unmounted, the body emptied. */
 async function unload(): Promise<void> {
   await act(async () => {
@@ -115,6 +129,7 @@ async function load(path?: string): Promise<void> {
   delete (globalThis as Record<symbol, unknown>)[RUNTIME_KEY]
   delete (globalThis as Record<string, unknown>)[CONTAINER]
   delete (globalThis as Record<string, unknown>)[TENDERS_CONTAINER]
+  for (const name of OTHER_REMOTES) delete (globalThis as Record<string, unknown>)[`__platform_mfe_${name}`]
   vi.resetModules()
   if (path) window.history.replaceState(null, '', path)
   const app = document.createElement('div')
@@ -180,6 +195,7 @@ beforeEach(() => {
     .on('GET /remotes/manifest.json', {
       dashboard: { entry: ENTRY, version: '1.0.0', ownerDomain: 'portal' },
       tenders: { entry: TENDERS_ENTRY, version: '1.0.0', ownerDomain: 'tender_management' },
+      ...Object.fromEntries(OTHER_REMOTES.map((name) => [name, { entry: otherEntry(name), version: '1.0.0', ownerDomain: 'portal' }])),
     })
     .on('GET /api/v1/public/tenants/resolve', (req) => {
       const id = new URL(req.url).searchParams.get('identifier')
@@ -217,6 +233,16 @@ beforeEach(() => {
           if (m !== './App') throw new Error(`Module "${m}" does not exist in container.`)
           const t = await tendersModule()
           return () => t
+        },
+      }
+    } else if (OTHER_REMOTES.some((name) => src.pathname === otherEntry(name))) {
+      const name = OTHER_REMOTES.find((n) => src.pathname === otherEntry(n))!
+      ;(globalThis as Record<string, unknown>)[`__platform_mfe_${name}`] = {
+        init: () => {},
+        get: async (m: string) => {
+          if (m !== './App') throw new Error(`Module "${m}" does not exist in container.`)
+          const r = await otherModule(name)
+          return () => r
         },
       }
     } else {
@@ -287,6 +313,18 @@ describe('the shell, end to end', () => {
     expect(window.location.pathname).toBe('/t/acme/tenders/T-1/documents')
     expect(injected).toEqual([TENDERS_ENTRY])
     expect(screen.queryByRole('heading', { name: /Dashboard/ })).toBeNull()
+  })
+
+  it.each([
+    ['drafting', '/t/acme/drafting/sections/S-1'],
+    ['workflows', '/t/acme/workflows/W-1/editor'],
+  ])('a deep link to /t/<slug>/%s/… loads only that remote, there, after sign-in', async (name, path) => {
+    await load(path)
+    await until(() => assigned.length > 0, 'the redirect to Keycloak')
+    await approveLogin()
+    await screen.findByRole('heading', { name: `${name} for Ada Lovelace in acme` }, { timeout: 5_000 })
+    expect(window.location.pathname).toBe(path)
+    expect(injected).toEqual([otherEntry(name)])
   })
 
   it("gives the remote the role map's permissions: an owner may invite, a member may only view", async () => {

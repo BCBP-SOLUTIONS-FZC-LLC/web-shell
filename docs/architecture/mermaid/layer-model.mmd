@@ -2,7 +2,7 @@ graph TD
     subgraph app["app/ — composition root"]
         index["bootstrap/index.ts\nasync boundary, unavailable message"]
         boot["bootstrap/bootstrap.tsx\nSDK start-up, session handling, wiring, render"]
-        routes["routes/App.tsx\nsigned-in routes, dashboard and tenders RemoteBoundary"]
+        routes["routes/App.tsx\nsigned-in routes, a RemoteBoundary per remote"]
         providers["providers/ShellRoot.tsx\nPlatformProvider"]
         layouts["layouts/\nscreen host, session-screen mounting"]
     end
@@ -37,6 +37,8 @@ graph TD
     subgraph remote["Remotes, loaded in the browser"]
         dashboard["dashboard ./App\nSDK hooks, no props"]
         tenders["tenders ./App (mfe-tender)\nSDK hooks, no props"]
+        drafting["drafting ./App (mfe-drafting)\nSDK hooks, no props"]
+        workflows["workflows ./App (mfe-workflow-designer)\nSDK hooks, no props"]
     end
 
     index -. dynamic import .-> boot
@@ -49,6 +51,8 @@ graph TD
     routes --> widgets
     routes -. loads at run time .-> dashboard
     routes -. loads at run time .-> tenders
+    routes -. loads at run time .-> drafting
+    routes -. loads at run time .-> workflows
     layouts --> features
     features --> pages
     pages --> components
