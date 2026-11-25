@@ -81,12 +81,17 @@ test("a reload checks the saved paid realm's discovery document under the produc
   expect(await violations(page)).toEqual([])
 })
 
-test("a remote's navigate() stays in the single-page app", async ({ page }) => {
+test("a remote's navigate() stays in the single-page app, and the mounted remote follows it", async ({ page }) => {
   await signIn(page)
+  await expect(page.getByText('Mounted at /t/acme/dashboard')).toBeVisible()
   await page.evaluate(() => ((window as unknown as { __samePage: boolean }).__samePage = true))
   await page.getByRole('button', { name: 'Members' }).click()
   await expect(page).toHaveURL(`${APP}/t/acme/dashboard/members`)
+  // The dashboard is already mounted and its router does not see the shell's navigation: the shell mounts it
+  // again at the new path (handoff §3.3), still without a page load.
+  await expect(page.getByText('Mounted at /t/acme/dashboard/members')).toBeVisible()
   expect(await page.evaluate(() => (window as unknown as { __samePage?: boolean }).__samePage)).toBe(true)
+  expect(await violations(page)).toEqual([])
 })
 
 test('sign-out POSTs to Keycloak under form-action, ends the SSO session and waits for a click', async ({ page }) => {

@@ -47,9 +47,10 @@ vi.mock('@bcbp-solutions-fzc-llc/frontend-sdk/react', async (original) => {
   }
 })
 
-const { default: App, ACCOUNT_REMOTE, ADMIN_REMOTE, DASHBOARD_REMOTE, DRAFTING_REMOTE, TENDERS_REMOTE, WORKFLOWS_REMOTE } = await import('../../src/app/routes/App')
+const { default: App, ACCOUNT_REMOTE, ADMIN_REMOTE, DASHBOARD_REMOTE, DRAFTING_REMOTE, TENDERS_REMOTE, WORKFLOWS_REMOTE, sectionOf } = await import('../../src/app/routes/App')
 const { createStore } = await import('../../src/application/use-cases/loadSessionContext')
 type AppNotices = import('../../src/app/routes/App').AppNotices
+type RouterNavigate = import('../../src/app/routes/App').RouterNavigate
 
 describe('App', () => {
   it('renders the dashboard remote under the workspace basename, with no props', () => {
@@ -354,6 +355,67 @@ describe('App header (app-chrome handoff, option A)', () => {
     fireEvent.click(nav().getByRole('link', { name: 'Dashboard' }))
     expect(remoteMounted).toHaveBeenCalledTimes(3)
     expect(remoteMounted).toHaveBeenLastCalledWith(DASHBOARD_REMOTE)
+  })
+
+  it("hands the SDK's navigator a navigate that remounts the section already mounted (handoff §3.3)", async () => {
+    window.history.replaceState({}, '', '/t/acme/admin/settings')
+    let navigate!: RouterNavigate
+    render(<App basename="/t/acme" onRouter={(n) => (navigate = n)} />)
+    expect(remoteMounted).toHaveBeenCalledTimes(1)
+    // Another path in the same remote: the remote's own router would not follow, so it mounts again there.
+    await act(async () => navigate('/admin/users'))
+    expect(window.location.pathname).toBe('/t/acme/admin/users')
+    expect(remoteMounted).toHaveBeenCalledTimes(2)
+    expect(remoteMounted).toHaveBeenLastCalledWith(ADMIN_REMOTE)
+    // Another section: that remote mounts once, as a route change does anyway.
+    await act(async () => navigate('/me/profile', { replace: true }))
+    expect(window.location.pathname).toBe('/t/acme/me/profile')
+    expect(remoteMounted).toHaveBeenCalledTimes(3)
+    expect(remoteMounted).toHaveBeenLastCalledWith(ACCOUNT_REMOTE)
+  })
+
+  it("decides by the section the shell's routes show, not the address bar a remote's own router moved", async () => {
+    window.history.replaceState({}, '', '/t/acme/dashboard')
+    let navigate!: RouterNavigate
+    render(<App basename="/t/acme" onRouter={(n) => (navigate = n)} />)
+    expect(remoteMounted).toHaveBeenCalledTimes(1)
+    // The dashboard's own router moves to a tenders path: the shell's routes still show the dashboard.
+    window.history.pushState({}, '', '/t/acme/tenders/T-1')
+    await act(async () => navigate('/dashboard/x'))
+    // The dashboard element stays, so it is mounted again at the new path.
+    expect(window.location.pathname).toBe('/t/acme/dashboard/x')
+    expect(remoteMounted).toHaveBeenCalledTimes(2)
+    expect(screen.getByTestId('remote')).toHaveAttribute('data-remote', DASHBOARD_REMOTE)
+  })
+
+  it('remounts nothing for a move that changes neither the path nor the query (no lost state, no loop)', async () => {
+    window.history.replaceState({}, '', '/t/acme/admin/users?tab=1')
+    let navigate!: RouterNavigate
+    render(<App basename="/t/acme" onRouter={(n) => (navigate = n)} />)
+    await act(async () => navigate('/admin/users?tab=1', { replace: true }))
+    await act(async () => navigate('/admin/users?tab=1#row-3'))
+    expect(remoteMounted).toHaveBeenCalledTimes(1)
+    // A new query is a new page for the remote: it is mounted again there.
+    await act(async () => navigate('/admin/users?tab=2'))
+    expect(remoteMounted).toHaveBeenCalledTimes(2)
+  })
+
+  it('remounts the section already mounted from the site root too (no basename)', async () => {
+    window.history.replaceState({}, '', '/tenders/T-1')
+    let navigate!: RouterNavigate
+    render(<App onRouter={(n) => (navigate = n)} />)
+    expect(remoteMounted).toHaveBeenCalledTimes(1)
+    await act(async () => navigate('/tenders/T-2'))
+    expect(window.location.pathname).toBe('/tenders/T-2')
+    expect(remoteMounted).toHaveBeenCalledTimes(2)
+  })
+
+  it('names a path’s section by its first segment', () => {
+    expect(sectionOf('/tenders/T-1/documents')).toBe('/tenders')
+    expect(sectionOf('/admin?tab=1')).toBe('/admin')
+    expect(sectionOf('/me#top')).toBe('/me')
+    expect(sectionOf('/')).toBe('/')
+    expect(sectionOf('')).toBe('/')
   })
 
   it('leaves a new-tab click to the browser', () => {

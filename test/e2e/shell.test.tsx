@@ -14,7 +14,7 @@
 // - HTMLFormElement#submit: the global sign-out's form POST to Keycloak is recorded (URL and fields)
 //   instead of leaving the page.
 // - react-dom/client's createRoot is wrapped only to unmount the app between page loads.
-import { createElement, type ComponentType } from 'react'
+import { createElement, useState, type ComponentType } from 'react'
 import type { Root } from 'react-dom/client'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -110,7 +110,14 @@ async function otherModule(name: string): Promise<{ default: ComponentType }> {
   function Remote() {
     const user = useCurrentUser()
     const workspace = useWorkspace()
-    return createElement('h1', null, `${name} for ${user?.name ?? 'nobody'} in ${workspace?.slug ?? '?'}`)
+    // As a remote's own router does: the URL is read once, when it mounts.
+    const [mountedAt] = useState(() => window.location.pathname)
+    return createElement(
+      'main',
+      null,
+      createElement('h1', null, `${name} for ${user?.name ?? 'nobody'} in ${workspace?.slug ?? '?'}`),
+      createElement('p', null, `${name} shows ${mountedAt}`),
+    )
   }
   return { default: Remote }
 }
@@ -421,6 +428,23 @@ describe('the shell, end to end', () => {
     const nav = within(screen.getByRole('navigation', { name: 'Sections' }))
     expect(nav.queryByRole('link', { name: 'Admin' })).toBeNull()
     expect(nav.getByRole('link', { name: 'Dashboard' })).toHaveAttribute('aria-current', 'page')
+  })
+
+  it("a remote's navigate() into the remote already showing opens it at the new path, with no page load", async () => {
+    await load('/t/acme/admin/settings')
+    await until(() => assigned.length > 0, 'the redirect to Keycloak')
+    await approveLogin()
+    await screen.findByText('admin shows /t/acme/admin/settings', {}, { timeout: 5_000 })
+    assigned.length = 0
+    const { navigate } = await import('@bcbp-solutions-fzc-llc/frontend-sdk/nav')
+    // Within the mounted remote: its own router would not follow the shell's, so the shell mounts it again there.
+    act(() => navigate('admin', '/t/acme/admin/users'))
+    await screen.findByText('admin shows /t/acme/admin/users', {}, { timeout: 5_000 })
+    // Into another remote: that one mounts at its path.
+    act(() => navigate('me', '/t/acme/me/profile'))
+    await screen.findByText('me shows /t/acme/me/profile', {}, { timeout: 5_000 })
+    expect(window.location.pathname).toBe('/t/acme/me/profile')
+    expect(assigned).toEqual([]) // no page load
   })
 
   it("gives the remote the role map's permissions: an owner may invite, a member may only view", async () => {
