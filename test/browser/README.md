@@ -50,4 +50,4 @@ npm run build && REMOTE_DIST=/tmp/mfe-dashboard/dist npm run test-contract
 | Role map and navigation | An owner sees "User management" (the shell's role map through SDK hooks); its `NavLink` opens the page without a reload |
 | Logout | The dashboard's Logout signs out through the shell: the form POST reaches Keycloak, "You are signed out" |
 
-CI's `Dashboard contract` job builds `BCBP-SOLUTIONS-FZC-LLC/mfe-dashboard` at `vars.DASHBOARD_REF` (default `main`) and runs this. It is informational: it does not gate `push`.
+CI's `Dashboard contract` job builds `BCBP-SOLUTIONS-FZC-LLC/mfe-dashboard` at `vars.DASHBOARD_REF` (default `main`) and runs this. The repository is private: the checkout uses `CI_REPO_READ_TOKEN`, which needs read access to it. It is informational: it does not gate `push`.
