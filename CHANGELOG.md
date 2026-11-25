@@ -10,6 +10,10 @@ Pull requests that change the shell, its dependencies, or the image add an entry
 
 ## [Unreleased]
 
+### Added (2026-11-25 — the drafting and workflow designer routes)
+
+**`/t/<slug>/drafting/*` loads mfe-drafting and `/t/<slug>/workflows/*` loads mfe-workflow-designer**, the way `dashboard` and `tenders` load: `RemoteBoundary` for `drafting` and `workflows` `./App` (containers `__platform_mfe_drafting`, `__platform_mfe_workflows`), no props, `useRouteTemplate('/t/:slug/drafting')` and `('/t/:slug/workflows')`, loading texts `app.loadingDrafting` and `app.loadingWorkflows` (catalogue: 89 keys). Each runs its own router under the workspace basename. `config/remotes.local.json` serves them at `localhost:5004` and `:5005` (`ownerDomain: portal`; the workflow designer's README says so, mfe-drafting does not, so it is provisional) and `runtime.local.json` allows both origins. Sign-in is unchanged. Neither remote is released (LLD §15 #22): each environment adds its manifest entry and `/remotes/<name>/` route when it is. Rebuilt from #73 without its sign-in changes. Tests: `test/integration/app.test.tsx` (both routes, no props, route templates), `test/e2e/shell.test.tsx` (a deep link to each loads only that remote's entry). README, ARCHITECTURE (+ layer and observability diagrams), the LLD, VERSIONING, CONTRIBUTING and the hosting doc list both.
+
 ### Fixed (2026-11-25 — sixth review)
 
 - **A remote's workspace switch never covers "Session ended" or a refusal screen.** `shell.switchWorkspace` does nothing once the boot has stopped (sign-out, expiry, refusal), checked before and after its PUB-1 call. *(Previously: a "not found" answer arriving after an expiry showed "Workspace not found" over "Session ended", whose OK left the user on an expired app with no Sign in.)* Test: `test/integration/bootstrap.test.tsx`.
@@ -112,13 +116,14 @@ Dev: `DEV_TENANT_STATUS` (`config/dev-platform.mjs`) picks the P-1 stub's status
 
 ### Known gaps
 
+- **`drafting` and `workflows` have routes but no release or contract run** (LLD §15 #22): `npm run test-contract` serves only the dashboard; each runs its own router (the shell-router navigation limit of §15 #18 applies); `ownerDomain: portal` for mfe-drafting is provisional.
 - **mfe-dashboard's fixed sidebar sits under the shell's notice stack** (LLD §15 #21) until it reads `--shell-notices-height` (`AppShellLayout.tsx:178` in mfe-dashboard); the remote's own content scrolls clear of the stack already.
 - **A saved paid workspace whose realm is gone still ends on Keycloak's 404 page while PUB-1 is down** (SDK `1.0.0-alpha.9`): the SDK keeps the saved entry when PUB-1 cannot answer; the first load after PUB-1 answers fixes it. Nothing the shell can do.
 - **The banners have no actions** (LLD §15 #20): no Upgrade or update-card link until the billing screens and their URLs exist. A5 shows again after a sign-out within its 7 days.
 - **A foreign trial session that P-35 refuses with a workspace state shows that state's screen** (LLD §15 #19), not the wrong-workspace one: the refusal carries no slug. Nothing else of that tenant shows, and Switch workspace asks for credentials.
 - **A6 has no Upgrade or Reactivate action** (LLD §15 #19): P-35 refused, so the shell does not know the user's roles, and no upgrade URL exists (IAM spec §6 A6 "Proposed"). A suspended member sees "You don't have access to this workspace" until the gateway sending `DENY_MEMBER_SUSPENDED` is deployed. The spec's `/workspace-unavailable` route is not implemented: the screens are dialogs.
 - **Each deployed `runtime.json` must name its `environment`** (LLD §15 #12). Until every one does, the shell keeps the build-time fallback (`__ENVIRONMENT__`), the constitution's open violation V5.
-- **No CloudFront until next month** (LLD §15 #9). Each environment routes `/api`, `/otel`, `/csp-report`, `/remotes/dashboard/` (and `/remotes/tenders/` once mfe-tender is released) at its ingress and mounts the CSP (with the IdP in `form-action`) and HSTS ([docs/hosting-without-cloudfront.md](docs/hosting-without-cloudfront.md)).
+- **No CloudFront until next month** (LLD §15 #9). Each environment routes `/api`, `/otel`, `/csp-report`, `/remotes/dashboard/` (and `/remotes/tenders/`, `/remotes/drafting/`, `/remotes/workflows/` once each remote is released) at its ingress and mounts the CSP (with the IdP in `form-action`) and HSTS ([docs/hosting-without-cloudfront.md](docs/hosting-without-cloudfront.md)).
 - **`tenders` has a route but no release or contract run** (LLD §15 #18): `npm run test-contract` serves only the dashboard; mfe-tender runs its own router (react-router-dom is not shared), so a shell-router navigation into `/tenders/…` does not re-render it; theme and CSS ownership when embedded is open.
 - **Dependabot's npm job fails** until the organisation Dependabot secret `PACKAGES_READ_TOKEN` exists (LLD §15 #13; needs an org admin).
 - **Official Privacy, Terms, Trust & Security and Help URLs** are not published (LLD §15 #1); the links stay hidden until they are set in `src/shared/constants/links.ts`.
@@ -140,7 +145,7 @@ Dev: `DEV_TENANT_STATUS` (`config/dev-platform.mjs`) picks the P-1 stub's status
 - Only `PLATFORM_ENVIRONMENT` (a fallback now) and `BUILD_VERSION` are compiled in. Everything else is `/config/runtime.json`, validated strictly by the SDK.
 - Every user-facing word is a key of the SDK `/i18n` `shell` namespace (`src/shared/i18n/en.json`), loaded before the first screen.
 - The access token goes only to the page's own origin, by the SDK's `ApiClient`; the browser never sends identity headers. Tokens are never stored.
-- Error boundaries: `RemoteBoundary` for `dashboard` and `tenders`, `MFEErrorBoundary` (`web-shell`) for the shell's own routes.
+- Error boundaries: `RemoteBoundary` for `dashboard`, `tenders`, `drafting` and `workflows`, `MFEErrorBoundary` (`web-shell`) for the shell's own routes.
 - Coverage is gated at 95% (100% today). `COVERAGE_THRESHOLD` can override the gate locally; no workflow sets it.
 - Claude Code: `.claude/settings.json` hooks, the `invariant-reviewer` and `doc-sync-reviewer` subagents, the `/sdk-upgrade` and `/stack-sync` skills.
 

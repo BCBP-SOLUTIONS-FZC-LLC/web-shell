@@ -44,7 +44,7 @@ Typed email, workspace name or URL (`toIdentifier`) → PUB-1 (generic message o
 
 ## Dashboard load
 
-`/t/<slug>/dashboard/*` → `RemoteBoundary('dashboard', './App')` → SDK `loadRemote`: kill switch, entry origin, `<script integrity>`, timeout, retries, `window.__platform_mfe_dashboard.init(shareScope)`, `get('./App')`. Failure → boundary "Something went wrong." / "Try again" (asks the container again, no reload). `/t/<slug>/tenders/*` loads `tenders` (mfe-tender) the same way, from `window.__platform_mfe_tenders`; the remote renders its own routes below `/tenders`.
+`/t/<slug>/dashboard/*` → `RemoteBoundary('dashboard', './App')` → SDK `loadRemote`: kill switch, entry origin, `<script integrity>`, timeout, retries, `window.__platform_mfe_dashboard.init(shareScope)`, `get('./App')`. Failure → boundary "Something went wrong." / "Try again" (asks the container again, no reload). `/t/<slug>/tenders/*` loads `tenders` (mfe-tender) the same way, from `window.__platform_mfe_tenders`; the remote renders its own routes below `/tenders`. `/t/<slug>/drafting/*` (`drafting`, mfe-drafting) and `/t/<slug>/workflows/*` (`workflows`, mfe-workflow-designer) load the same way, from `window.__platform_mfe_drafting` and `window.__platform_mfe_workflows`.
 
 ## APIs the shell calls
 

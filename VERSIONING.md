@@ -21,9 +21,9 @@ This shell has no package for another app to import from npm. Its public contrac
 | In scope (SemVer applies) | Out of scope (may change without MAJOR) |
 |---------------------------|------------------------------------------|
 | The shell's SDK version (`@bcbp-solutions-fzc-llc/frontend-sdk`, shared as a strict singleton). A remote requires at least the SDK version it was built against | Internal file layout under `src/`, component names, CSS class names |
-| `dashboard` `./App` and `tenders` `./App` get no props: the remote reads the signed-in user (`useCurrentUser`) and sign-out (`useSignOut`) from the SDK this shell provides through `PlatformProvider` (`user`, `signOut`) | The remotes' own UI. Each is versioned in its own repository |
+| `dashboard`, `tenders`, `drafting` and `workflows` `./App` get no props: the remote reads the signed-in user (`useCurrentUser`) and sign-out (`useSignOut`) from the SDK this shell provides through `PlatformProvider` (`user`, `signOut`) | The remotes' own UI. Each is versioned in its own repository |
 | Shared singletons from `@bcbp-solutions-fzc-llc/webpack-preset`: `react` and `react-dom` `^19.0.0`, `@opentelemetry/api` `~1.10.0`, every SDK subpath | Patch-level upgrades inside those ranges |
-| Routes `/t/<slug>/dashboard/*` (remote dashboard), `/t/<slug>/tenders/*` (remote tenders), the catch-all redirect to `/dashboard`, and the callback path `/auth/callback` | Copy, theme class names, the login-page feature list, and the session screens' wording |
+| Routes `/t/<slug>/dashboard/*` (remote dashboard), `/t/<slug>/tenders/*` (remote tenders), `/t/<slug>/drafting/*` (remote drafting), `/t/<slug>/workflows/*` (remote workflows), the catch-all redirect to `/dashboard`, and the callback path `/auth/callback` | Copy, theme class names, the login-page feature list, and the session screens' wording |
 | `/config/runtime.json` keys the shell relies on (the SDK schema) and the `/remotes/manifest.json` format; the IAM endpoints it calls (PUB-1, P-35; P-1 and P-27 for the banners); build args `PLATFORM_ENVIRONMENT` and `BUILD_VERSION` | The default `public/config/runtime.json` the image ships. Each environment serves its own |
 | Image listen port **8080**, `GET /healthz` (plain `ok`), `GET /` (shell document), `GET /config/runtime.json`, `GET /remotes/manifest.json` and `GET /version.json` (no-cache), hashed files under `/assets/` | nginx config comments, cache headers on files other than the ones named here |
 | `package.json` `version` once a tag exists — it must match the Git tag without the `v` | The npm package name `web-shell`. It is not published |
@@ -50,7 +50,7 @@ This shell has no formal support-window policy yet, since nothing is running in 
 
 ## Consume a release
 
-Do not add this repository as an npm dependency. Run the **shell image** (or serve the static bundle from the GitHub Release), serve the environment's `/config/runtime.json` and `/remotes/manifest.json` over the defaults, and let the SDK load `dashboard` and `tenders` from the manifest.
+Do not add this repository as an npm dependency. Run the **shell image** (or serve the static bundle from the GitHub Release), serve the environment's `/config/runtime.json` and `/remotes/manifest.json` over the defaults, and let the SDK load `dashboard`, `tenders`, `drafting` and `workflows` from the manifest.
 
 ### Pull and verify the image
 

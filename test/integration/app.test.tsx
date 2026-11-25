@@ -23,7 +23,7 @@ vi.mock('@bcbp-solutions-fzc-llc/frontend-sdk/react', async (original) => ({
   },
 }))
 
-const { default: App, DASHBOARD_REMOTE, TENDERS_REMOTE } = await import('../../src/app/routes/App')
+const { default: App, DASHBOARD_REMOTE, DRAFTING_REMOTE, TENDERS_REMOTE, WORKFLOWS_REMOTE } = await import('../../src/app/routes/App')
 const { createStore } = await import('../../src/application/use-cases/loadSessionContext')
 type AppNotices = import('../../src/app/routes/App').AppNotices
 
@@ -52,6 +52,23 @@ describe('App', () => {
     // mfe-tender's userLabel and onLogout are optional and default to the SDK's useCurrentUser and useSignOut.
     expect(boundaryProps).toHaveBeenLastCalledWith(undefined)
     expect(window.location.pathname).toBe('/t/acme/tenders/T-1/documents')
+  })
+
+  it.each([
+    ['drafting', DRAFTING_REMOTE, 'mfe-drafting', '/t/acme/drafting/sections/S-1', 'Loading drafting…'],
+    ['workflows', WORKFLOWS_REMOTE, 'mfe-workflow-designer', '/t/acme/workflows/W-1/editor', 'Loading workflows…'],
+  ])('renders the %s remote under /%s/*, with no props', (name, remote, repo, path, loading) => {
+    window.history.replaceState({}, '', path)
+    render(<App basename="/t/acme" />)
+    const boundary = screen.getByTestId('remote')
+    expect(boundary).toHaveAttribute('data-remote', remote)
+    expect(remote, repo).toBe(name) // the remote's container name and manifest key
+    expect(boundary).toHaveAttribute('data-module', './App')
+    expect(screen.getByTestId('fallback')).toHaveTextContent(loading)
+    expect(routeTemplate).toHaveBeenCalledWith(`/t/:slug/${name}`)
+    // Each reads the user and sign-out from the SDK (its props are optional).
+    expect(boundaryProps).toHaveBeenLastCalledWith(undefined)
+    expect(window.location.pathname).toBe(path)
   })
 
   it('redirects any other path to the dashboard', () => {

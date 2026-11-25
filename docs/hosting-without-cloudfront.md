@@ -7,7 +7,7 @@ CloudFront is not available yet (expected next month). Until then the image serv
 | CloudFront job (platform design §C3) | Until then |
 |---|---|
 | TLS | The load balancer or ingress terminates TLS |
-| One origin: `/` the shell, `/remotes/dashboard/<version>/` the dashboard's files, `/remotes/tenders/<version>/` mfe-tender's files (once released), `/api/*` the gateway, `/otel/*` the collector, `/csp-report` the collector | The ingress routes the same path prefixes to those services; everything else goes to this image. nginx answers 404 for `/api`, `/otel`, `/csp-report` and missing `/remotes` files, so a routing mistake shows as a 404, never as `index.html` |
+| One origin: `/` the shell, `/remotes/dashboard/<version>/` the dashboard's files, `/remotes/tenders/<version>/` mfe-tender's files, `/remotes/drafting/<version>/` and `/remotes/workflows/<version>/` mfe-drafting's and mfe-workflow-designer's (each once released), `/api/*` the gateway, `/otel/*` the collector, `/csp-report` the collector | The ingress routes the same path prefixes to those services; everything else goes to this image. nginx answers 404 for `/api`, `/otel`, `/csp-report` and missing `/remotes` files, so a routing mistake shows as a 404, never as `index.html` |
 | CSP and `Reporting-Endpoints` | Mount [`nginx/security.d/csp.conf.example`](../nginx/security.d/csp.conf.example) as `/etc/nginx/security.d/csp.conf`, with this environment's Keycloak origin in `connect-src` **and `form-action`** (the global sign-out POSTs a form to it) |
 | HSTS | Mount [`nginx/security.d/hsts.conf.example`](../nginx/security.d/hsts.conf.example) as `/etc/nginx/security.d/hsts.conf` (HTTPS-only hosts) |
 | SPA rewrite, `nosniff`, `Referrer-Policy`, `X-Frame-Options`, COOP, `Permissions-Policy`, Cache-Control, gzip | Already in the image (`nginx/default.conf`) |
@@ -17,7 +17,7 @@ Each environment also mounts its own `/config/runtime.json` and `/remotes/manife
 
 ## The dashboard: same origin (recommended) or its own
 
-**Same origin.** The ingress routes `/remotes/dashboard/` to the dashboard's files. The manifest entry is `/remotes/dashboard/<version>/remoteEntry.js` with the integrity from the dashboard's `remote-manifest-entry.json`. The CSP example works unchanged. This is the layout CloudFront will have, so nothing changes for the dashboard later. mfe-tender follows the same pattern under `/remotes/tenders/`, with manifest key `tenders` and `ownerDomain: tender_management`.
+**Same origin.** The ingress routes `/remotes/dashboard/` to the dashboard's files. The manifest entry is `/remotes/dashboard/<version>/remoteEntry.js` with the integrity from the dashboard's `remote-manifest-entry.json`. The CSP example works unchanged. This is the layout CloudFront will have, so nothing changes for the dashboard later. mfe-tender follows the same pattern under `/remotes/tenders/`, with manifest key `tenders` and `ownerDomain: tender_management`; so do mfe-drafting (`/remotes/drafting/`, key `drafting`) and mfe-workflow-designer (`/remotes/workflows/`, key `workflows`), both `ownerDomain: portal`.
 
 **Its own origin** (say `https://dashboard.<domain>`), only if path routing is impossible. All of these, or the dashboard does not load:
 

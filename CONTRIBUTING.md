@@ -35,9 +35,9 @@ npm run build             # tsc and the production bundle
 
 The dev server serves `/config/runtime.json` and `/remotes/manifest.json` from `config/`, and stubs PUB-1, P-35, P-1 and P-27 so sign-in and the banners work with only Keycloak running (`config/dev-platform.mjs`). `DEV_API_URL=https://… npm run dev` proxies `/api` to a real API instead.
 
-The dashboard remote is a separate repo. Start `mfe-dashboard` so `http://localhost:5002/remoteEntry.js` is served (it builds as remote `dashboard` with the preset's Rsbuild plugin); otherwise `/t/bcbp/dashboard` shows the remote boundary's error. `mfe-tender` (`npm run dev` there) serves remote `tenders` at `http://localhost:5003/remoteEntry.js` for `/t/bcbp/tenders`. Tests never fetch those ports: the integration tests replace `RemoteBoundary`, and the e2e suite stubs the remote's entry script.
+The dashboard remote is a separate repo. Start `mfe-dashboard` so `http://localhost:5002/remoteEntry.js` is served (it builds as remote `dashboard` with the preset's Rsbuild plugin); otherwise `/t/bcbp/dashboard` shows the remote boundary's error. `mfe-tender` (`npm run dev` there) serves remote `tenders` at `http://localhost:5003/remoteEntry.js` for `/t/bcbp/tenders`. `mfe-drafting` serves `drafting` at `http://localhost:5004/remoteEntry.js` for `/t/bcbp/drafting`, and `mfe-workflow-designer` serves `workflows` at `http://localhost:5005/remoteEntry.js` for `/t/bcbp/workflows`. Tests never fetch those ports: the integration tests replace `RemoteBoundary`, and the e2e suite stubs the remote's entry script.
 
-Local ports: shell **5001**, Keycloak **8080**, dashboard **5002**, tenders **5003**. The production image also listens on **8080**. Map it to another host port when Keycloak is already running (`docker run -p 18080:8080`).
+Local ports: shell **5001**, Keycloak **8080**, dashboard **5002**, tenders **5003**, drafting **5004**, workflows **5005**. The production image also listens on **8080**. Map it to another host port when Keycloak is already running (`docker run -p 18080:8080`).
 
 `npm run hooks:install` copies `.githooks/pre-commit` into `.git/hooks/pre-commit`. Run it again after that file changes. On each commit the hook refuses a staged `.env` or `docker.local.env`, then runs the same workflow, line-ending, and Dockerfile pin checks as `validate-quality`, then `tsc --noEmit`. ESLint, the Vitest suite, the 95% gate, Hadolint, Trivy, and the image smoke script stay in CI. Run `npm run lint`, `npm run test:ci` and `npm run build` before you open a pull request. Git for Windows runs the hook with its Bash.
 
@@ -51,7 +51,7 @@ src/
     bootstrap/index.ts   ← Async boundary (Rsbuild's entry); "unavailable" message on a fatal start-up error
     bootstrap/bootstrap.tsx ← Composition root: SDK start-up sequence, session handling, wiring, render
     providers/ShellRoot.tsx ← PlatformProvider with the live session context
-    routes/App.tsx       ← Signed-in routes, dashboard and tenders RemoteBoundary, widgets with the SDK's state and the bootstrap's notices
+    routes/App.tsx       ← Signed-in routes, a RemoteBoundary per remote, widgets with the SDK's state and the bootstrap's notices
     layouts/             ← screen.tsx (full-screen host), sessionScreens.tsx (mounts the session screens)
   presentation/
     pages/login/         ← LoginPage, useEmailSignIn (the remembered-email repository is passed in)
@@ -220,7 +220,7 @@ These tests pin behavior other repos and the login flow depend on. Change them o
 - **`test/integration/bootstrap.test.tsx`** — the exact SDK initialisation order, no automatic login after a logout or a device-clock refusal, the app never renders for a wrong-workspace login or a P-35 refusal that is a workspace state (A6/A8), a trial with a slug awaiting P-35 and checked against its slug, `login-required` without a workspace, deny-all without a session context, and the app unmounts on sign-out.
 - **`test/unit/iam.test.ts`** — the PUB-1 → `Workspace` and P-35 → `SessionContext` ports, through the real `ApiClient` (`createTestPlatform`, `mockApi`), against the SDK's contract cases in `@bcbp-solutions-fzc-llc/frontend-sdk/contracts`; PUB-1 is called without a token.
 - **`test/integration/session-screens.test.tsx`** — "not found" and "unreachable" show the same message.
-- **`test/integration/app.test.tsx`** — `/dashboard/*` renders `dashboard` `./App` and `/tenders/*` renders `tenders` `./App`, each with no props, under the workspace basename.
+- **`test/integration/app.test.tsx`** — `/dashboard/*` renders `dashboard` `./App` `/tenders/*` renders `tenders` `./App`, and `/drafting/*` and `/workflows/*` render `drafting` and `workflows`, each with no props, under the workspace basename.
 - **`test/e2e/shell.test.tsx`** — the whole sign-in with the real SDK: PKCE to the realm PUB-1 names, tokens never stored, the URL under `/t/<slug>/`, the remote reading the user and permissions through SDK hooks, and no silent sign-in after a global sign-out.
 - **`test/smoke/deployment.test.ts`** — what nginx (and CloudFront, live) must serve: only extension-less paths get `index.html`, the runtime files are uncached and pass the SDK's validation, hashed assets are immutable and match their integrity.
 
