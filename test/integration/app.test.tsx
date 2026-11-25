@@ -421,25 +421,36 @@ describe('App header (app-chrome handoff, option A)', () => {
     expect(sameSection('/admin', '/me')).toBe(false)
   })
 
-  it('falls back to a full page load once the app is gone, as the SDK does without a navigator', () => {
+  it('does nothing once the app is gone: no page load, no URL change (the screen that replaced it stays)', async () => {
     const assign = vi.spyOn(window.location, 'assign').mockImplementation(() => {})
     const replace = vi.spyOn(window.location, 'replace').mockImplementation(() => {})
     window.history.replaceState({}, '', '/t/acme/admin/settings')
     let navigate!: RouterNavigate
     const { unmount } = render(<App basename="/t/acme" onRouter={(n) => (navigate = n)} />)
+    // While mounted, re-registrations on each move keep the router reachable.
+    await act(async () => navigate('/admin/users'))
+    await act(async () => navigate('/admin/roles'))
+    expect(window.location.pathname).toBe('/t/acme/admin/roles')
     unmount()
     navigate('/tenders/T-2')
     navigate('/me', { replace: true })
-    expect(assign).toHaveBeenCalledWith('/t/acme/tenders/T-2')
-    expect(replace).toHaveBeenCalledWith('/t/acme/me')
-    // From the site root (no basename): the path as it is.
-    window.history.replaceState({}, '', '/dashboard')
-    const root = render(<App onRouter={(n) => (navigate = n)} />)
-    root.unmount()
-    navigate('/tenders')
-    expect(assign).toHaveBeenLastCalledWith('/tenders')
+    expect(window.location.pathname).toBe('/t/acme/admin/roles')
+    expect(assign).not.toHaveBeenCalled()
+    expect(replace).not.toHaveBeenCalled()
     assign.mockRestore()
     replace.mockRestore()
+  })
+
+  it('compares an encoded section as the routes decode it', async () => {
+    window.history.replaceState({}, '', '/t/acme/admin/settings')
+    let navigate!: RouterNavigate
+    render(<App basename="/t/acme" onRouter={(n) => (navigate = n)} />)
+    await act(async () => navigate('/%61dmin/users'))
+    expect(remoteMounted).toHaveBeenCalledTimes(2)
+    expect(sameSection('/%61dmin/users', '/admin')).toBe(true)
+    // A malformed escape is compared as written.
+    expect(sameSection('/%E0%A4%A/x', '/%e0%a4%a')).toBe(true)
+    expect(sameSection('/%E0%A4%A', '/admin')).toBe(false)
   })
 
   it('names a path’s section by its first segment', () => {

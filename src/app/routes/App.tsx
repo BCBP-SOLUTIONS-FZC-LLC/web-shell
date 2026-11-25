@@ -164,9 +164,19 @@ export function sectionOf(path: string): string {
   return /^\/[^/?#]*/.exec(path)?.[0] ?? '/'
 }
 
-/** Whether two router paths are in the same section, compared as the routes match them: without case. */
+/** A section as the routes match it: decoded (`/%61dmin` is `/admin`) and without case. */
+function matchedSection(path: string): string {
+  const section = sectionOf(path)
+  try {
+    return decodeURIComponent(section).toLowerCase()
+  } catch {
+    return section.toLowerCase() // a malformed escape: compared as written
+  }
+}
+
+/** Whether two router paths are in the same section, compared as the routes match them. */
 export function sameSection(a: string, b: string): boolean {
-  return sectionOf(a).toLowerCase() === sectionOf(b).toLowerCase()
+  return matchedSection(a) === matchedSection(b)
 }
 
 /** The address bar's path and query: what a remote's own router shows. */
@@ -183,27 +193,32 @@ const addressBar = () => window.location.pathname + window.location.search
  * is cannot loop. A query change remounts too: a remote keeps a filter or tab in the query with its own
  * router, never with navigate() (LLD §4.5).
  *
- * When the router goes (App unmounted: a sign-out, a refusal screen), the navigator falls back to a full page
- * load, as the SDK's navigate() does without a navigator, so a late navigate() never drives a dead router.
+ * Once the router is gone (App unmounted: a sign-out, a refusal screen, "Session ended" over a refusal), a
+ * late navigate() does nothing: the screen that replaced the app stays, and no page load can start a
+ * sign-in without a click. The next App (a new basename) registers its own navigator.
  */
-function RouterBridge({ onRouter, onVisit, basename }: { onRouter: (navigate: RouterNavigate) => void; onVisit: () => void; basename: string | undefined }) {
+function RouterBridge({ onRouter, onVisit }: { onRouter: (navigate: RouterNavigate) => void; onVisit: () => void }) {
   const navigate = useNavigate()
   // The section the shell's routes show: a remount is needed only when that route element stays. The
   // navigator is registered again on each change (react-router's navigate changes with it anyway).
   const { pathname } = useLocation()
+  // Set only on mount and unmount, never between two registrations, so a navigate() made while React swaps
+  // one registration for the next still reaches the router.
+  const mounted = useRef(false)
+  useEffect(() => {
+    mounted.current = true
+    return () => {
+      mounted.current = false
+    }
+  }, [])
   useEffect(() => {
     onRouter((to, o) => {
+      if (!mounted.current) return
       const before = addressBar()
       void navigate(to, o)
       if (addressBar() !== before && sameSection(to, pathname)) onVisit()
     })
-    return () =>
-      onRouter((to, o) => {
-        const url = `${basename ?? ''}${to}`
-        if (o?.replace) window.location.replace(url)
-        else window.location.assign(url)
-      })
-  }, [navigate, onRouter, onVisit, pathname, basename])
+  }, [navigate, onRouter, onVisit, pathname])
   return null
 }
 
@@ -327,7 +342,7 @@ export default function App({
   return (
     <MFEErrorBoundary mfe={SHELL_MFE} fallback={(e) => <AppError reference={e.traceId ?? e.requestId} onRetry={e.retry} />}>
       <BrowserRouter {...(basename ? { basename } : {})}>
-        {onRouter ? <RouterBridge onRouter={onRouter} onVisit={remount} basename={basename} /> : null}
+        {onRouter ? <RouterBridge onRouter={onRouter} onVisit={remount} /> : null}
         <Update />
         <div className="flex min-h-screen flex-col">
           {frame ? <Frame basename={basename} remotes={remotes} workspaceName={workspaceName} onVisit={remount} /> : null}
