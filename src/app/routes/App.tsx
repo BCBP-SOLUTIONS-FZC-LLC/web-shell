@@ -1,16 +1,24 @@
 // The signed-in shell. The bootstrap renders this only with an authenticated session, so there is
 // no signed-out route here: sign-in screens are mounted by the bootstrap outside this tree.
-import { useEffect, useLayoutEffect, useRef, useSyncExternalStore, type ReactNode } from 'react'
-import { BrowserRouter, Navigate, Route, Routes, useNavigate, type NavigateFunction } from 'react-router-dom'
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode, type RefObject } from 'react'
+import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate, type NavigateFunction } from 'react-router-dom'
 import {
   MFEErrorBoundary,
   RemoteBoundary,
   useAppUpdate,
+  useCurrentUser,
+  useFeatureFlag,
+  useHasPermission,
   useReadOnly,
   useRouteTemplate,
   useSessionContext,
+  useSignOut,
+  useSwitchWorkspace,
+  useWorkspace,
 } from '@bcbp-solutions-fzc-llc/frontend-sdk/react'
-import { useShellText } from '../../shared/i18n'
+import { ADMIN_ENTRY } from '../../domain/rules/permissions'
+import { useShellText, type ShellKey } from '../../shared/i18n'
+import { AppHeader, type FrameLink } from '../../presentation/widgets/AppHeader'
 import { AppError } from '../../presentation/widgets/AppError'
 import { ContextUnavailable } from '../../presentation/widgets/ContextUnavailable'
 import { ReadOnlyNotice } from '../../presentation/widgets/ReadOnlyNotice'
@@ -29,12 +37,24 @@ export const DRAFTING_REMOTE = 'drafting'
 /** The remote that renders the workflow designer (mfe-workflow-designer), as named in /remotes/manifest.json. */
 export const WORKFLOWS_REMOTE = 'workflows'
 
+/** The remote that renders workspace administration (mfe-admin), as named in /remotes/manifest.json. */
+export const ADMIN_REMOTE = 'admin'
+
+/** The remote that renders the user's own account (mfe-me), as named in /remotes/manifest.json. */
+export const ACCOUNT_REMOTE = 'me'
+
+/**
+ * The runtime-config flag that turns the shell's header off in an environment (`"flags": { "shell.frame": false }`),
+ * e.g. while a remote that still draws its own frame is the only one served. On when absent.
+ */
+export const FRAME_FLAG = 'shell.frame'
+
 /** The shell's own name in error logs and web-error metrics (the dashboard reports as `dashboard`). */
 export const SHELL_MFE = 'web-shell'
 
 function Loading({ children }: { children: string }) {
   return (
-    <div className="flex min-h-dvh items-center justify-center bg-[#030d1b] font-sans text-white/80">
+    <div className="flex h-full min-h-[60dvh] items-center justify-center bg-[#030d1b] font-sans text-white/80">
       {children}
     </div>
   )
@@ -78,6 +98,31 @@ function Workflows() {
   return <RemoteBoundary remote={WORKFLOWS_REMOTE} module="./App" fallback={<Loading>{text('app.loadingWorkflows')}</Loading>} />
 }
 
+/**
+ * Workspace administration (mfe-admin), under /t/<slug>/admin/*, and the user's own account (mfe-me),
+ * under /t/<slug>/me/*. Each runs its own router under the same basename and reads the user, the
+ * workspace, sign-out and permissions from the SDK, so neither gets props.
+ */
+function Admin() {
+  useRouteTemplate('/t/:slug/admin')
+  const text = useShellText()
+  return <RemoteBoundary remote={ADMIN_REMOTE} module="./App" fallback={<Loading>{text('app.loadingAdmin')}</Loading>} />
+}
+
+function Account() {
+  useRouteTemplate('/t/:slug/me')
+  const text = useShellText()
+  return <RemoteBoundary remote={ACCOUNT_REMOTE} module="./App" fallback={<Loading>{text('app.loadingAccount')}</Loading>} />
+}
+
+/** The header's section links: the remote, its route and its label. Shown only when the remote is served. */
+const SECTIONS: readonly { remote: string; to: string; label: ShellKey }[] = [
+  { remote: DASHBOARD_REMOTE, to: '/dashboard', label: 'app.frame.dashboard' },
+  { remote: TENDERS_REMOTE, to: '/tenders', label: 'app.frame.tenders' },
+  { remote: DRAFTING_REMOTE, to: '/drafting', label: 'app.frame.drafting' },
+  { remote: WORKFLOWS_REMOTE, to: '/workflows', label: 'app.frame.workflows' },
+]
+
 /** The update notice, with the SDK's update state (presentation takes it as props). */
 function Update() {
   const update = useAppUpdate()
@@ -89,6 +134,8 @@ export interface AppNotices {
   banners: readonly BannerProps[]
   /** RFC 3339: a cancelled workspace's read-only grace end. */
   readOnlyUntil?: string
+  /** The workspace's name (P-1), for the header's user menu. */
+  workspaceName?: string
 }
 
 /** A value that changes after render (the bootstrap's store), read with useSyncExternalStore. */
@@ -115,32 +162,93 @@ function RouterBridge({ onRouter }: { onRouter: (navigate: NavigateFunction) => 
 /** The CSS custom property remotes read for the notice stack's height. */
 export const NOTICES_HEIGHT_VAR = '--shell-notices-height'
 
+/** The CSS custom property remotes read for the shell header's height (absent while the header is off). */
+export const HEADER_HEIGHT_VAR = '--shell-header-height'
+
 /**
- * Publishes the bottom notice stack's height as `--shell-notices-height` on <html> (0px when empty), so a
- * remote's fixed elements can end above it (`bottom: var(--shell-notices-height, 0px)`) instead of
- * sitting under it. Set through the CSSOM, which the platform CSP allows (no inline style).
+ * Publishes an element's height as a custom property on <html>, kept current by a ResizeObserver and
+ * removed on unmount. Set through the CSSOM, which the platform CSP allows (no inline style).
  */
-function NoticeStack({ children }: { children: ReactNode }) {
-  const ref = useRef<HTMLDivElement>(null)
+function usePublishedHeight(ref: RefObject<HTMLElement | null>, name: string) {
   useLayoutEffect(() => {
     const el = ref.current!
     const root = document.documentElement
-    const publish = () => root.style.setProperty(NOTICES_HEIGHT_VAR, `${el.offsetHeight}px`)
+    const publish = () => root.style.setProperty(name, `${el.offsetHeight}px`)
     publish()
     // Every engine the shell supports has ResizeObserver (the browser suite runs all three).
     const observer = new ResizeObserver(publish)
     observer.observe(el)
     return () => {
       observer.disconnect()
-      root.style.removeProperty(NOTICES_HEIGHT_VAR)
+      root.style.removeProperty(name)
     }
-  }, [])
+  }, [ref, name])
+}
+
+/**
+ * Publishes the bottom notice stack's height as `--shell-notices-height` on <html> (0px when empty), so a
+ * remote's fixed elements can end above it (`bottom: var(--shell-notices-height, 0px)`) instead of
+ * sitting under it.
+ */
+function NoticeStack({ children }: { children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null)
+  usePublishedHeight(ref, NOTICES_HEIGHT_VAR)
   return (
     <div ref={ref} className="sticky bottom-0 z-40 flex flex-col">
       {children}
     </div>
   )
 }
+
+/**
+ * The shell's header (option A of the app-chrome handoff): links to the served remotes, the Admin entry
+ * point for those who may administer the workspace, and the user menu. Its height is published as
+ * `--shell-header-height`, so a remote's fixed elements can start below it.
+ *
+ * A link is followed by this router. Each remote runs its own router, which does not see this one's
+ * navigation, so a link to the section the user is in remounts the routes (`onVisit`): it opens that
+ * section's start page instead of changing only the URL (§15 #18).
+ */
+function Frame({ basename, remotes, workspaceName, onVisit }: { basename: string | undefined; remotes: ReadonlySet<string>; workspaceName: string | undefined; onVisit: () => void }) {
+  const text = useShellText()
+  const navigate = useNavigate()
+  const { pathname } = useLocation()
+  const user = useCurrentUser()
+  const workspace = useWorkspace()
+  const signOut = useSignOut()
+  const switchWorkspace = useSwitchWorkspace()
+  const mayAdminister = useHasPermission(ADMIN_ENTRY.action, ADMIN_ENTRY.resource)
+  const ref = useRef<HTMLDivElement>(null)
+  usePublishedHeight(ref, HEADER_HEIGHT_VAR)
+  const inSection = (to: string) => pathname === to || pathname.startsWith(`${to}/`)
+  const link = (id: string, to: string, label: ShellKey): FrameLink => ({
+    id,
+    to,
+    href: `${basename ?? ''}${to}`,
+    label: text(label),
+    current: inSection(to),
+  })
+  return (
+    <div ref={ref} className="sticky top-0 z-50">
+      <AppHeader
+        links={SECTIONS.filter((s) => remotes.has(s.remote)).map((s) => link(s.remote, s.to, s.label))}
+        admin={mayAdminister && remotes.has(ADMIN_REMOTE) ? link(ADMIN_REMOTE, '/admin', 'app.frame.admin') : undefined}
+        account={remotes.has(ACCOUNT_REMOTE) ? link(ACCOUNT_REMOTE, '/me', 'app.frame.account') : undefined}
+        user={user}
+        workspace={workspaceName ?? workspace?.slug}
+        onNavigate={(to) => {
+          // Another section mounts its remote anyway; the same section's remote is mounted again.
+          if (inSection(to)) onVisit()
+          navigate(to)
+        }}
+        onSwitchWorkspace={switchWorkspace}
+        onSignOut={() => void signOut()}
+      />
+    </div>
+  )
+}
+
+const NO_REMOTES: ReadonlySet<string> = new Set()
 
 /**
  * Routes under /t/<slug>/ once the workspace has a slug (the SDK moves the URL there after
@@ -150,13 +258,19 @@ export default function App({
   basename,
   onRouter,
   notices = noNotices,
+  remotes = NO_REMOTES,
 }: {
   basename?: string
   onRouter?: (navigate: NavigateFunction) => void
   notices?: Live<AppNotices>
+  /** The remotes this environment serves (the manifest's, less those switched off): the header links to these. */
+  remotes?: ReadonlySet<string>
 }) {
   const context = useSessionContext()
-  const { banners, readOnlyUntil } = useSyncExternalStore(notices.subscribe, notices.get, notices.get)
+  const { banners, readOnlyUntil, workspaceName } = useSyncExternalStore(notices.subscribe, notices.get, notices.get)
+  const frame = useFeatureFlag(FRAME_FLAG, true)
+  // Bumped by a header link to the section the user is in: the routes are keyed by it, so that remote mounts afresh (Frame).
+  const [visit, setVisit] = useState(0)
   // The shell's own screens in an error boundary (the SDK's): a render error is logged and counted
   // under `web-shell` and replaced by AppError instead of a blank page. The remote has its own
   // (RemoteBoundary), so a remote's error never reaches this one.
@@ -166,12 +280,15 @@ export default function App({
         {onRouter ? <RouterBridge onRouter={onRouter} /> : null}
         <Update />
         <div className="flex min-h-screen flex-col">
-          <div className="flex-1">
+          {frame ? <Frame basename={basename} remotes={remotes} workspaceName={workspaceName} onVisit={() => setVisit((v) => v + 1)} /> : null}
+          <div className="flex-1" key={visit}>
             <Routes>
               <Route path="/dashboard/*" element={<Dashboard />} />
               <Route path="/tenders/*" element={<Tenders />} />
               <Route path="/drafting/*" element={<Drafting />} />
               <Route path="/workflows/*" element={<Workflows />} />
+              <Route path="/admin/*" element={<Admin />} />
+              <Route path="/me/*" element={<Account />} />
               <Route path="*" element={<Navigate to="/dashboard" replace />} />
             </Routes>
           </div>

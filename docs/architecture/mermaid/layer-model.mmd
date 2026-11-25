@@ -2,7 +2,7 @@ graph TD
     subgraph app["app/ — composition root"]
         index["bootstrap/index.ts\nasync boundary, unavailable message"]
         boot["bootstrap/bootstrap.tsx\nSDK start-up, session handling, wiring, render"]
-        routes["routes/App.tsx\nsigned-in routes, a RemoteBoundary per remote"]
+        routes["routes/App.tsx\nsigned-in routes, the header (Frame),\na RemoteBoundary per remote"]
         providers["providers/ShellRoot.tsx\nPlatformProvider"]
         layouts["layouts/\nscreen host, session-screen mounting"]
     end
@@ -10,7 +10,7 @@ graph TD
     subgraph presentation["presentation/"]
         pages["pages/login\nLoginPage, useEmailSignIn"]
         features["features/session-screens\nsign-in, signed out, session ended, …"]
-        widgets["widgets/\nupdate notice, workspace banners, read-only notice,\nmissing permissions, error page"]
+        widgets["widgets/\nheader, update notice, workspace banners,\nread-only notice, missing permissions, error page"]
         components["components/\nBrandLogo, PageLinks"]
     end
 
@@ -39,6 +39,8 @@ graph TD
         tenders["tenders ./App (mfe-tender)\nSDK hooks, no props"]
         drafting["drafting ./App (mfe-drafting)\nSDK hooks, no props"]
         workflows["workflows ./App (mfe-workflow-designer)\nSDK hooks, no props"]
+        admin["admin ./App (mfe-admin)\nSDK hooks, no props"]
+        me["me ./App (mfe-me)\nSDK hooks, no props"]
     end
 
     index -. dynamic import .-> boot
@@ -49,10 +51,14 @@ graph TD
     boot --> infra
     boot --> sdkmods
     routes --> widgets
+    routes --> dom
+    widgets --> components
     routes -. loads at run time .-> dashboard
     routes -. loads at run time .-> tenders
     routes -. loads at run time .-> drafting
     routes -. loads at run time .-> workflows
+    routes -. loads at run time .-> admin
+    routes -. loads at run time .-> me
     layouts --> features
     features --> pages
     pages --> components
