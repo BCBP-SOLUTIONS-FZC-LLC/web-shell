@@ -51,13 +51,13 @@ src/
     bootstrap/index.ts   ← Async boundary (Rsbuild's entry); "unavailable" message on a fatal start-up error
     bootstrap/bootstrap.tsx ← Composition root: SDK start-up sequence, session handling, wiring, render
     providers/ShellRoot.tsx ← PlatformProvider with the live session context
-    routes/App.tsx       ← Signed-in routes, a RemoteBoundary per remote, widgets with the SDK's state and the bootstrap's notices
+    routes/App.tsx       ← Signed-in routes, the header (Frame), a RemoteBoundary per remote, widgets with the SDK's state and the bootstrap's notices
     layouts/             ← screen.tsx (full-screen host), sessionScreens.tsx (mounts the session screens)
   presentation/
     pages/login/         ← LoginPage, useEmailSignIn (the remembered-email repository is passed in)
     features/session-screens/ ← Sign-in, signed out, session ended, device clock, wrong workspace, workspace not found, workspace unavailable (A6/A8), workspace not loaded, workspace upgraded (A5) (components)
     components/          ← BrandLogo, PageLinks
-    widgets/             ← Update notice, workspace banners, read-only notice, missing-permissions notice (state passed in, or mounted only while it holds)
+    widgets/             ← Header (AppHeader), update notice, workspace banners, read-only notice, missing-permissions notice (state passed in, or mounted only while it holds)
   application/           ← Use cases (no React, no browser APIs): resolveWorkspace, requestPasswordReset, loadSessionContext, loadWorkspaceStatus; signIn.ts
   domain/                ← Contracts, errors, rules: RememberedEmailRepository, WorkspaceNotFoundError, permissions (role map), identifier (sign-in box), workspaceAccess (P-35 refusals → workspace state), workspaceBanners (which banner, to whom)
   infrastructure/
@@ -145,7 +145,7 @@ docs/lld/web-shell-lld.md ← Low-level design (the contract)
 
 ### Adding a widget or component
 
-1. `src/presentation/widgets/` for a piece of the signed-in app that takes its state and actions as props, or is mounted only while that state holds (`UpdateAvailable`, `ContextUnavailable`, `ReadOnlyNotice`, `WorkspaceBanners`, `AppError`); `src/presentation/components/` for a reusable piece (`BrandLogo`, `PageLinks`). Neither imports the SDK, `infrastructure/` or `app/`.
+1. `src/presentation/widgets/` for a piece of the signed-in app that takes its state and actions as props, or is mounted only while that state holds (`AppHeader`, `UpdateAvailable`, `ContextUnavailable`, `ReadOnlyNotice`, `WorkspaceBanners`, `AppError`); `src/presentation/components/` for a reusable piece (`BrandLogo`, `PageLinks`), which a widget may use. Neither imports the SDK, `infrastructure/` or `app/`.
 2. The route (`src/app/routes/App.tsx`) reads SDK hooks and passes plain props down.
 3. Tailwind classes for styling. A `style` prop only for a value computed at run time (`BrandLogo`'s size, `LoginPage`'s `--hero-shift`): React sets it through the CSSOM, which the CSP allows. No `<style>` element, no style attribute in HTML, no runtime CSS-in-JS (the CSP has no `unsafe-inline`).
 
@@ -220,7 +220,7 @@ These tests pin behavior other repos and the login flow depend on. Change them o
 - **`test/integration/bootstrap.test.tsx`** — the exact SDK initialisation order, no automatic login after a logout or a device-clock refusal, the app never renders for a wrong-workspace login or a P-35 refusal that is a workspace state (A6/A8), a trial with a slug awaiting P-35 and checked against its slug, `login-required` without a workspace, deny-all without a session context, the focus refresh (once a minute; a changed context applied, a refusal or another workspace replacing the app, nothing after an expiry or a sign-out), and the app unmounts on sign-out.
 - **`test/unit/iam.test.ts`** — the PUB-1 → `Workspace` and P-35 → `SessionContext` ports, through the real `ApiClient` (`createTestPlatform`, `mockApi`), against the SDK's contract cases in `@bcbp-solutions-fzc-llc/frontend-sdk/contracts`; PUB-1 is called without a token.
 - **`test/integration/session-screens.test.tsx`** — "not found" and "unreachable" show the same message.
-- **`test/integration/app.test.tsx`** — `/dashboard/*` renders `dashboard` `./App` `/tenders/*` renders `tenders` `./App`, and `/drafting/*` and `/workflows/*` render `drafting` and `workflows`, each with no props, under the workspace basename.
+- **`test/integration/app.test.tsx`** — `/dashboard/*` renders `dashboard` `./App` `/tenders/*` renders `tenders` `./App`, `/drafting/*`, `/workflows/*`, `/admin/*` and `/me/*` render `drafting`, `workflows`, `admin` and `me`, each with no props, under the workspace basename; the header links only to served remotes, shows Admin only for `manage:members`, and its user menu signs out and switches workspace through the SDK.
 - **`test/e2e/shell.test.tsx`** — the whole sign-in with the real SDK: PKCE to the realm PUB-1 names, tokens never stored, the URL under `/t/<slug>/`, the remote reading the user and permissions through SDK hooks, and no silent sign-in after a global sign-out.
 - **`test/smoke/deployment.test.ts`** — what nginx (and CloudFront, live) must serve: only extension-less paths get `index.html`, the runtime files are uncached and pass the SDK's validation, hashed assets are immutable and match their integrity.
 
@@ -271,12 +271,12 @@ The text report prints uncovered lines. Cover the branch you changed. The gate i
 | `constants` | `src/shared/constants/` | `i18n` |
 | `ui_assets` | `src/shared/ui/` | — |
 | `components` | `src/presentation/components/` | `ui_assets`, `i18n`, `constants`; React |
-| `widgets` | `src/presentation/widgets/` | `i18n`; React |
+| `widgets` | `src/presentation/widgets/` | `i18n`, `components`; React |
 | `pages` | `src/presentation/pages/` | `components`, `ui_assets`, `i18n`, `constants`, `domain`; `application` types only; React |
 | `features` | `src/presentation/features/` | `pages`, `components`, `i18n`, `domain`; `application` types only; React; SDK `/auth` types only |
 | `layouts` | `src/app/layouts/` | `features`, `i18n`, `application`; React; SDK `/auth` types |
 | `providers` | `src/app/providers/` | `application`; React, SDK `/react`; SDK `/auth` types |
-| `routes` | `src/app/routes/` | `widgets`, `i18n`; React, React Router, SDK `/react` |
+| `routes` | `src/app/routes/` | `widgets`, `i18n`, `domain` (`ADMIN_ENTRY`); React, React Router, SDK `/react` |
 | `bootstrap` | `src/app/bootstrap/bootstrap.tsx` | `domain`, `application`, `infrastructure`, `i18n`, `ui_assets`, `layouts`, `providers`, `routes`; any package. Not presentation or `constants`: it reaches the screens through `layouts`, `providers` and `routes` |
 | `entry` | `src/app/bootstrap/index.ts` | `bootstrap` (dynamic), `i18n` (`en.json`) |
 

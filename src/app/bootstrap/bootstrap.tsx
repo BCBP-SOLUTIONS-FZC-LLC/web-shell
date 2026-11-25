@@ -11,6 +11,7 @@ import { initializeTracing } from '@bcbp-solutions-fzc-llc/frontend-sdk/tracing'
 import { getLogger, initializeLogging } from '@bcbp-solutions-fzc-llc/frontend-sdk/logging'
 import { initializeMetrics, startWebVitals } from '@bcbp-solutions-fzc-llc/frontend-sdk/metrics'
 import {
+  isRemoteKilled,
   runtimeConfigFlagProvider,
   sessionContextFlagProvider,
   setFlagProvider,
@@ -380,8 +381,14 @@ async function start(cfg: RuntimeConfig, report: { otlpBaseUrl: string }): Promi
     detect: () => context.get()?.locale,
   })
   if (stopped()) return
-  await loadManifest().catch((error: unknown) => getLogger().error('manifest load failed', { error }))
+  const manifest = await loadManifest().catch((error: unknown) => {
+    getLogger().error('manifest load failed', { error })
+    return {}
+  })
   if (stopped()) return
+  // The header links only to remotes this environment serves and has not switched off. Worked out on every
+  // render: a context that arrives late brings the tenant's flags (remote.<name>.disabled) with it.
+  const servedRemotes = (): ReadonlySet<string> => new Set(Object.keys(manifest).filter((name) => !isRemoteKilled(name)))
   startVersionPolling()
 
   // Route under /t/<slug> only when the URL is there (rememberWorkspace moved it, or the user opened it).
@@ -428,7 +435,11 @@ async function start(cfg: RuntimeConfig, report: { otlpBaseUrl: string }): Promi
     const now = Date.now()
     const until = readOnlyUntil(status.tenant)
     const show = (at: number) =>
-      notices.set({ banners: workspaceBanners(status.tenant, status.seats, who, at), ...(until ? { readOnlyUntil: until } : {}) })
+      notices.set({
+        banners: workspaceBanners(status.tenant, status.seats, who, at),
+        ...(until ? { readOnlyUntil: until } : {}),
+        ...(status.tenant ? { workspaceName: status.tenant.name } : {}),
+      })
     show(now)
     // The trial's days left move with the clock: worked out again every hour while the page is open
     // (P-1 is not asked again), until a sign-out or an expiry.
@@ -455,7 +466,7 @@ async function start(cfg: RuntimeConfig, report: { otlpBaseUrl: string }): Promi
       <StrictMode>
         <ShellRoot context={context} shell={shell}>
           {/* Keyed by the basename: a router whose basename changes is a new router. */}
-          <App key={base ?? '/'} {...(base ? { basename: base } : {})} onRouter={onRouter} notices={notices} />
+          <App key={base ?? '/'} {...(base ? { basename: base } : {})} onRouter={onRouter} notices={notices} remotes={servedRemotes()} />
         </ShellRoot>
       </StrictMode>,
     )
@@ -471,8 +482,9 @@ async function start(cfg: RuntimeConfig, report: { otlpBaseUrl: string }): Promi
   signedOutDuringBoot.signal.addEventListener('abort', () => backgroundRetry.abort(), { once: true })
   let applied = 0
   // A context that changed: the subject, flags and provider get it, then the banners (once) and the router
-  // (rememberWorkspace may have moved the URL under /t/<slug>/). Shared by the background retry and the
-  // focus refresh. False when a later request's answer is already applied: this one is older.
+  // (rememberWorkspace may have moved the URL under /t/<slug>/). Rendered again either way, so the header
+  // drops a remote the tenant's flags switch off. Shared by the background retry and the focus refresh.
+  // False when a later request's answer is already applied: this one is older.
   const takeContext = (next: SessionContext): boolean => {
     // Every context that reaches here came through loadOrdered (the background retry, the focus refresh).
     const n = askedAs.get(next)!
@@ -481,11 +493,8 @@ async function start(cfg: RuntimeConfig, report: { otlpBaseUrl: string }): Promi
     context.set(next)
     applyContext()
     startNotices()
-    const moved = routerBasename()
-    if (moved !== basename) {
-      basename = moved
-      render()
-    }
+    basename = routerBasename()
+    render()
     return true
   }
   // A refusal received after render: the app goes (its data must not stay under the screen; a sign-out already

@@ -18,7 +18,7 @@ import { createElement, type ComponentType } from 'react'
 import type { Root } from 'react-dom/client'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { act, fireEvent, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mockProblem } from '@bcbp-solutions-fzc-llc/frontend-sdk/testing'
@@ -47,8 +47,8 @@ const CONTAINER = '__platform_mfe_dashboard'
 const TENDERS_ENTRY = '/remotes/tenders/1.0.0/remoteEntry.js'
 /** The global mfe-tender's remoteEntry.js defines. */
 const TENDERS_CONTAINER = '__platform_mfe_tenders'
-/** mfe-drafting and mfe-workflow-designer: each a remote on the SDK's hooks, named by its manifest key. */
-const OTHER_REMOTES = ['drafting', 'workflows'] as const
+/** mfe-drafting, mfe-workflow-designer, mfe-admin and mfe-me: each a remote on the SDK's hooks, named by its manifest key. */
+const OTHER_REMOTES = ['drafting', 'workflows', 'admin', 'me'] as const
 const otherEntry = (name: string) => `/remotes/${name}/1.0.0/remoteEntry.js`
 const TENANT = '7d3c1f9e-2b4a-4c6d-8e0f-1a2b3c4d5e6f'
 const EMAIL = 'ada@acme.test'
@@ -104,7 +104,7 @@ async function tendersModule(): Promise<{ default: ComponentType }> {
   return { default: Tenders }
 }
 
-/** A remote (drafting, workflows) that reads the user and the workspace from the shell's SDK. */
+/** A remote (drafting, workflows, admin, me) that reads the user and the workspace from the shell's SDK. */
 async function otherModule(name: string): Promise<{ default: ComponentType }> {
   const { useCurrentUser, useWorkspace } = await import('@bcbp-solutions-fzc-llc/frontend-sdk/react')
   function Remote() {
@@ -344,6 +344,8 @@ describe('the shell, end to end', () => {
   it.each([
     ['drafting', '/t/acme/drafting/sections/S-1'],
     ['workflows', '/t/acme/workflows/W-1/editor'],
+    ['admin', '/t/acme/admin/users'],
+    ['me', '/t/acme/me/profile'],
   ])('a deep link to /t/<slug>/%s/… loads only that remote, there, after sign-in', async (name, path) => {
     await load(path)
     await until(() => assigned.length > 0, 'the redirect to Keycloak')
@@ -370,6 +372,55 @@ describe('the shell, end to end', () => {
     }
     expect(net.sent('/api/v1/me/session-context')).toHaveLength(2)
     expect(assigned).toEqual([]) // no page load, no sign-in round trip
+  })
+
+  it("the shell's header links to the served remotes without a page load, and its Sign out ends the SSO session", async () => {
+    await signInByEmail()
+    const nav = within(screen.getByRole('navigation', { name: 'Sections' }))
+    expect(nav.getAllByRole('link').map((l) => [l.textContent, l.getAttribute('href')])).toEqual([
+      ['Dashboard', '/t/acme/dashboard'],
+      ['Tenders', '/t/acme/tenders'],
+      ['Drafting', '/t/acme/drafting'],
+      ['Workflows', '/t/acme/workflows'],
+      ['Admin', '/t/acme/admin'], // an owner (manage:members)
+    ])
+    await userEvent.click(nav.getByRole('link', { name: 'Tenders' }))
+    await screen.findByRole('heading', { name: 'Tenders for Ada Lovelace in acme' }, { timeout: 5_000 })
+    expect(window.location.pathname).toBe('/t/acme/tenders')
+    expect(assigned).toEqual([]) // no page load, no sign-in round trip
+    expect(injected).toEqual([ENTRY, TENDERS_ENTRY])
+
+    // The user menu names the user and the workspace (P-1), and links My account (mfe-me).
+    await userEvent.click(screen.getByRole('button', { name: 'Account menu: Ada Lovelace' }))
+    expect(screen.getByText('Workspace: Acme')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('link', { name: 'My account' }))
+    await screen.findByRole('heading', { name: 'me for Ada Lovelace in acme' }, { timeout: 5_000 })
+    expect(window.location.pathname).toBe('/t/acme/me')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Account menu: Ada Lovelace' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Sign out' }))
+    await screen.findByRole('heading', { name: 'You are signed out' }, { timeout: 5_000 })
+    expect(document.getElementById('app')!.childElementCount).toBe(0)
+    expect(posted.map((p) => p.url)).toEqual([`POST ${IDP}/realms/tenant-acme/protocol/openid-connect/logout`])
+  })
+
+  it("the header's Switch workspace resolves the name (PUB-1) and signs in to that workspace asking for credentials", async () => {
+    await signInByEmail()
+    await userEvent.click(screen.getByRole('button', { name: 'Account menu: Ada Lovelace' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Switch workspace' }))
+    await userEvent.type(screen.getByLabelText('Work email or workspace name'), 'acme')
+    await userEvent.click(screen.getByRole('button', { name: 'Continue' }))
+    await until(() => assigned.length > 0, 'the redirect to Keycloak')
+    expect(net.sent('/api/v1/public/tenants/resolve').map((r) => new URL(r.url).searchParams.get('identifier'))).toEqual([EMAIL, 'acme'])
+    expect(new URL(assigned[0]!).pathname).toBe('/realms/tenant-acme/protocol/openid-connect/auth')
+  })
+
+  it('a member sees no Admin link in the header', async () => {
+    roles = ['member']
+    await signInByEmail()
+    const nav = within(screen.getByRole('navigation', { name: 'Sections' }))
+    expect(nav.queryByRole('link', { name: 'Admin' })).toBeNull()
+    expect(nav.getByRole('link', { name: 'Dashboard' })).toHaveAttribute('aria-current', 'page')
   })
 
   it("gives the remote the role map's permissions: an owner may invite, a member may only view", async () => {

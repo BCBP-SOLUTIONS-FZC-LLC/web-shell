@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { localStorageRememberedEmail as remembered } from '../../src/infrastructure/storage/rememberedEmail'
 import { hasPermission, roleMapAuthorizer, setAuthorizer, setAuthzSubject } from '@bcbp-solutions-fzc-llc/frontend-sdk/authz'
 import { createTestPlatform } from '@bcbp-solutions-fzc-llc/frontend-sdk/testing'
-import { IAM_ROLES, permissions } from '../../src/domain/rules/permissions'
+import { ADMIN_ENTRY, ADMIN_PERMISSIONS, IAM_ROLES, permissions } from '../../src/domain/rules/permissions'
 import { hideScreen, resetScreen, showScreen } from '../../src/app/layouts/screen'
 
 describe('localStorageRememberedEmail (the RememberedEmailRepository)', () => {
@@ -97,6 +97,31 @@ describe('permissions (IAM P-35 roles, §10.4 grants)', () => {
   ] as const)('grants %s:%s to %j only', (action, resource, allowed) => {
     for (const role of IAM_ROLES) {
       expect(can(['member', role], action, resource), role).toBe(role !== 'member' && (allowed as readonly string[]).includes(role))
+    }
+  })
+
+  it('lists the IAM admin grants, none of which a member or tender admin holds', () => {
+    expect([...ADMIN_PERMISSIONS].sort()).toEqual([
+      'manage:admin-roles',
+      'manage:delegation-policy',
+      'manage:members',
+      'manage:sso',
+      'manage:tenant-settings',
+      'read:audit',
+    ])
+    for (const p of ADMIN_PERMISSIONS) {
+      expect(permissions.member).not.toContain(p)
+      expect(permissions.tender_admin).not.toContain(p)
+    }
+  })
+
+  // mfe-admin's useAdminAccess is "manage:members or any admin permission": the header's one check
+  // (ADMIN_ENTRY) is the same rule only while every role with an admin grant holds manage:members.
+  it('gives manage:members to every role that holds any admin grant, so the Admin entry check is exact', () => {
+    expect(`${ADMIN_ENTRY.action}:${ADMIN_ENTRY.resource}`).toBe('manage:members')
+    for (const role of IAM_ROLES) {
+      const anyAdmin = permissions[role].some((p) => ADMIN_PERMISSIONS.includes(p))
+      expect(permissions[role].includes('manage:members'), role).toBe(anyAdmin)
     }
   })
 
