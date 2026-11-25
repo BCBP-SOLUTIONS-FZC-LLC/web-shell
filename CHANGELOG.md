@@ -10,6 +10,31 @@ Pull requests that change the shell, its dependencies, or the image add an entry
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.5.0] - 2026-11-25
+
+**Not breaking for remotes or environments: the dashboard contract is unchanged from `0.4.0`, and everything else is added.** The remotes `dashboard` and `tenders` are the same (no props, containers `__platform_mfe_<name>`); the shell value gains an optional `refreshContext`. The shell shares the SDK as **`1.0.0-alpha.10`** and still loads remotes built on alpha.4 to alpha.10, so mfe-dashboard `v0.4.0` (alpha.6) loads as before: the contract suite passes 12/12 against it. New routes `/t/<slug>/drafting/*`, `/workflows/*`, `/admin/*` and `/me/*` load `drafting`, `workflows`, `admin` and `me` once an environment's manifest lists them.
+
+**What users see.**
+- **A header** above every remote: links to the remotes the environment serves, Admin for owners and tenant admins, and a user menu with My account, Switch workspace and Sign out.
+- **IAM's workspace states:** "Your trial has ended", "Workspace unavailable", "Your access is paused" and "You don't have access to this workspace" replace the app when IAM refuses the workspace. A trial workspace is checked against its slug before anything shows.
+- **Workspace notices:** trial days left, a payment issue, all seats in use, no owner, a read-only workspace with its end date, and a one-time welcome after an upgrade.
+- **Sign-in:** the box takes a work email, a workspace name or a pasted workspace link.
+- **Live roles:** a role or plan change made elsewhere shows when the page gets focus, at most once a minute, and a remote can ask for it at once (`useRefreshSessionContext`). Neither needs a reload.
+
+**Deploying it.**
+- It replaces `0.4.0`. **Every environment where trial users sign in must serve IAM P-35**: a trial workspace with a slug stays closed without it (smoke `live` checks it). P-1 and P-27 are optional: without them there are no banners.
+- **The header is on by default.** mfe-dashboard `v0.4.0` and mfe-tender still draw their own frames, so the page shows two navigations, and the dashboard's fixed sidebar overlaps the header's start (LLD §15 #23). Set `"flags": { "shell.frame": false }` in `/config/runtime.json` where that matters, until they migrate.
+- **New remotes:** for each, add its manifest entry (`drafting` and `workflows` with `ownerDomain: portal`; `admin` and `me` once built) and, until CloudFront, an ingress route for `/remotes/<name>/`.
+- **Rollback:** `0.4.0`, with the same dashboard.
+
+**Not yet checked.**
+- **Remotes:** mfe-tender, mfe-drafting, mfe-workflow-designer, mfe-admin and mfe-me have no release and no contract run against this shell.
+- **IAM:** its merged changes (refusal codes, `read_only_until`, `DENY_MEMBER_SUSPENDED`, the realm revert) are not deployed in any environment yet. Until they are, the matching screens and notices stay unused.
+
+Details below.
+
 ### Changed (2026-11-25 — SDK `1.0.0-alpha.10`: a remote's session-context refresh)
 
 **All three platform packages move to `1.0.0-alpha.10`, exact, on one version, and the shell value gets `refreshContext`, so a remote can reload IAM P-35 without a page load** (web-shell's session-context refresh handoff, for mfe-admin; LLD §15 #25 closed). A remote calls the SDK's `useRefreshSessionContext()` after the user changed their own roles, or after a `403 DENY_ROLE_INSUFFICIENT`. The shell's `refreshContext` runs the focus refresh's load (`reloadContext` in `src/app/bootstrap/bootstrap.tsx`) at once, not held to the focus refresh's minute, and resolves `true` when a new context was applied while it ran, by its own load or by one it waited for (a focus refresh, a newer background-retry answer), so a remote is not told nothing changed when its change is live; `false` when nothing new was applied, its own load failed (the context is kept; a step that throws after the load is logged as `session context refresh failed`), or the shell took over the page (a refusal's screen, the wrong-workspace screen, after a sign-out or an expiry). Never rejects. One load runs at a time: a focus while one runs is skipped, and a remote's call waits for a running load, then loads afresh, because that one may have read P-35 before the change; every load restarts the focus refresh's minute. Where the SDK's reference shell applies a context with a new slug for the same tenant, this shell keeps its stricter rule and shows the wrong-workspace screen. The release also brings `<Writable>` and the written `navigate()` contract, which need nothing from the shell. Shell before remotes: a remote that calls the hook or uses `<Writable>` must be built on alpha.10, so it needs this shell; under an older shell the hook resolves `false`. Checks: `npm run test-contract` against mfe-dashboard `v0.4.0` (alpha.6) passes 12/12; no new SDK export duplicates a shell name. Tests: `test/integration/bootstrap.test.tsx` (12 cases: applied, unchanged and failed, refused, another workspace, after a sign-out, waiting for a focus refresh, `true` when a focus refresh it waited for applied the change, `true` when a newer background-retry answer did, never rejecting when a step after the load throws, a focus skipped during its load, two calls in turn, a sign-out while waiting), `test/e2e/shell.test.tsx` (a remote's `useRefreshSessionContext()` with the real SDK). *(Previously: a remote could not ask; a change showed on the next focus after a minute, or a reload.)*
