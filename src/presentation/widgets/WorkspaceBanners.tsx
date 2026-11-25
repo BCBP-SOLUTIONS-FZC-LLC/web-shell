@@ -1,10 +1,10 @@
 import { useShellText, type ShellKey } from '../../shared/i18n'
 
 /** One banner (the domain's WorkspaceBanner, by shape: widgets take their state as props). */
-export type BannerProps = { kind: 'trial'; days: number } | { kind: 'past-due' } | { kind: 'seats-full'; seats: number } | { kind: 'ownerless' }
+export type BannerProps = { kind: 'trial'; days: number } | { kind: 'trial-ended' } | { kind: 'past-due' } | { kind: 'seats-full'; seats: number } | { kind: 'ownerless' }
 
 function trialKey(days: number): ShellKey {
-  return days === 0 ? 'app.banner.trialEndsToday' : days === 1 ? 'app.banner.trialOneDay' : 'app.banner.trialDays'
+  return days === 0 ? 'app.banner.trialLastDay' : days === 1 ? 'app.banner.trialOneDay' : 'app.banner.trialDays'
 }
 
 /**
@@ -20,7 +20,9 @@ export function WorkspaceBanners({ banners }: { banners: readonly BannerProps[] 
         <div key={b.kind} role="status" className="bg-indigo-50 px-4 py-2 text-center font-sans text-sm text-indigo-950 shadow">
           {b.kind === 'trial'
             ? text(trialKey(b.days), { days: b.days })
-            : b.kind === 'past-due'
+            : b.kind === 'trial-ended'
+              ? text('app.banner.trialEnded')
+              : b.kind === 'past-due'
               ? text('app.banner.pastDue')
               : b.kind === 'seats-full'
                 ? text('app.banner.seatsFull', { seats: b.seats })

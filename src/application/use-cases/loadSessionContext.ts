@@ -37,6 +37,8 @@ export interface RetryOptions {
   signal?: AbortSignal
   /** Each failed retry, for the log. */
   onError?: (e: unknown, attempt: number) => void
+  /** Which failures are tried again. Default `isTransient` (the ApiClient's own rule). */
+  retryable?: (e: unknown) => boolean
 }
 
 /** Resolves after `ms`, or at once when `signal` is (or becomes) aborted; leaves no listener behind. */
@@ -58,7 +60,7 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
 /**
  * Retries `load` after a failed first load: up to `attempts` times, waiting baseDelayMs, then twice
  * that, and so on. Resolves to the context, or undefined when the tries run out, an error is not
- * transient, or `signal` aborts.
+ * retryable (`o.retryable`, default transient), or `signal` aborts.
  */
 export async function retrySessionContext(
   load: (signal?: AbortSignal) => Promise<SessionContext>,
@@ -75,19 +77,25 @@ export async function retrySessionContext(
     } catch (e) {
       if (o.signal?.aborted) return undefined
       o.onError?.(e, attempt)
-      if (!isTransient(e)) return undefined
+      if (!(o.retryable ?? isTransient)(e)) return undefined
     }
     delay *= 2
   }
   return undefined
 }
 
-/** How a failed first P-35 load ends: a context after all, a workspace state, or another failure. */
+/** Whether `settleRefusal` asks again after its delay: a membership refusal, which IAM's caches may lag. */
+export function refusalIsReasked(e: unknown): boolean {
+  const block = blockedWorkspace(e)
+  return block === 'member-paused' || block === 'no-access'
+}
+
+/** How a P-35 refusal settles: a context after all, a workspace state, or another failure. */
 export type SettledLoad = { context: SessionContext } | { block: WorkspaceBlock } | { error: unknown }
 
 /**
- * Settles a failed first P-35 load. A membership refusal (`member-paused`, `no-access`) can be IAM's
- * caches lagging a change by a few seconds: a member just reactivated (the gateway keeps its answer
+ * Settles a P-35 refusal (the first load's, or a trial's pre-render retry's). A membership refusal
+ * (`member-paused`, `no-access`) can be IAM's caches lagging a change by a few seconds: a member just reactivated (the gateway keeps its answer
  * 5 s), added or invited. So it is asked once more after `delayMs` (default 5000, IAM's advice)
  * before it is taken as final. A tenant state is final at once; any other failure is returned as is.
  */
@@ -98,7 +106,7 @@ export async function settleRefusal(
 ): Promise<SettledLoad> {
   const block = blockedWorkspace(error)
   if (!block) return { error }
-  if (block !== 'member-paused' && block !== 'no-access') return { block }
+  if (!refusalIsReasked(error)) return { block }
   await sleep(o.delayMs ?? 5000, o.signal)
   if (o.signal?.aborted) return { error }
   try {

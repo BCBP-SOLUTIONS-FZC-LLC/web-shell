@@ -41,7 +41,7 @@ export function toWorkspace(identifier: string, r: ResolveResponse): Workspace |
   const slug = trial
     ? identifier.includes('@')
       ? undefined
-      : identifier
+      : identifier.trim().toLowerCase()
     : r.realm.startsWith(prefix)
       ? r.realm.slice(prefix.length)
       : undefined
@@ -57,7 +57,9 @@ export function toWorkspace(identifier: string, r: ResolveResponse): Workspace |
 export function toSessionContext(r: SessionContextResponse): SessionContext {
   return {
     tenantId: r.tenant_id,
-    slug: r.slug,
+    // Trimmed and lower-cased like a PUB-1 trial slug (toWorkspace): the bootstrap's trial check compares the two.
+    // A body without a slug (outside the contract) keeps the context, as before: only the trial check needs it.
+    slug: typeof r.slug === 'string' ? r.slug.trim().toLowerCase() : r.slug,
     roles: r.roles ?? [],
     departments: r.departments ?? [],
     ...(r.plan !== undefined ? { plan: r.plan } : {}),
@@ -72,14 +74,22 @@ export function toSessionContext(r: SessionContextResponse): SessionContext {
 let api: ReturnType<typeof createApiClient> | undefined
 const client = () => (api ??= createApiClient())
 
+function isResolveResponse(d: unknown): d is ResolveResponse {
+  return typeof d === 'object' && d !== null && !Array.isArray(d) && typeof (d as { found?: unknown }).found === 'boolean'
+}
+
 export const workspaceResolver: WorkspaceResolver = {
   async resolve(identifier, signal) {
     // Public endpoint on the same origin, rate-limited per IP: no token.
-    const res = await client().get<ResolveResponse>('/v1/public/tenants/resolve', {
+    const res = await client().get<unknown>('/v1/public/tenants/resolve', {
       query: { identifier },
       auth: false,
       ...(signal ? { signal } : {}),
     })
+    // Only JSON with a boolean `found` is an answer (SDK alpha.8, WorkspaceResolver). Anything else (a WAF
+    // challenge page sent with a 2xx, such as AWS WAF's 202; an empty body) is a failed call, so the SDK
+    // keeps the saved workspace instead of dropping it as "not found". A 429 and other errors already throw.
+    if (!isResolveResponse(res.data)) throw new Error(`PUB-1 answered ${res.status} without a resolve response`)
     return toWorkspace(identifier, res.data)
   },
 }

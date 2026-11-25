@@ -165,7 +165,7 @@ describe('dialogs', () => {
     resolve.mockResolvedValue(acme)
     await user.click(screen.getByRole('button', { name: 'Switch workspace' }))
     await typeEmail('ada@acme.com')
-    await waitFor(() => expect(idp.switchWorkspace).toHaveBeenCalledWith(acme))
+    await waitFor(() => expect(idp.switchWorkspace).toHaveBeenCalledWith(acme, { prompt: 'login' }))
   })
 })
 
@@ -193,6 +193,6 @@ describe('workspace unavailable (spec A6, A8)', () => {
     resolve.mockResolvedValue(acme)
     await user.click(screen.getByRole('button', { name: 'Switch workspace' }))
     await typeEmail('ada@acme.com')
-    await waitFor(() => expect(idp.switchWorkspace).toHaveBeenCalledWith(acme))
+    await waitFor(() => expect(idp.switchWorkspace).toHaveBeenCalledWith(acme, { prompt: 'login' }))
   })
 })

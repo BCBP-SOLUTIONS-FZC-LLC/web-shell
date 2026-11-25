@@ -45,13 +45,17 @@ describe('toIdentifier (IAM spec §6 A2: email, workspace name or pasted URL)', 
     ['/t/acme/tenders/42', 'acme'],
     ['https://app.example.com/t/acme/members/ada@acme.com', 'acme'], // a URL with @ is still a URL
     ['https://ada@app.example.com/t/acme', 'acme'],
+    ['app.example.com/t/acme/members/ada@acme.com', 'acme'], // a link without its scheme, @ in the path
+    ['ops/billing@acme.com', 'ops/billing@acme.com'], // `/` is allowed before the @ of an address
+    [`https://app.example.com/t/beta/tenders/1?${'q'.repeat(400)}`, 'beta'], // a URL of any length gives its slug
   ])('%j → %j', (typed, identifier) => {
     expect(toIdentifier(typed, slugOf)).toBe(identifier)
   })
 
   it.each([
     ['empty', '   '],
-    ['over 254 characters', `${'a'.repeat(MAX_IDENTIFIER_LENGTH - 8)}@acme.com`],
+    ['an email over 254 characters', `${'a'.repeat(MAX_IDENTIFIER_LENGTH - 8)}@acme.com`],
+    ['a name over 254 characters', 'a'.repeat(MAX_IDENTIFIER_LENGTH + 1)],
     ['a URL without /t/<slug>', 'https://app.example.com/dashboard'],
     ['a URL that does not parse', 'http://[bad/t/acme'],
   ])('names no workspace when %s', (_, typed) => {
@@ -66,7 +70,8 @@ describe('toIdentifier (IAM spec §6 A2: email, workspace name or pasted URL)', 
 
   it('only an email is an email (and so a login_hint)', () => {
     expect(isEmailIdentifier('ada@acme.com')).toBe(true)
-    for (const not of ['acme', 'https://app.example.com/t/acme/members/ada@acme.com', 'a@b@c', '@acme.com', 'ada@', 'ada @acme.com', 'ada@acme.com?x=1'])
+    expect(isEmailIdentifier('ops/billing@acme.com')).toBe(true)
+    for (const not of ['acme', 'https://app.example.com/t/acme/members/ada@acme.com', 'app.example.com/t/acme/ada@acme.com', '/t/acme/ada@acme.com', 'localhost:5001/x@acme.com', 'a?code=1@acme.com', 'a#x@acme.com', 'a@b@c', '@acme.com', 'ada@', 'ada @acme.com', 'ada@acme.com?x=1'])
       expect(isEmailIdentifier(not), not).toBe(false)
   })
 })

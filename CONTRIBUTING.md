@@ -55,7 +55,7 @@ src/
     layouts/             ← screen.tsx (full-screen host), sessionScreens.tsx (mounts the session screens)
   presentation/
     pages/login/         ← LoginPage, useEmailSignIn (the remembered-email repository is passed in)
-    features/session-screens/ ← Sign-in, signed out, session ended, device clock, wrong workspace, workspace not found, workspace unavailable (A6/A8), workspace upgraded (A5) (components)
+    features/session-screens/ ← Sign-in, signed out, session ended, device clock, wrong workspace, workspace not found, workspace unavailable (A6/A8), workspace not loaded, workspace upgraded (A5) (components)
     components/          ← BrandLogo, PageLinks
     widgets/             ← Update notice, workspace banners, read-only notice, missing-permissions notice (state passed in, or mounted only while it holds)
   application/           ← Use cases (no React, no browser APIs): resolveWorkspace, requestPasswordReset, loadSessionContext, loadWorkspaceStatus; signIn.ts
@@ -217,7 +217,7 @@ npx vitest run test/unit/iam.test.ts
 
 These tests pin behavior other repos and the login flow depend on. Change them only when the contract change is intentional, and update `README.md` and `VERSIONING.md` in the same pull request.
 
-- **`test/integration/bootstrap.test.tsx`** — the exact SDK initialisation order, no automatic login after a logout or a device-clock refusal, the app never renders for a wrong-workspace login or a P-35 refusal that is a workspace state (A6/A8), deny-all without a session context, and the app unmounts on sign-out.
+- **`test/integration/bootstrap.test.tsx`** — the exact SDK initialisation order, no automatic login after a logout or a device-clock refusal, the app never renders for a wrong-workspace login or a P-35 refusal that is a workspace state (A6/A8), a trial with a slug awaiting P-35 and checked against its slug, `login-required` without a workspace, deny-all without a session context, and the app unmounts on sign-out.
 - **`test/unit/iam.test.ts`** — the PUB-1 → `Workspace` and P-35 → `SessionContext` ports, through the real `ApiClient` (`createTestPlatform`, `mockApi`), against the SDK's contract cases in `@bcbp-solutions-fzc-llc/frontend-sdk/contracts`; PUB-1 is called without a token.
 - **`test/integration/session-screens.test.tsx`** — "not found" and "unreachable" show the same message.
 - **`test/integration/app.test.tsx`** — `/dashboard/*` renders `dashboard` `./App` and `/tenders/*` renders `tenders` `./App`, each with no props, under the workspace basename.

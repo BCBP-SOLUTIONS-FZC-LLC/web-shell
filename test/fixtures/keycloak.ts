@@ -56,6 +56,10 @@ export class FakeKeycloak {
   extraClaims: Record<string, unknown> = {}
   /** The provider's clock; set it off the page's to test the device-clock check. */
   now: () => number = () => Date.now()
+  /** Realms deleted under a saved workspace (Realm Provisioner's revert or offboarding). */
+  readonly deleted = new Set<string>()
+  /** The realms whose discovery document was asked for (the SDK's realm probe, alpha.9), in order. */
+  readonly discoveries: string[] = []
 
   issuer(realm: string): string {
     return `${IDP}/realms/${realm}`
@@ -111,6 +115,14 @@ export class FakeKeycloak {
 
   fetch = vi.fn(async (input: string, init?: RequestInit): Promise<Response> => {
     const url = new URL(input)
+    // Discovery, as Keycloak 26 answers it: a realm's own document, and for a missing realm a 404 without
+    // CORS headers, which the page sees only as a failed fetch.
+    const discovery = /^\/realms\/([^/]+)\/\.well-known\/openid-configuration$/.exec(url.pathname)?.[1]
+    if (discovery !== undefined) {
+      this.discoveries.push(discovery)
+      if (this.deleted.has(discovery)) throw new TypeError('Failed to fetch')
+      return Response.json({ issuer: this.issuer(discovery), authorization_endpoint: `${this.issuer(discovery)}/protocol/openid-connect/auth` })
+    }
     const body = new URLSearchParams(String(init?.body ?? ''))
     const grant = body.get('grant_type') ?? ''
     this.requests.push({ grant, body })

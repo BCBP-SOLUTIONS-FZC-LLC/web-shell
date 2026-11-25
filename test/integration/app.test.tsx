@@ -104,10 +104,41 @@ describe('App', () => {
         expect.stringContaining("We couldn't load your permissions"),
       ])
       expect(notices[0]!.parentElement).toBe(notices[1]!.parentElement)
+      // In the page's flow after the remote, sticky at the bottom: never fixed over the remote's last controls.
+      const stack = notices[0]!.parentElement!
+      expect(stack).toHaveClass('sticky', 'bottom-0')
+      expect(stack).not.toHaveClass('fixed')
+      expect(stack.previousElementSibling!.compareDocumentPosition(stack) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+      expect(stack.previousElementSibling).toHaveClass('flex-1')
     } finally {
       readOnly = false
       context = { roles: ['member'] }
     }
+  })
+
+  it('publishes the notice stack height as --shell-notices-height for remotes, and follows its size', () => {
+    let observed: (() => void) | undefined
+    const disconnect = vi.fn()
+    vi.stubGlobal('ResizeObserver', class {
+      constructor(cb: () => void) {
+        observed = cb
+      }
+      observe() {}
+      disconnect = disconnect
+    })
+    vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(40)
+    window.history.replaceState({}, '', '/t/acme/dashboard')
+    const { unmount } = render(<App basename="/t/acme" />)
+    const root = document.documentElement.style
+    expect(root.getPropertyValue('--shell-notices-height')).toBe('40px')
+    vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(72)
+    observed!()
+    expect(root.getPropertyValue('--shell-notices-height')).toBe('72px')
+    unmount()
+    expect(disconnect).toHaveBeenCalledOnce()
+    expect(root.getPropertyValue('--shell-notices-height')).toBe('')
+    vi.unstubAllGlobals()
+    vi.restoreAllMocks()
   })
 
   it('shows the workspace banners in the same bottom stack, and follows the store when they arrive', () => {
@@ -131,11 +162,17 @@ describe('App', () => {
 
   it.each([
     [1, '1 day left in your trial'],
-    [0, 'Your trial ends today'],
+    [0, 'Your trial ends within a day'],
   ])('says %i trial days left in words', (days, words) => {
     window.history.replaceState({}, '', '/t/acme/dashboard')
     render(<App basename="/t/acme" notices={createStore<AppNotices>({ banners: [{ kind: 'trial', days }] })} />)
     expect(screen.getByRole('status')).toHaveTextContent(words)
+  })
+
+  it('says the trial has ended once its end has passed', () => {
+    window.history.replaceState({}, '', '/t/acme/dashboard')
+    render(<App basename="/t/acme" notices={createStore<AppNotices>({ banners: [{ kind: 'trial-ended' }] })} />)
+    expect(screen.getByRole('status')).toHaveTextContent('Your trial has ended')
   })
 
   it("adds the grace end date to the read-only notice when IAM gives one (P-1 read_only_until)", () => {

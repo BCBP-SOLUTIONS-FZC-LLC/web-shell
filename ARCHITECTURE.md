@@ -2,7 +2,7 @@
 
 This document describes the internal structure, dependency direction, browser flows, data, caching, observability, security and deployment of `web-shell`.
 
-`web-shell` is a **private Rsbuild application** (`github.com/BCBP-SOLUTIONS-FZC-LLC/web-shell`, Node.js 26, React 19.3) built on the platform SDK (`@bcbp-solutions-fzc-llc/frontend-sdk` `1.0.0-alpha.6`). The npm package name is `web-shell` and `"private": true`. Nothing installs it. What ships is a static bundle: the SDK bootstrap, the sign-in and session screens, and a Module Federation host (`shell`) that renders the `dashboard` and `tenders` remotes. The production process is nginx on port **8080**, uid **101**. There is no API server, database, or message bus in this repository.
+`web-shell` is a **private Rsbuild application** (`github.com/BCBP-SOLUTIONS-FZC-LLC/web-shell`, Node.js 26, React 19.3) built on the platform SDK (`@bcbp-solutions-fzc-llc/frontend-sdk` `1.0.0-alpha.9`). The npm package name is `web-shell` and `"private": true`. Nothing installs it. What ships is a static bundle: the SDK bootstrap, the sign-in and session screens, and a Module Federation host (`shell`) that renders the `dashboard` and `tenders` remotes. The production process is nginx on port **8080**, uid **101**. There is no API server, database, or message bus in this repository.
 
 Current release: `v0.4.0` (remotes `dashboard` and `tenders`, SDK alpha.6); `v0.3.0` (remote `dashboard` only) is its rollback; `v0.2.0` and `v0.1.0` (remote `app2`) are superseded. `package.json` `version` matches the latest tag. Image tags, the SemVer contract, and how to cut a release are in [VERSIONING.md](./VERSIONING.md).
 
@@ -229,11 +229,11 @@ sequenceDiagram
         else device-clock
             Boot->>Screens: showDeviceClock (wait for a click)
         else none or login-required
-            Boot->>SDK: workspace from the failed attempt, or chooseWorkspace
+            Boot->>SDK: workspace from the failed attempt (login-required; without one, ask), else chooseWorkspace
             opt no known workspace
                 Boot->>Screens: askForWorkspace (email, name or URL → PUB-1)
             end
-            Boot->>SDK: idp.login(workspace, loginHint)
+            Boot->>SDK: idp.login(workspace, loginHint?, prompt: 'login' when uncheckable)
         end
     else authenticated, wrong workspace
         Boot->>Screens: showWrongWorkspace (app never renders)
@@ -243,8 +243,15 @@ sequenceDiagram
         opt membership refused (access paused, not a member)
             Boot->>IAM: ask once more after 5 s (IAM's caches may lag a change)
         end
+        opt trial workspace with a slug, no context yet, any failure but a workspace state
+            Boot->>IAM: retry after 1 s, 2 s, 4 s before anything mounts
+        end
         alt P-35 refuses the workspace (trial ended, suspended, access paused, not a member)
             Boot->>Screens: showWorkspaceUnavailable (A6/A8; app never renders, the shell remembers nothing)
+        else trial with a slug, still no context
+            Boot->>Screens: showWorkspaceLoadFailed (sign out, switch or try again; app never renders)
+        else trial with a slug, P-35 slug is another tenant's
+            Boot->>Screens: showWrongWorkspace (nothing cached, URL kept, app never renders)
         else
             Boot->>SDK: subject, flags, rememberWorkspace (/t/slug/)
             Boot->>SDK: initializeI18n (detect: P-35 locale), loadManifest, startVersionPolling
@@ -253,7 +260,7 @@ sequenceDiagram
             Boot->>Browser: banners and the read-only grace date into App
             Boot->>Screens: showUpgradeWelcome (A5) once after a recent upgrade, never after expiry or over another screen
             opt no session context
-                Boot->>IAM: retry after 1 s, 2 s, 4 s (online network error, timeout, 429, 502-504)
+                Boot->>IAM: retry after 1 s, 2 s, 4 s (online network error, timeout, 429, 502-504; never a trial with a slug)
                 Boot->>SDK: subject, flags, rememberWorkspace, and the provider updates live
                 Boot->>Screens: a retry answering with a workspace state: unmount App, showWorkspaceUnavailable
             end
@@ -266,8 +273,8 @@ sequenceDiagram
 3. Consent stays the SDK's default (essential only), then tracing, logging and metrics against `telemetry.otlpBaseUrl`, `installGlobalErrorHandlers()`, `startWebVitals()`, platform flags from the runtime config. Then `registerShellMessages(cfg.i18n.defaultLocale)` (`infrastructure/i18n/shellMessages.ts`): the shell's `shell` namespace is registered and loaded for the default locale (`setLocale`), so the sign-in screens, which show before step 8, never show raw keys.
 4. `createOidcProvider(cfg.auth, workspaceResolver)`, `setTokenSource(initializeAuth(idp))`, `idp.init()`. On a reload or a new tab `init()` may redirect once with `prompt=none` and never settle.
 5. Anonymous: see the sign-in flow. The bootstrap returns without rendering the app.
-6. Authenticated in the wrong workspace (a trial login through an invitation that landed in another tenant): `showWrongWorkspace`. The app never renders and the workspace is not cached.
-7. Authenticated: `idp.subscribe` handles expiry and sign-out (below). When P-35 refuses the workspace itself (`blockedWorkspace`, LLD §7.1: `TENANT_TRIAL_EXPIRED` → "Your trial has ended" (A6); `TENANT_SUSPENDED` or `404 TENANT_NOT_FOUND` → "Workspace unavailable"; `MEMBER_SUSPENDED` or the gateway's `DENY_MEMBER_SUSPENDED` → "Your access is paused"; `DENY_UNRESOLVABLE_SUBJECT` or `404 MEMBER_NOT_FOUND` → "You don't have access to this workspace" (A8)), `showWorkspaceUnavailable` offers Sign out and Switch workspace and the app never renders. A membership refusal (the last two) is asked once more after 5 s first (`settleRefusal`), because IAM's caches can lag a reactivation or a new member by a few seconds. The shell remembers nothing (no `rememberWorkspace`, no `/t/<slug>/` move); a workspace the SDK's `chooseWorkspace` cached before login stays cached, so a reload restores into the same screen. Any other refusal (`INSUFFICIENT_ROLE` included) keeps the deny-all path below, and a background retry that answers with a workspace state unmounts the app and shows that screen. Otherwise the P-35 session context sets the authorizer subject and tenant flags, and `rememberWorkspace` caches the workspace with its slug and moves the URL to `/t/<slug>/`. Without a context: deny-all and platform flags only, with a warning log; after render a network failure while online, a timeout, 429, 502, 503 or 504 (the SDK ApiClient's own rule) is retried after 1 s, 2 s and 4 s, one request per attempt, and a success updates the subject, flags and provider without a reload. A sign-out stops the retries, and a sign-out during these steps stops the boot before the app mounts.
+6. Authenticated in the wrong workspace (a trial login through an invitation that landed in another tenant): `showWrongWorkspace`. The app never renders and the workspace is not cached. A trial workspace with a slug is also checked against P-35 (step 7): every trial tenant shares one realm, so a silent restore can ride another trial tenant's SSO session, and a cached entry has no `tenantIdHint` for `isWrongWorkspace`.
+7. Authenticated: `idp.subscribe` handles expiry and sign-out (below). When P-35 refuses the workspace itself (`blockedWorkspace`, LLD §7.1: `TENANT_TRIAL_EXPIRED` → "Your trial has ended" (A6); `TENANT_SUSPENDED` or `404 TENANT_NOT_FOUND` → "Workspace unavailable"; `MEMBER_SUSPENDED` or the gateway's `DENY_MEMBER_SUSPENDED` → "Your access is paused"; `DENY_UNRESOLVABLE_SUBJECT` or `404 MEMBER_NOT_FOUND` → "You don't have access to this workspace" (A8)), `showWorkspaceUnavailable` offers Sign out and Switch workspace and the app never renders. A membership refusal (the last two) is asked once more after 5 s first (`settleRefusal`), because IAM's caches can lag a reactivation or a new member by a few seconds. The shell remembers nothing (no `rememberWorkspace`, no `/t/<slug>/` move); a workspace the SDK's `chooseWorkspace` cached before login stays cached, so a reload restores into the same screen. Any other refusal (`INSUFFICIENT_ROLE` included) keeps the deny-all path below, and a background retry that answers with a workspace state is settled the same way (a membership refusal asked once more after 5 s, the deny-all app kept meanwhile) before it unmounts the app and shows that screen. Otherwise the P-35 session context sets the authorizer subject and tenant flags, and `rememberWorkspace` caches the workspace with its slug and moves the URL to `/t/<slug>/`. A trial workspace with a slug waits for P-35 before anything renders: every failure that is not a workspace state (offline, 404, 500 too) is retried first, no context shows "We couldn't load your workspace" (`showWorkspaceLoadFailed`), and a P-35 `slug` other than the workspace's shows `showWrongWorkspace`. Without a context (other sessions): deny-all and platform flags only, with a warning log; after render a network failure while online, a timeout, 429, 502, 503 or 504 (the SDK ApiClient's own rule) is retried after 1 s, 2 s and 4 s, one request per attempt, and a success updates the subject, flags and provider without a reload. A sign-out stops the retries, and a sign-out or an expiry during these steps stops the boot before the app mounts (`stopped()`).
 8. `initializeI18n` (the user's P-35 `locale` first, through `detect`), `loadManifest()` (a failure is logged; the app still renders), `startVersionPolling()`.
 9. Render `<App>` inside `app/providers/ShellRoot` (a `PlatformProvider` whose `context` follows the retry store and whose `locale` follows `setLocale`) into `#app`. The router's basename is `/t/<slug>` when `slugFromPath` finds one in the URL. The router is registered as the SDK's navigator: a remote's `navigate()` under the basename stays in the page; any other path is a full load.
 10. Once the session context is known (at render, or when the background retry succeeds), P-1 and, for owners and tenant admins, P-27 load in the background (`loadWorkspaceStatus`): the banners and the read-only grace date go into the `notices` store `App` reads, and a trial converted in the last 7 days shows the A5 welcome once per device, never after the session expired or over another screen. A failure logs `workspace status unavailable` and shows nothing.
@@ -276,7 +283,7 @@ After render the subscription does two things:
 
 | Session event | What the shell does |
 |---|---|
-| `expired` | "Session ended" dialog over the app. Sign in calls `signInAgain`, which re-resolves the workspace when the server ended the session and reuses the cache otherwise |
+| `expired` | "Session ended" dialog over the app. Sign in calls `signInAgain`, which re-resolves the workspace when the server ended the session and reuses the cache otherwise; its `prompt` callback (SDK alpha.9) asks for credentials for a trial workspace nothing can check |
 | `anonymous`, `signed-out` (here or in another tab) | Unmount the app, so the previous user's data is not left under the dialog. "You are signed out"; Sign in calls `idp.login({ workspace })`, and the SDK adds `prompt=login` because it recorded the sign-out |
 
 Routes inside the app:
@@ -318,7 +325,7 @@ sequenceDiagram
         IAM-->>UC: realm, strategy
         UC-->>Screens: workspace
         Screens-->>Boot: onChosen(workspace, loginHint only for an email)
-        Boot->>SDK: idp.login(workspace, loginHint)
+        Boot->>SDK: idp.login(workspace, loginHint?, prompt: 'login' when uncheckable)
         Note over SDK: verifier, S256 challenge, state<br/>location to the realm's authorize URL
         SDK->>KC: GET /realms/{realm}/.../auth?code_challenge_method=S256&login_hint
         KC->>SDK: redirect to {origin}/auth/callback?code&state
@@ -331,11 +338,11 @@ sequenceDiagram
 
 Which workspace a signed-out visit uses, in order:
 
-1. The workspace a failed silent attempt named (`reason: 'login-required'`).
-2. `chooseWorkspace`: the `/t/<slug>` in the URL (cached or resolved), otherwise the most recently cached workspace.
+1. The workspace a failed silent attempt named (`reason: 'login-required'`). The SDK re-checks a trial one with PUB-1 first (at most 5 s, then the saved entry). When PUB-1 no longer knows it, `login-required` comes without a workspace and the shell goes straight to the sign-in screen (step 3), with or without a slug in the URL: never another cached workspace (the SDK's `SessionState` contract). Step 2 is for the other reasons; step 3 is the fallback for all of them.
+2. `chooseWorkspace`: the `/t/<slug>` in the URL (cached or resolved; a cached trial entry is re-checked with PUB-1; a cached paid entry is used once Keycloak serves its realm, else re-checked with PUB-1), otherwise the most recently cached workspace.
 3. The sign-in screen (`askForWorkspace`). It takes a work email, a workspace name or a pasted workspace URL (`toIdentifier` reduces a URL to its `/t/<slug>`), resolves it through PUB-1 and returns the workspace, with `loginHint` only when the user typed an email.
 
-A known workspace goes straight to Keycloak, with the remembered email as `login_hint` when there is one (a remembered workspace name is not sent). After `reason: 'signed-out'` or `'device-clock'` the bootstrap shows a dialog and waits for a click: an automatic login after a logout would ride the live SSO session and undo it.
+A known workspace goes straight to Keycloak, with the remembered email as `login_hint` when there is one (a remembered workspace name is not sent). After `reason: 'signed-out'` or `'device-clock'` the bootstrap shows a dialog and waits for a click: an automatic login after a logout would ride the live SSO session and undo it. A trial workspace with neither a slug nor a `tenantIdHint` (an invitation email, if IAM drops `tenant_id`: OQ-10) signs in with `prompt: 'login'`: nothing can check that session after sign-in, and the shared trial realm's SSO session may be someone else's.
 
 PUB-1 → `Workspace`: strategy `shared` is the trial realm, with `tenant_id` as `tenantIdHint` and a slug only when the identifier was one. A dedicated realm's slug is the realm after `auth.paidRealmPrefix` (`tenant-`). The SDK refuses to cache a workspace whose slug and realm disagree, so a paid realm must be named `tenant-<slug>`; the local realm is `tenant-bcbp` for that reason.
 
@@ -418,10 +425,10 @@ sequenceDiagram
     end
 ```
 
-| Concern | Behaviour (SDK `ApiClient`, alpha.6) |
+| Concern | Behaviour (SDK `ApiClient`, alpha.9) |
 |---|---|
 | Token | `Authorization: Bearer` only to the page's own origin, from the in-memory token source (`setTokenSource(initializeAuth(idp))`); `auth: false` sends none (PUB-1) |
-| Identity headers | `x-user-id`, `x-tenant-id`, `x-tenant-roles`, `x-departments`, `x-plan`, `x-feature-flags`, `x-residency-mode` are refused: a `TypeError` in `local`, `dev` or before an environment is identified, dropped with an essential warning elsewhere |
+| Identity headers | `x-user-id`, `x-tenant-id`, `x-tenant-roles`, `x-departments`, `x-plan`, `x-feature-flags`, `x-residency-mode`, `x-auth-time` (alpha.7) are refused: a `TypeError` in `local`, `dev` or before an environment is identified, dropped with an essential warning elsewhere |
 | Correlation | `x-request-id` (per call), W3C `traceparent`, and `x-session-id` (unless `telemetry.sendSessionHeader` is false), on same-origin or `api.propagationAllowlist` URLs only |
 | Timeout | `api.timeoutMs` (35 000 ms in the image's `runtime.json`) → `TimeoutError` |
 | Retries | GET, PUT and DELETE (POST and PATCH only with `retry.unsafe`): up to 2 by default, on 429, 502, 503, 504, a network error while online, or a timeout. Waits `Retry-After` (capped at 30 s), else a random wait up to 250 ms × 2ⁿ, capped at 5 s. `isTransient` in `application/use-cases/loadSessionContext.ts` mirrors this rule; a test fails if they diverge |
@@ -435,9 +442,9 @@ sequenceDiagram
 
 Before sign-in the browser has no token and no realm. PUB-1 answers one question for it: which Keycloak realm the sign-in redirect goes to.
 
-- **Only when needed.** The bootstrap first asks the SDK's `chooseWorkspace`. A cached workspace (`localStorage` `…:workspaces`: the URL's `/t/<slug>/`, or with no slug the most recent) skips PUB-1 and the sign-in screen; an uncached slug in the URL is resolved through PUB-1 without the sign-in screen. A failed silent sign-in names its own workspace.
+- **Only when needed.** The bootstrap first asks the SDK's `chooseWorkspace`. A cached paid workspace (`localStorage` `…:workspaces`: the URL's `/t/<slug>/`, or with no slug the most recent) skips the sign-in screen, and PUB-1 too once Keycloak serves its realm's discovery document (≤ 3 s; SDK alpha.9); a realm deleted under it (a revert, offboarding) is re-checked with PUB-1; an uncached slug in the URL is resolved through PUB-1 without the sign-in screen. A cached trial entry is re-checked with PUB-1 (at most 5 s; one call per trial sign-in). A failed silent sign-in names its own workspace, or none when PUB-1 no longer knows it.
 - **No token.** `GET /api/v1/public/tenants/resolve?identifier=<email or slug>` with `auth: false`; PUB-1 is public and rate-limited per IP.
-- **Mapping (`toWorkspace`).** `strategy: "shared"` is the trial realm, and the slug is known only when the identifier was the slug. `tenant_id` becomes `tenantIdHint`. `"dedicated"` is a paid realm: the slug is the realm without `auth.paidRealmPrefix` (`tenant-`). `found: false`, or a missing realm, is no workspace.
+- **Mapping (`toWorkspace`).** `strategy: "shared"` is the trial realm, and the slug is known only when the identifier was the slug (kept trimmed and lower-cased; `toSessionContext` does the same to P-35's `slug`, so the trial slug check compares like with like). `tenant_id` becomes `tenantIdHint`. `"dedicated"` is a paid realm: the slug is the realm without `auth.paidRealmPrefix` (`tenant-`). `found: false`, or a missing realm, is no workspace.
 - **One message for every failure.** `resolveWorkspaceUseCase` turns not found, 429, unreachable, malformed and a URL with no workspace alike into `WorkspaceNotFoundError`; the screen shows "We couldn't find a workspace for that. Try your workspace name — it's the part after /t/ in your workspace link — or ask your administrator." It never says which input failed (email, workspace name or URL).
 - **No shell cache, no retry loop.** One request per submit; the ApiClient's own retries apply to 429 and 502–504. An email or workspace name resolved on the sign-in screen is cached only after a successful sign-in (`rememberWorkspace`, with the slug from P-35). A slug from the URL that PUB-1 resolves is cached by `chooseWorkspace` at once, after the SDK checks that realm and slug match.
 
@@ -456,7 +463,7 @@ sequenceDiagram
     Boot->>SDK: chooseWorkspace(pathname, resolver)
     alt URL has a workspace slug that is cached, or no slug and any workspace is cached
         SDK->>Cache: the slug's workspace, or the most recent one
-        Cache-->>Boot: Workspace (no PUB-1 call)
+        Cache-->>Boot: Workspace (paid: realm confirmed with Keycloak discovery, PUB-1 only if it is gone; trial: re-checked with PUB-1, ≤ 5 s)
     else URL has a workspace slug that is not cached
         SDK->>PUB: resolve(slug) through workspaceResolver
         PUB-->>SDK: realm
@@ -480,7 +487,7 @@ sequenceDiagram
         end
         Screen-->>Boot: Workspace, and loginHint only when an email was typed (onChosen)
     end
-    Boot->>SDK: idp.login(workspace, loginHint)
+    Boot->>SDK: idp.login(workspace, loginHint?, prompt: 'login' when uncheckable)
     Note over SDK: after sign-in rememberWorkspace caches it with the slug from P-35
 ```
 
@@ -488,17 +495,18 @@ sequenceDiagram
 
 ## Session context (P-35), roles and flags
 
-Roles, plan and flags are not in the token. After sign-in the bootstrap loads them from IAM P-35 (`GET /api/v1/me/session-context`) and maps them with `toSessionContext` (snake_case to camelCase; missing lists become empty).
+Roles, plan and flags are not in the token. After sign-in the bootstrap loads them from IAM P-35 (`GET /api/v1/me/session-context`) and maps them with `toSessionContext` (snake_case to camelCase; missing lists become empty; `slug` trimmed and lower-cased).
 
 | Step | What happens |
 |---|---|
 | Load | `sessionContextSource.load()`, with the ApiClient's own retries |
 | Success | `setAuthzSubject({ roles, tenantId })`; `setFlagProvider(sessionContextFlagProvider(context))`; `rememberWorkspace({ …workspace, slug })` moves the URL under `/t/<slug>/`; the IAM `locale` feeds `initializeI18n` |
-| Refused (workspace state) | `blockedWorkspace` (`domain/rules/workspaceAccess.ts`, LLD §7.1): trial ended, workspace suspended or closed, access paused, not a member → `showWorkspaceUnavailable` (Sign out, Switch workspace). A membership refusal is asked once more after 5 s. No subject, flags, `rememberWorkspace` or render |
-| Any other failure | Warning `session context unavailable`; the authorizer denies all and only platform flags apply; `App` shows the missing-permissions notice with Reload |
-| Read-only | `useReadOnly()` (P-35 `read_only`, or a `DENY_TENANT_READ_ONLY` answer seen on the page): `App` shows "Workspace is read-only (subscription ended)" (`ReadOnlyNotice`, IAM spec §7.10), stacked with the missing-permissions notice at the bottom. For a cancelled workspace P-1's `read_only_until` adds "Access ends on <date>" (the grace end, when the workspace is suspended). Remotes disable their own actions; the shell only says why |
-| Background retry | Only after a transient failure (`isTransient`): 3 tries after 1 s, 2 s, 4 s, one request each (`loadSessionContextOnce`, `retry: false`). A success updates the subject, the flags and the `PlatformProvider` live, and re-renders the router if the URL moved. A sign-out aborts it A retry that answers with a workspace state (LLD §7.1) unmounts the app and shows that screen instead. |
-| Workspace banners | After render, once the context is known (the first load or a late one): P-1 `GET /api/v1/tenants/:id` and, for owners and tenant admins (`manage:members`), P-27 `…/seat-usage`, in the background (`loadWorkspaceStatus`). `workspaceBanners` (`domain/rules/workspaceBanners.ts`) picks trial days left (everyone), payment problem (owner, `manage:tenant-settings`), all seats used (owner and tenant admin, `manage:members`; `active_users + pending_invitations >= licensed_seats`, IAM has no overage), no owner (tenant admin); `App` shows them in the bottom stack (`WorkspaceBanners`). A failure logs `workspace status unavailable` and shows none. A trial converted to paid in the last 7 days shows the welcome (A5) once per device and workspace (SDK `storage('shell')` key `upgradeWelcomeSeen`, cleared on sign-out) |
+| Refused (workspace state) | `blockedWorkspace` (`domain/rules/workspaceAccess.ts`, LLD §7.1): trial ended, workspace suspended or closed, access paused, not a member → `showWorkspaceUnavailable` (Sign out, Switch workspace: the sign-in screen, then `switchWorkspace(w, { prompt: 'login' })`). A membership refusal is asked once more after 5 s. No subject, flags, `rememberWorkspace` or render |
+| Any other failure (not a trial with a slug: see that row) | Warning `session context unavailable`; the authorizer denies all and only platform flags apply; `App` shows the missing-permissions notice with Reload |
+| Read-only | `useReadOnly()` (P-35 `read_only`, or a `DENY_TENANT_READ_ONLY` answer seen on the page): `App` shows "Workspace is read-only (subscription ended)" (`ReadOnlyNotice`, IAM spec §7.10), stacked with the missing-permissions notice at the bottom (the stack is `sticky bottom-0` in the page's flow after the remote, so the page ends below it and never hides the remote's last controls). For a cancelled workspace P-1's `read_only_until` adds "Access ends on <date>" (the grace end, when the workspace is suspended). Remotes disable their own actions; the shell only says why |
+| Trial with a slug | P-35 is awaited before anything mounts: every first failure that is not a workspace state (offline, 404, 500 and the transient ones) is tried 3 more times first (1 s, 2 s, 4 s; `retryable` on `retrySessionContext`). `showWorkspaceLoading()` ("Loading your workspace…", words only, nothing of the session) covers the wait; the next screen or the app replaces it. A workspace state from a retry is settled like the first load's (a membership refusal asked once more after 5 s; if that ask fails otherwise, the retries run once more) and shows its screen; no context after them shows "We couldn't load your workspace" (`showWorkspaceLoadFailed`: Sign out, Switch workspace (`prompt: 'login'`) and Try again (a reload, which may fail the same way)); a P-35 `slug` other than the workspace's shows the wrong-workspace screen. None of them renders the app or calls `rememberWorkspace`. A sign-out or an expiry ("Session ended") during the wait stops the boot. Known limit: a workspace state (A6/A8) carries no slug, so a foreign trial session that IAM refuses shows that state's screen, not the wrong-workspace one; nothing else of that tenant shows. Where P-35 is not deployed (404), a trial user with a slug gets the load-failed screen after about 7 s |
+| Background retry | Never for a trial with a slug (above). Only after a transient failure (`isTransient`): 3 tries after 1 s, 2 s, 4 s, one request each (`loadSessionContextOnce`, `retry: false`). A success updates the subject, the flags and the `PlatformProvider` live, and re-renders the router if the URL moved. A sign-out aborts it, or an expiry discards its answer. A retry that answers with a workspace state (LLD §7.1) is settled like the first load's (`settleRefusal`: a membership refusal asked once more after 5 s; the deny-all app stays meanwhile, a context from that ask is applied, another failure keeps deny-all), then unmounts the app and shows that screen. |
+| Workspace banners | After render, once the context is known (the first load or a late one): P-1 `GET /api/v1/tenants/:id` and, for owners and tenant admins (`manage:members`), P-27 `…/seat-usage`, in the background (`loadWorkspaceStatus`). `workspaceBanners` (`domain/rules/workspaceBanners.ts`) picks trial days left, whole days to the nearest day, at least 1 (a new 14-day trial reads 14; "within a day" only in the last 24 h; "Your trial has ended" once the end has passed while IAM still says `trial`) (everyone), payment problem (owner, `manage:tenant-settings`), all seats used (owner and tenant admin, `manage:members`; `active_users + pending_invitations >= licensed_seats`, IAM has no overage), no owner (tenant admin); `App` shows them in the bottom stack (`WorkspaceBanners`). A failure logs `workspace status unavailable` and shows none. A trial converted to paid in the last 7 days and still on a paid plan (`active` or `past_due`, never `cancelled`) shows the welcome (A5) once per device and workspace (SDK `storage('shell')` key `upgradeWelcomeSeen`, cleared on sign-out), marked seen when shown so a screen that replaces it does not bring it back. A sign-out, an expiry or a refusal screen while P-1/P-27 load sets nothing (`stopped()`). The banners are worked out again every hour from the loaded answers (`BANNER_REFRESH_MS`, no new request), so the trial's days left move in an open tab; a sign-out or an expiry stops it |
 | Role map | `domain/rules/permissions.ts`: keys are IAM's closed set (`member`, `tenant_owner`, `tenant_admin`, `tender_admin`); `roleMapAuthorizer` turns roles into `action:resource` UI permissions (one colon each, or it throws), including the IAM screens' `manage:admin-roles`, `manage:tenant-settings` (owner), `manage:sso`, `manage:delegation-policy`, `read:audit` (admin) and `manage:tender-access` (tender admin). Department levels are never roles. UI hints only: the services enforce |
 
 ---
@@ -534,7 +542,7 @@ sequenceDiagram
 
 | Event | Source | The shell's reaction |
 |---|---|---|
-| `expired` (idle, a failed refresh, ended at the server: `serverEnded`, or a workspace switch in another tab) | SDK `/auth`: the idle timer (`auth.idleTimeoutMs`, last activity shared across tabs), the token refresh, or `workspace-switched` on `platform-auth` | `showSessionEnded`: "Session ended" with Sign in, over the running app; `signInAgain` runs only on the click |
+| `expired` (idle, a failed refresh, ended at the server: `serverEnded`, or a workspace switch in another tab) | SDK `/auth`: the idle timer (`auth.idleTimeoutMs`, last activity shared across tabs), the token refresh, or `workspace-switched` on `platform-auth` | `showSessionEnded`: "Session ended" with Sign in, over the running app; `signInAgain` runs only on the click. During start-up it also stops the boot (`stopped()`). Not shown while a refusal screen (A6/A8, wrong workspace, workspace not loaded) is up: that screen stays, since "Session ended" would sign in to the same, possibly foreign, session, and its own Sign out and Switch ask for credentials |
 | `anonymous`, reason `signed-out` | Sign-out here or in another tab (`BroadcastChannel` `platform-auth`) | Abort the boot and the P-35 retry, unmount `#app`, then "You are signed out". The next sign-in sends `prompt=login` |
 | New shell build | `startVersionPolling` (`/version.json` holds the shell's build version; every `appUpdate.pollIntervalMs`, 300 s) | `UpdateAvailable` banner; reload only on the user's click. A new dashboard (a changed manifest only) is picked up on the next page load |
 | P-35 recovered | The background retry | Permissions and flags appear without a reload |
@@ -550,7 +558,7 @@ Tokens are never written to storage. A reload restores the session from Keycloak
 | `@bcbp-solutions-fzc-llc/frontend-sdk:workspaces` | `localStorage` | SDK, `rememberWorkspace` | Cached workspaces (realm, slug), so a return visit skips the sign-in screen |
 | `…:storage:<workspace>:shell:upgradeWelcomeSeen` | `localStorage` (SDK `storage('shell')`) | `infrastructure/storage/upgradeWelcome.ts` | The upgrade welcome (A5) was seen in this workspace on this device; the SDK clears it on sign-out and workspace switch |
 | `@bcbp-solutions-fzc-llc/frontend-sdk:session-id`, `:auth:last-activity`, `:auth:last-user` | `localStorage` | SDK | Telemetry session id, idle timeout across tabs, user change detection |
-| `bcbp.rememberEmail`, `bcbp.loginEmail` | `localStorage` | `infrastructure/storage/rememberedEmail.ts` (behind the domain's `RememberedEmailRepository`) | "Remember Email" only: an email or a bare workspace name only, never a URL (a pasted link may carry a token or code; `isRememberableIdentifier`). Needed before a workspace is known, so it does not use the SDK's per-workspace `storage()`. Every access is wrapped in `try`; blocked storage just forgets |
+| `bcbp.rememberEmail`, `bcbp.loginEmail` | `localStorage` | `infrastructure/storage/rememberedEmail.ts` (behind the domain's `RememberedEmailRepository`) | "Remember Email" only: an email or a bare workspace name only, never a URL (a pasted link may carry a token or code; `isRememberableIdentifier`). With the box checked, a value that cannot be remembered (a URL, an over-long value) clears both keys, as unchecked does: a kept email would become the next person's `login_hint` on a shared device. Needed before a workspace is known, so it does not use the SDK's per-workspace `storage()`. Every access is wrapped in `try`; blocked storage just forgets |
 
 Remotes that need storage use `storage(appId)` from `/storage`, which is namespaced per workspace and refuses token-like keys.
 
@@ -619,6 +627,7 @@ classDiagram
 | `TenantStatus` (P-1) | `name`, `status`, `trialEndsAt?`, `subscriptionStartedAt?`, `ownerlessSince?`, `readOnlyUntil?` | IAM Org & Membership; mapped by `toTenantStatus` |
 | `SeatUsage` (P-27) | `activeUsers`, `pendingInvitations`, `licensedSeats` | IAM Org & Membership; mapped by `toSeatUsage` |
 | Shell value | `user`, `workspace`, `context`, `locale`, `switchWorkspace`, `signOut` | This shell, in `PlatformProvider`; remotes read it through SDK hooks (no props) |
+| `--shell-notices-height` | The bottom notice stack's height in px on `<html>` (`NOTICES_HEIGHT_VAR`, `routes/App.tsx`), `0px` when empty | This shell (`NoticeStack`, `ResizeObserver`, set through the CSSOM); a remote's fixed elements may read it (optional) |
 | Runtime config | `/config/runtime.json`, validated strictly by the SDK (README § Configuration, LLD §9.1) | Each environment |
 | Remote manifest | `/remotes/manifest.json`: `dashboard`, `tenders` → entry URL and `integrity` | Each environment |
 | Storage keys | § Browser storage | SDK, `infrastructure/storage/rememberedEmail.ts` and `infrastructure/storage/upgradeWelcome.ts` |
@@ -730,10 +739,12 @@ A browser shell has no locks, but it has races: an async start-up that a sign-ou
 
 | Race | Guard |
 |---|---|
-| Sign-out while the bootstrap is still awaiting (P-35, i18n, manifest) | `signedOutDuringBoot` (`AbortController`): checked after every await, so the app never mounts for a user who is gone |
-| Sign-out during the P-35 background retry | The same signal aborts the retry's sleep and request; a late answer is discarded |
-| Sign-out while P-1/P-27 load | The same signal aborts the requests (nothing logged); `signedOut()` is checked before the store is set; `noticesRequested` loads once per page |
-| The session expires, or another screen opens, while P-1 loads | The A5 welcome is skipped (`expired` flag, `isScreenShown()`), so "Session ended" or "Workspace not found" is never replaced |
+| Sign-out, or the session expires, while the bootstrap is still awaiting (P-35, i18n, manifest) | `stopped()` (`signedOutDuringBoot` (`AbortController`), `expired`, or `refused`: a refusal screen replaced the boot or the app, through `refuse()`): checked after every await, so the app never mounts for a user who is gone and "Session ended" is never covered |
+| The session expires while a refusal screen is up (A6/A8, wrong workspace, workspace not loaded) | The refusal screen stays (`refused`); "Session ended" is not shown, since its Sign in would ride the same, possibly foreign, session. A sign-out still shows "You are signed out" |
+| Sign-out during the P-35 background retry | The same signal aborts the retry's sleep and request; a late answer is discarded. An expiry lets the retry finish, but its answer is discarded too (`stopped()`) |
+| Sign-out while P-1/P-27 load | The same signal aborts the requests (nothing logged); `stopped()` (sign-out or expiry) is checked before the store is set; `noticesRequested` loads once per page |
+| The session expires, or another screen opens, while P-1 loads | Expiry or a refusal screen: nothing is set (`stopped()`): no banners, no date, no A5, and the hourly banner refresh stops. Another screen up: A5 is skipped (`isScreenShown()`). "Session ended" or "Workspace not found" is never replaced |
+| A remote calls `switchWorkspace` after a sign-out, an expiry or a refusal, or its PUB-1 answer arrives after one | `stopped()` checked before and after PUB-1: nothing is shown, so "Session ended" or the refusal screen stays |
 | Another tab signs out | `BroadcastChannel` `platform-auth` (SDK) → `anonymous`, `signed-out`; the shell unmounts `#app` before "You are signed out" |
 | The idle timer fires, or another tab switches workspace | Last activity is shared across tabs; `workspace-switched` on `platform-auth` (SDK) → `expired`: "Session ended" is shown over the app, and nothing signs in until the click |
 | Overlapping `setLocale` calls (a language switch while a catalogue loads). The bootstrap's two calls cannot overlap: `registerShellMessages` is awaited before `initializeI18n` | The SDK's generation counter: the later call wins |
@@ -751,8 +762,9 @@ A browser shell has no locks, but it has races: an async start-up that a sign-ou
 | Silent restore | Keycloak SSO session | degrade | `anonymous`; the sign-in flow runs |
 | Resolve the email or workspace name | PUB-1 | stop on that screen | One generic message. The user can retry |
 | Leave for Keycloak | Browser navigation | stop | The shell is gone until Keycloak redirects back |
-| Session context, a workspace state | P-35 | stop on that screen | A6/A8 dialog with Sign out and Switch workspace; the app never renders (a membership refusal is asked once more after 5 s; a refusal that a background retry receives unmounts the app) |
-| Session context, any other failure | P-35 | degrade, then recover | Warning log. Deny-all permissions and platform flags until it answers; after a transient failure (a network failure while online, a timeout, 429, 502, 503 or 504 (the SDK ApiClient's own rule)) it is retried after 1 s, 2 s, 4 s, one request per attempt, and applied live (any other answer, offline included, is final) (the router moves under `/t/<slug>/` then). A notice with Reload says some actions are hidden |
+| Session context, a workspace state | P-35 | stop on that screen | A6/A8 dialog with Sign out and Switch workspace; the app never renders (a membership refusal is asked once more after 5 s, on the first load, a trial's pre-render retries and the background retry alike; a refusal that holds on a background retry unmounts the app) |
+| Session context, a trial with a slug that never loads | P-35 | stop on that screen | "We couldn't load your workspace" with Sign out, Switch workspace (`prompt: 'login'`) and Try again (a reload, which may fail the same way) after 3 retries of any failure that is not a workspace state (also offline, 404 and 500: where P-35 is not deployed, every trial user with a slug stops here); the app never renders, since the session may be another trial tenant's: without P-35 the slug cannot be checked, so `INSUFFICIENT_ROLE` keeps it closed too. The text says so ("…so it stays closed. Try again later, sign out, or switch to another workspace."). Every environment where trial users sign in must serve P-35: smoke `live` checks it (401 without a token, never 404) |
+| Session context, any other failure (not a trial with a slug) | P-35 | degrade, then recover | Warning log. Deny-all permissions and platform flags until it answers; after a transient failure (a network failure while online, a timeout, 429, 502, 503 or 504 (the SDK ApiClient's own rule)) it is retried after 1 s, 2 s, 4 s, one request per attempt, and applied live (any other answer, offline included, is final) (the router moves under `/t/<slug>/` then). A notice with Reload says some actions are hidden |
 | Workspace banners | P-1, P-27 | ignore | Warning log `workspace status unavailable`; no banners, no read-only date, no A5. Not retried |
 | Remote manifest | `/remotes/manifest.json` | degrade | Error log. The app renders; `RemoteBoundary` shows its error |
 | Dashboard or tenders load or render | `dashboard` / `tenders` remote | degrade | Boundary message with "Try again". The rest of the shell keeps running |
@@ -769,7 +781,7 @@ A browser shell has no locks, but it has races: an async start-up that a sign-ou
 | The shell is a public OAuth client. There is no client secret in the repo or the bundle | Runtime config has a `clientId` only |
 | Tokens never touch storage | SDK `/auth`. `no-raw-storage` lint rule on `src/` (off only for `src/infrastructure/storage/rememberedEmail.ts`) |
 | No login starts without a click after a logout | `showSignedOut`, `showDeviceClock`, `showSessionEnded` |
-| The app never renders for a wrong-workspace login | `isWrongWorkspace` check before render |
+| The app never renders for a wrong-workspace login | P-35's slug for a trial with a slug, awaited before render; `isWrongWorkspace` check before render |
 | The app never renders when P-35 refuses the workspace (A6/A8) | `blockedWorkspace` / `settleRefusal` before render (bootstrap.tsx); a late refusal unmounts it |
 | The bootstrap runs once, behind the async boundary | `src/app/bootstrap/index.ts` |
 | Remotes take React, the OTel API and the SDK from the shell | Preset shared map; the plugin's `ProvideSdkRspackPlugin` provides every SDK subpath |
@@ -849,9 +861,9 @@ Vitest 5, happy-dom at `http://localhost:5001/`, Testing Library. `vitest.config
 | Layer | Path | What it locks |
 |---|---|---|
 | Unit | `test/unit/` | PUB-1, P-35, P-1 and P-27 mappings and the port calls, which banner shows to whom, the A5 window and seen flag, the P-35 refusal codes and their statuses (and the one re-ask of a membership refusal), the identifier rule (email, name, URL forms, 254 characters) and the role map's grants, the entry point's fatal path, remember-email with blocked storage, the screen host, `BrandLogo`, the session-context retry and store, the navigator adapter |
-| Integration | `test/integration/` | The login page and the carousel, every session screen, `App` routes and props (the banners and the read-only date included), and the bootstrap: the exact initialisation order, each anonymous reason, wrong workspace, a P-35 refusal that is a workspace state (A6/A8: no render; the re-ask; a late refusal unmounting the app) and one that is not (`INSUFFICIENT_ROLE`), missing context and its background retry, the banner load (P-27 only for owners and admins, failures, a late context, a sign-out mid-load) and A5 once, sign-out during boot, i18n `detect`, navigator registration, start-up failure reporting, manifest failure, expiry and sign-out events; axe-core over every shell screen (`accessibility.test.tsx`) |
-| End to end | `test/e2e/` | The real bootstrap and SDK (inlined by Vitest, fresh per simulated page load) against a fake Keycloak and network: PKCE sign-in, `/t/<slug>/`, the remote's SDK hooks and permissions, deny-all, P-35 refusals showing A6/A8 with no remote load, the trial, seats and read-only-date banners from P-1/P-27 (no P-27 for a member), A5 once, an IAM outage that recovers in the background, a failing remote, global sign-out (form POST), the device clock |
-| Browser | `test/browser/`, CI `browser` | The production build in Chromium, Firefox and WebKit under the production CSP and Trusted Types, over HTTPS, with a fake Keycloak on a second origin: self-hosted fonts and hashed images, PKCE sign-in, the remote's entry with integrity and the share scope, `navigate()` without a reload, the sign-out form POST under `form-action`, the start-up failure reaching `/otel`, colour contrast (axe on the login page; the read-only notice's and a workspace banner's ratio measured in the signed-in page) |
+| Integration | `test/integration/` | The login page and the carousel, every session screen, `App` routes and props (the banners and the read-only date included), and the bootstrap: the exact initialisation order, each anonymous reason (`login-required` without a workspace: the sign-in screen with or without a slug, never `chooseWorkspace`; a trial sign-in nothing can check asks for credentials), wrong workspace, a trial with a slug (P-35 awaited; its slug checked; "We couldn't load your workspace"), a P-35 refusal that is a workspace state (A6/A8: no render; the re-ask; a late refusal unmounting the app) and one that is not (`INSUFFICIENT_ROLE`), missing context and its background retry, the banner load (P-27 only for owners and admins, failures, a late context, a sign-out mid-load, the hourly recompute) and A5 once (seen when shown), "Loading your workspace…" while P-35 is awaited, every way into an uncheckable trial asking for credentials, a remote's switch rejecting when PUB-1 cannot answer, sign-out during boot, i18n `detect`, navigator registration, start-up failure reporting, manifest failure, expiry and sign-out events; axe-core over every shell screen (`accessibility.test.tsx`) |
+| End to end | `test/e2e/` | The real bootstrap and SDK (inlined by Vitest, fresh per simulated page load) against a fake Keycloak and network: PKCE sign-in, `/t/<slug>/`, the remote's SDK hooks and permissions, deny-all, P-35 refusals showing A6/A8 with no remote load, the trial, seats and read-only-date banners from P-1/P-27 (no P-27 for a member), A5 once, an IAM outage that recovers in the background, a failing remote, global sign-out (form POST), the device clock, a trial deep link whose P-35 slug is another tenant's (wrong-workspace screen), a trial whose P-35 never loads ("We couldn't load your workspace"), a silent restore of a trial PUB-1 no longer knows (the email screen, one PUB-1 call), a WAF challenge page in place of PUB-1 (the saved workspace kept), a reload of a paid workspace Keycloak still serves (no PUB-1 call), a reload after a revert deleted the paid realm (restored into the trial realm, one PUB-1 call) |
+| Browser | `test/browser/`, CI `browser` | The production build in Chromium, Firefox and WebKit under the production CSP and Trusted Types, over HTTPS, with a fake Keycloak on a second origin: self-hosted fonts and hashed images, PKCE sign-in, the remote's entry with integrity and the share scope, `navigate()` without a reload, the sign-out form POST under `form-action`, the start-up failure reaching `/otel`, colour contrast (axe on the login page; the read-only notice's and a workspace banner's ratio measured in the signed-in page), at a 300 px window the content ending above the sticky notice stack with `--shell-notices-height` equal to its height, a reload loading the saved paid realm's discovery document under `connect-src` (SDK alpha.9) |
 | Dashboard contract | `test/browser/dashboard.spec.ts`, CI `dashboard-contract` | The real mfe-dashboard build in this shell under the production CSP (informational) |
 | Smoke | `test/smoke/`, `.github/scripts/smoke-tests.sh` | Image at most 200 MB and the startup gate, then the suite against the container: SPA rule, Cache-Control per location, script integrity, 404s, runtime config and manifest validated by the SDK. With `SMOKE_MODE=live`, a deployment's security headers too |
 
@@ -899,7 +911,7 @@ What the shell promises to others, and how each promise changes (VERSIONING.md h
 |---|---|---|
 | Platform SDK version | All three packages together, exact pins; shell first, unless the release changes the shell–remote contract (then deploy together); `/sdk-upgrade` | `check-sdk-pins.mjs` (hook), `SdkVersionPlugin` (build), `test-contract` |
 | `runtime.json` schema | The SDK's schema (strict; unknown keys refused). New keys arrive with an SDK release (alpha.6: `environment`) | The SDK at start-up; smoke `image` and `live` |
-| Remote contract | Remote name `dashboard`, container `__platform_mfe_dashboard`, no props, the `PlatformProvider` shell value. A rename is a MAJOR change and deploys with the dashboard. Remote `tenders` (mfe-tender): container `__platform_mfe_tenders`, no props, `ownerDomain` `tender_management`; same rules, deploys with mfe-tender | `npm run test-contract` against a real mfe-dashboard build; CI `Dashboard contract`. `tenders`: integration and e2e stubs only (LLD §15 #18) |
+| Remote contract | Remote name `dashboard`, container `__platform_mfe_dashboard`, no props, the `PlatformProvider` shell value. A rename is a MAJOR change and deploys with the dashboard. Remote `tenders` (mfe-tender): container `__platform_mfe_tenders`, no props, `ownerDomain` `tender_management`; same rules, deploys with mfe-tender. The CSS variable `--shell-notices-height` is additive: removing or renaming it is a MAJOR change; a remote need not read it | `npm run test-contract` against a real mfe-dashboard build; CI `Dashboard contract`. `tenders`: integration and e2e stubs only (LLD §15 #18) |
 | Routes and storage keys | `/t/<slug>/dashboard/*`, `/t/<slug>/tenders/*`; `bcbp.*` keys and `…:storage:<workspace>:shell:upgradeWelcomeSeen`. A change updates README, ARCHITECTURE, the LLD and CHANGELOG together | e2e and browser suites (`/tenders/*`: integration and e2e only) |
 | IAM ports (PUB-1, P-35, P-1, P-27) | IAM's swagger; the SDK's contract cases; P-35 refusal codes (LLD §7.1): IAM's replies of 2026-11-24 | `test/unit/iam.test.ts` against the SDK's contract cases; `test/unit/session-context.test.ts` for the refusal codes; `test/unit/workspace-status.test.ts` for P-1 and P-27 (no SDK contract cases exist for them) |
 | The shell's text | Keys of `src/shared/i18n/en.json`; a new locale adds a catalogue | `test/unit/shell-text.test.ts` |
@@ -914,7 +926,7 @@ Each row is a mechanism in this repo or in the SDK it relies on.
 |---|---|---|---|
 | Spoofing | A forged `state` is paired with an attacker's authorization code | SDK `/auth` | `state` and the PKCE verifier are checked before the token request |
 | Spoofing | A script plants a session in storage | SDK `/auth` | There is no stored session to plant. Tokens are in memory |
-| Spoofing | A trial login lands in another tenant than the invitation's | `bootstrap.tsx` | `isWrongWorkspace` stops the render and the workspace is not cached |
+| Spoofing | A trial login lands in another tenant than the invitation's | `bootstrap.tsx` | `isWrongWorkspace` (and, for a trial with a slug, P-35's slug) stops the render and the workspace is not cached; a trial sign-in that nothing can check (no slug, no `tenantIdHint`) asks for credentials (`prompt: 'login'`) |
 | Tampering | A query parameter or manifest entry swaps the remote origin | SDK `/mfe` | Entries load only from the page's origin or `remotes.allowedOrigins`, and are integrity-pinned outside local, dev and test |
 | Tampering | A chunk on the CDN is swapped | Preset `ChunkIntegrityPlugin` | Every script carries `integrity`; a mismatch fails as a chunk-load error |
 | Tampering | The remote's script runs in the shell origin | Module Federation | Expected. A remote is trusted code. The boundary catches a throw. It does not sandbox the remote |

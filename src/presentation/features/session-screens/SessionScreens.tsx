@@ -170,7 +170,41 @@ export function UpgradeWelcomeDialog({ name, onContinue }: { name: string; onCon
   )
 }
 
-/** A trial login that landed in another tenant than the invitation's: never cached, app not rendered. */
+/**
+ * While the bootstrap waits on P-35 before anything may render (a trial's check, a refusal's second
+ * ask): words only, nothing of the session, which may be someone else's.
+ */
+export function WorkspaceLoadingScreen() {
+  const text = useShellText()
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#030d1b]/90 px-6 font-sans">
+      <p role="status" aria-live="polite" className="m-0 text-sm text-white">
+        {text('session.loading')}
+      </p>
+    </div>
+  )
+}
+
+/**
+ * A trial session whose workspace could not be checked (P-35 did not load): the app is not rendered,
+ * since the session may be another trial tenant's. A reload may fail the same way, so the user can also
+ * sign out or switch.
+ */
+export function WorkspaceLoadFailedDialog({ onRetry, onSignOut, onSwitch }: { onRetry: () => void; onSignOut: () => void; onSwitch: () => void }) {
+  return (
+    <Dialog title="session.loadFailed.title" role="alertdialog">
+      <Text id="session.loadFailed.text" />
+      <Button onClick={onRetry} label="common.tryAgain" />
+      <Button onClick={onSignOut} label="common.signOut" />
+      <Button onClick={onSwitch} label="session.wrongWorkspace.switch" />
+    </Dialog>
+  )
+}
+
+/**
+ * A trial login that landed in another tenant than the invitation's, or than the trial workspace the
+ * URL or the cache named (P-35's slug differs): never cached, app not rendered.
+ */
 export function WrongWorkspaceDialog({ onSignOut, onSwitch }: { onSignOut: () => void; onSwitch: () => void }) {
   return (
     <Dialog title="session.wrongWorkspace.title" role="alertdialog">

@@ -5,7 +5,7 @@ import { createApiClient } from '@bcbp-solutions-fzc-llc/frontend-sdk/http'
 import { createTestPlatform, mockApi, mockProblem } from '@bcbp-solutions-fzc-llc/frontend-sdk/testing'
 import type { SessionContext } from '@bcbp-solutions-fzc-llc/frontend-sdk/auth'
 import { workspaceBlock } from '../../src/domain/rules/workspaceAccess'
-import { blockedWorkspace, createStore, isTransient, retrySessionContext, settleRefusal } from '../../src/application/use-cases/loadSessionContext'
+import { blockedWorkspace, createStore, isTransient, refusalIsReasked, retrySessionContext, settleRefusal } from '../../src/application/use-cases/loadSessionContext'
 
 const ctx = { tenantId: 't-1', slug: 'acme', roles: ['member'] } as unknown as SessionContext
 /**
@@ -178,6 +178,21 @@ describe('blockedWorkspace (P-35 refusals that are workspace states)', () => {
     expect(blockedWorkspace(new Error('403'))).toBeUndefined()
     // A problem with no errorCode at all.
     expect(workspaceBlock(403, undefined)).toBeUndefined()
+  })
+})
+
+describe('refusalIsReasked (whether the bootstrap shows "Loading your workspace…" while settleRefusal waits)', () => {
+  it('is true only for a membership refusal, which settleRefusal asks again after its delay', async () => {
+    const refusal = async (errorCode: string, status = 403) =>
+      parseProblemResponse(mockProblem(status === 404 ? PlatformProblemTypes.NotFound : PlatformProblemTypes.Forbidden, { errorCode }))
+    expect(refusalIsReasked(await refusal('MEMBER_SUSPENDED'))).toBe(true)
+    expect(refusalIsReasked(await refusal('DENY_UNRESOLVABLE_SUBJECT'))).toBe(true)
+    expect(refusalIsReasked(await refusal('MEMBER_NOT_FOUND', 404))).toBe(true)
+    // A tenant state settles at once: its screen comes with no loading screen first.
+    expect(refusalIsReasked(await refusal('TENANT_TRIAL_EXPIRED'))).toBe(false)
+    expect(refusalIsReasked(await refusal('TENANT_SUSPENDED'))).toBe(false)
+    expect(refusalIsReasked(await refusal('INSUFFICIENT_ROLE'))).toBe(false)
+    expect(refusalIsReasked(new Error('500'))).toBe(false)
   })
 })
 

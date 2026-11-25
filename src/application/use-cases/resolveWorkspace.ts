@@ -13,7 +13,7 @@ export interface ResolveWorkspaceOptions {
 }
 
 /**
- * "Not found", rate-limited, unreachable and an identifier that names no workspace (empty, over 254
+ * "Not found", rate-limited, unreachable and an identifier that names no workspace (empty, an email or name over 254
  * characters, a URL without /t/<slug>) all end as WorkspaceNotFoundError (never says which).
  */
 export function resolveWorkspaceUseCase(resolver: WorkspaceResolver, o: ResolveWorkspaceOptions = {}): ResolveWorkspace {
