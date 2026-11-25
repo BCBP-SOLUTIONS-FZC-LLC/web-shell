@@ -1,7 +1,7 @@
 // The signed-in shell. The bootstrap renders this only with an authenticated session, so there is
 // no signed-out route here: sign-in screens are mounted by the bootstrap outside this tree.
-import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode, type RefObject } from 'react'
-import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate, type NavigateFunction } from 'react-router-dom'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode, type RefObject } from 'react'
+import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import {
   MFEErrorBoundary,
   RemoteBoundary,
@@ -152,10 +152,73 @@ function ReadOnly({ until }: { until: string | undefined }) {
   return useReadOnly() ? <ReadOnlyNotice until={until} /> : null
 }
 
-/** Hands the router's navigate to the bootstrap, which registers it as the SDK's navigator. */
-function RouterBridge({ onRouter }: { onRouter: (navigate: NavigateFunction) => void }) {
+/**
+ * react-router's navigate as the SDK's navigator uses it: a path under the basename, push or replace. The
+ * same shape as `RouterNavigate` in infrastructure/federation/navigator.ts (routes may not import
+ * infrastructure); the bootstrap passes this one to `shellNavigator`, so the compiler checks they agree.
+ */
+export type RouterNavigate = (to: string, o?: { replace?: boolean }) => void
+
+/** A router path's section, its first segment: '/tenders/T-1?x' → '/tenders'. */
+export function sectionOf(path: string): string {
+  return /^\/[^/?#]*/.exec(path)?.[0] ?? '/'
+}
+
+/** A section as the routes match it: decoded (`/%61dmin` is `/admin`) and without case. */
+function matchedSection(path: string): string {
+  const section = sectionOf(path)
+  try {
+    return decodeURIComponent(section).toLowerCase()
+  } catch {
+    return section.toLowerCase() // a malformed escape: compared as written
+  }
+}
+
+/** Whether two router paths are in the same section, compared as the routes match them. */
+export function sameSection(a: string, b: string): boolean {
+  return matchedSection(a) === matchedSection(b)
+}
+
+/** The address bar's path and query: what a remote's own router shows. */
+const addressBar = () => window.location.pathname + window.location.search
+
+/**
+ * Hands the router's navigate to the bootstrap, which registers it as the SDK's navigator. Each remote runs
+ * its own router, which does not see this one's navigation: a navigate() that stays in the section the
+ * shell's routes show (`navigate('admin', '/t/acme/admin/users')` while `/admin/settings` shows) would keep
+ * the same route element mounted, change the URL and leave the page. So such a move, once it has changed
+ * the address bar's path or query, remounts the routes (`onVisit`), and the remote's router starts at the new
+ * URL. A move to another section mounts that remote anyway; a move that changes nothing (the same path and
+ * query, or a hash) remounts nothing, so a remote's state is not lost and a remote that navigates to where it
+ * is cannot loop. A query change remounts too: a remote keeps a filter or tab in the query with its own
+ * router, never with navigate() (LLD §4.5).
+ *
+ * Once the router is gone (App unmounted: a sign-out, a refusal screen, "Session ended" over a refusal), a
+ * late navigate() does nothing: the screen that replaced the app stays, and no page load can start a
+ * sign-in without a click. The next App (a new basename) registers its own navigator.
+ */
+function RouterBridge({ onRouter, onVisit }: { onRouter: (navigate: RouterNavigate) => void; onVisit: () => void }) {
   const navigate = useNavigate()
-  useEffect(() => onRouter(navigate), [navigate, onRouter])
+  // The section the shell's routes show: a remount is needed only when that route element stays. The
+  // navigator is registered again on each change (react-router's navigate changes with it anyway).
+  const { pathname } = useLocation()
+  // Set only on mount and unmount, never between two registrations, so a navigate() made while React swaps
+  // one registration for the next still reaches the router.
+  const mounted = useRef(false)
+  useEffect(() => {
+    mounted.current = true
+    return () => {
+      mounted.current = false
+    }
+  }, [])
+  useEffect(() => {
+    onRouter((to, o) => {
+      if (!mounted.current) return
+      const before = addressBar()
+      void navigate(to, o)
+      if (addressBar() !== before && sameSection(to, pathname)) onVisit()
+    })
+  }, [navigate, onRouter, onVisit, pathname])
   return null
 }
 
@@ -207,7 +270,7 @@ function NoticeStack({ children }: { children: ReactNode }) {
  *
  * A link is followed by this router. Each remote runs its own router, which does not see this one's
  * navigation, so a link to the section the user is in remounts the routes (`onVisit`): it opens that
- * section's start page instead of changing only the URL (§15 #18).
+ * section's start page instead of changing only the URL (§6.6d; a remote's navigate(): §4.5).
  */
 function Frame({ basename, remotes, workspaceName, onVisit }: { basename: string | undefined; remotes: ReadonlySet<string>; workspaceName: string | undefined; onVisit: () => void }) {
   const text = useShellText()
@@ -220,7 +283,7 @@ function Frame({ basename, remotes, workspaceName, onVisit }: { basename: string
   const mayAdminister = useHasPermission(ADMIN_ENTRY.action, ADMIN_ENTRY.resource)
   const ref = useRef<HTMLDivElement>(null)
   usePublishedHeight(ref, HEADER_HEIGHT_VAR)
-  const inSection = (to: string) => pathname === to || pathname.startsWith(`${to}/`)
+  const inSection = (to: string) => sameSection(to, pathname)
   const link = (id: string, to: string, label: ShellKey): FrameLink => ({
     id,
     to,
@@ -261,7 +324,7 @@ export default function App({
   remotes = NO_REMOTES,
 }: {
   basename?: string
-  onRouter?: (navigate: NavigateFunction) => void
+  onRouter?: (navigate: RouterNavigate) => void
   notices?: Live<AppNotices>
   /** The remotes this environment serves (the manifest's, less those switched off): the header links to these. */
   remotes?: ReadonlySet<string>
@@ -269,18 +332,20 @@ export default function App({
   const context = useSessionContext()
   const { banners, readOnlyUntil, workspaceName } = useSyncExternalStore(notices.subscribe, notices.get, notices.get)
   const frame = useFeatureFlag(FRAME_FLAG, true)
-  // Bumped by a header link to the section the user is in: the routes are keyed by it, so that remote mounts afresh (Frame).
+  // Bumped by a move into the section the user is in (a header link, or a remote's navigate()): the routes are
+  // keyed by it, so that remote mounts afresh at the new URL (Frame, RouterBridge).
   const [visit, setVisit] = useState(0)
+  const remount = useCallback(() => setVisit((v) => v + 1), [])
   // The shell's own screens in an error boundary (the SDK's): a render error is logged and counted
   // under `web-shell` and replaced by AppError instead of a blank page. The remote has its own
   // (RemoteBoundary), so a remote's error never reaches this one.
   return (
     <MFEErrorBoundary mfe={SHELL_MFE} fallback={(e) => <AppError reference={e.traceId ?? e.requestId} onRetry={e.retry} />}>
       <BrowserRouter {...(basename ? { basename } : {})}>
-        {onRouter ? <RouterBridge onRouter={onRouter} /> : null}
+        {onRouter ? <RouterBridge onRouter={onRouter} onVisit={remount} /> : null}
         <Update />
         <div className="flex min-h-screen flex-col">
-          {frame ? <Frame basename={basename} remotes={remotes} workspaceName={workspaceName} onVisit={() => setVisit((v) => v + 1)} /> : null}
+          {frame ? <Frame basename={basename} remotes={remotes} workspaceName={workspaceName} onVisit={remount} /> : null}
           <div className="flex-1" key={visit}>
             <Routes>
               <Route path="/dashboard/*" element={<Dashboard />} />

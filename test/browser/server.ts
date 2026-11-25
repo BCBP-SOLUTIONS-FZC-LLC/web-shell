@@ -87,8 +87,11 @@ const REMOTE_ENTRY = `(() => {
         const workspace = sdk.useWorkspace()
         const canManage = sdk.useHasPermission('manage', 'members')
         const signOut = sdk.useSignOut()
+        // As a remote's own router does: the URL is read once, when it mounts.
+        const mountedAt = React.useState(() => window.location.pathname)[0]
         return h('main', null,
           h('h1', null, 'Dashboard for ' + (user && user.name) + ' in ' + (workspace && workspace.slug)),
+          h('p', null, 'Mounted at ' + mountedAt),
           canManage ? h('button', { type: 'button' }, 'Invite') : null,
           h('button', { type: 'button', onClick: () => nav.navigate('dashboard', '/t/' + workspace.slug + '/dashboard/members') }, 'Members'),
           h('button', { type: 'button', onClick: () => void signOut() }, 'Sign out'))

@@ -256,7 +256,7 @@ The remote never runs its own Keycloak client, never reads tokens, and never imp
 
 ### 5. Navigation
 
-`navigate()` from the SDK's `/nav` goes through the shell's router when the path is under the current `/t/<slug>` basename (no reload), and is a full load otherwise (`infrastructure/federation/navigator.ts`).
+`navigate()` from the SDK's `/nav` goes through the shell's router when the path is under the current `/t/<slug>` basename (no reload), and is a full load otherwise (`infrastructure/federation/navigator.ts`). The path decides: `appId` is ignored, so a cross-remote path carries the workspace prefix (`/t/acme/admin/users`). A move that stays in the section the shell's routes show, and changes the path or query, mounts that remote again at the new path, because its own router does not see the shell's navigation; a move that changes nothing (the same path and query, or a hash) remounts nothing. Within its own section a remote uses its own router: its own `navigate()` there would remount it and lose its state.
 
 ### 6. Errors
 

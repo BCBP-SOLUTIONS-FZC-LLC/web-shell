@@ -25,7 +25,7 @@ npx playwright install chromium firefox webkit   # once, if the browsers are mis
 | Login page | No CSP violation; Geist loaded from `/assets/`; carousel images hashed under `/assets/`; no third-party request |
 | Sign-in | PKCE through the fake Keycloak, `/t/acme/dashboard`, the remote's entry loaded with its integrity through Trusted Types, role map (`Invite` for an owner), no token in storage |
 | Reload | A reload of the saved paid workspace loads its realm's discovery document (the SDK's realm probe, alpha.9) under `connect-src`, then restores silently to the dashboard; no CSP violation |
-| `navigate()` | A remote's navigation under the basename changes the URL without a reload (`registerNavigator`) |
+| `navigate()` | A remote's `navigate()` under the basename changes the URL without a reload (`registerNavigator`), and the mounted remote is mounted again at the new path; no CSP violation |
 | Sign-out | The form POST reaches Keycloak under `form-action` with `client_id`, `id_token_hint`, `post_logout_redirect_uri`; "You are signed out"; the next sign-in sends `prompt=login` |
 | Start-up failure | A missing `/config/runtime.json` shows the unavailable page and `the app could not start` reaches `/otel/v1/logs` |
 | Read-only notice | P-35 `read_only` shows "Workspace is read-only (subscription ended)" under the production CSP; its contrast ratio measured in the page (≥ 4.5; axe cannot be injected into the signed-in page) and no CSP violation |
