@@ -4,7 +4,7 @@ import { NetworkError, PlatformProblemTypes, TimeoutError, parseProblemResponse,
 import { createApiClient } from '@bcbp-solutions-fzc-llc/frontend-sdk/http'
 import { createTestPlatform, mockApi, mockProblem } from '@bcbp-solutions-fzc-llc/frontend-sdk/testing'
 import type { SessionContext } from '@bcbp-solutions-fzc-llc/frontend-sdk/auth'
-import { workspaceBlock } from '../../src/domain/rules/workspaceAccess'
+import { isPageWorkspace, workspaceBlock } from '../../src/domain/rules/workspaceAccess'
 import { blockedWorkspace, createStore, isTransient, refusalIsReasked, retrySessionContext, settleRefusal } from '../../src/application/use-cases/loadSessionContext'
 
 const ctx = { tenantId: 't-1', slug: 'acme', roles: ['member'] } as unknown as SessionContext
@@ -234,5 +234,36 @@ describe('settleRefusal (a membership refusal is asked once more)', () => {
     const load = vi.fn<() => Promise<SessionContext>>()
     expect(await settleRefusal(first, load, { signal: stop.signal })).toEqual({ error: first })
     expect(load).not.toHaveBeenCalled()
+  })
+})
+
+describe('isPageWorkspace (a refreshed session context never rebinds the page)', () => {
+  const paid = { trial: false, slug: 'acme' }
+  const acme = { tenantId: 't-1', slug: 'acme' }
+
+  it('a trial with a slug: P-35 must name that slug, as on the first load (one realm for every trial tenant)', () => {
+    const trial = { trial: true, slug: 'beta' }
+    expect(isPageWorkspace({ tenantId: 't-9', slug: 'beta' }, undefined, trial)).toBe(true)
+    expect(isPageWorkspace({ tenantId: 't-9', slug: 'gamma' }, { tenantId: 't-9', slug: 'beta' }, trial)).toBe(false)
+    expect(isPageWorkspace({ tenantId: 't-9' }, { tenantId: 't-9', slug: 'beta' }, trial)).toBe(false)
+  })
+
+  it('otherwise the same tenant as the context the page has, and the same slug when both name one', () => {
+    expect(isPageWorkspace(acme, acme, paid)).toBe(true)
+    expect(isPageWorkspace({ tenantId: 't-2', slug: 'globex' }, acme, paid)).toBe(false)
+    // Another tenant without a slug: still refused.
+    expect(isPageWorkspace({ tenantId: 't-2' }, acme, paid)).toBe(false)
+    expect(isPageWorkspace({ tenantId: 't-1', slug: 'other' }, acme, paid)).toBe(false)
+  })
+
+  it('a body without a slug, or with a null one, keeps its context (LLD §4.2)', () => {
+    expect(isPageWorkspace({ tenantId: 't-1' }, acme, paid)).toBe(true)
+    expect(isPageWorkspace({ tenantId: 't-1', slug: null }, acme, paid)).toBe(true)
+    expect(isPageWorkspace(acme, { tenantId: 't-1', slug: null }, paid)).toBe(true)
+  })
+
+  it('nothing to compare without a context yet (a deny-all page), as on the first load: a realm name in another case passes', () => {
+    expect(isPageWorkspace({ tenantId: 't-1', slug: 'acme' }, undefined, { trial: false, slug: 'Acme' })).toBe(true)
+    expect(isPageWorkspace({ tenantId: 't-9', slug: 'beta' }, undefined, { trial: true })).toBe(true)
   })
 })

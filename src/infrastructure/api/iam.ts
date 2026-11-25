@@ -58,8 +58,8 @@ export function toSessionContext(r: SessionContextResponse): SessionContext {
   return {
     tenantId: r.tenant_id,
     // Trimmed and lower-cased like a PUB-1 trial slug (toWorkspace): the bootstrap's trial check compares the two.
-    // A body without a slug (outside the contract) keeps the context, as before: the trial check and the focus
-    // refresh compare slugs only when both are known.
+    // A body without a slug (outside the contract) keeps the context, as before, except for a trial with a
+    // slug: its check, on the first load and on a focus refresh, needs P-35 to name that slug.
     slug: typeof r.slug === 'string' ? r.slug.trim().toLowerCase() : r.slug,
     roles: r.roles ?? [],
     departments: r.departments ?? [],

@@ -1106,6 +1106,78 @@ describe('bootstrap, the session-context refresh on focus', () => {
     expect(screen.getByRole('main')).toHaveTextContent('app at /t/acme')
   })
 
+  it('keeps the page when P-35 sends slug null for this tenant (a paid workspace)', async () => {
+    await act(() => bootstrap())
+    loadContext.mockResolvedValue({ tenantId: 't-1', slug: null, roles: ['member', 'tenant_admin'] })
+    later(MINUTE)
+    focus()
+    await settle()
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    expect(subjects.at(-1)).toEqual({ roles: ['member', 'tenant_admin'], tenantId: 't-1' })
+  })
+
+  it('shows the wrong-workspace screen for another tenant even without a slug', async () => {
+    await act(() => bootstrap())
+    loadContext.mockResolvedValue({ tenantId: 't-2', roles: ['member'] })
+    later(MINUTE)
+    focus()
+    await settle()
+    expect(screen.getByRole('alertdialog', { name: 'You signed in to a different workspace' })).toBeInTheDocument()
+    expect(screen.queryByRole('main')).not.toBeInTheDocument()
+  })
+
+  it('a trial with a slug: a refresh without that slug shows the wrong-workspace screen, as the first load would', async () => {
+    initResult = { status: 'authenticated', user, workspace: { realm: 'trial', trial: true, slug: 'beta' }, expiresAt: Date.now() + 60_000 }
+    loadContext.mockResolvedValue({ tenantId: 't-9', slug: 'beta', roles: ['member'] })
+    await act(() => bootstrap())
+    expect(screen.getByRole('main')).toBeInTheDocument()
+    loadContext.mockResolvedValue({ tenantId: 't-9', roles: ['member', 'tenant_admin'] })
+    later(MINUTE)
+    focus()
+    await settle()
+    expect(screen.getByRole('alertdialog', { name: 'You signed in to a different workspace' })).toBeInTheDocument()
+  })
+
+  it('a refresh answer older than one the background retry applied is dropped', async () => {
+    let refreshAnswer!: (c: unknown) => void
+    let retryAnswer!: (c: unknown) => void
+    loadContext
+      .mockRejectedValueOnce(new NetworkError(false, 'req-1')) // the first load: retried in the background
+      .mockRejectedValueOnce(new NetworkError(false, 'req-2')) // the retry's first attempt (after 1 s)
+      .mockImplementationOnce(() => new Promise((r) => (refreshAnswer = r))) // the refresh, sent first
+      .mockImplementationOnce(() => new Promise((r) => (retryAnswer = r))) // the retry's second attempt, sent later
+    const started = bootstrap()
+    await act(() => vi.advanceTimersByTimeAsync(1_000))
+    later(MINUTE)
+    focus()
+    await settle()
+    await act(() => vi.advanceTimersByTimeAsync(2_000))
+    expect(loadContext).toHaveBeenCalledTimes(4)
+    // The later request answers first, with the role change; the earlier one answers last, without it.
+    retryAnswer({ tenantId: 't-1', slug: 'acme', roles: ['member', 'tenant_admin'] })
+    await settle()
+    refreshAnswer({ tenantId: 't-1', slug: 'acme', roles: ['member'] })
+    await act(() => vi.advanceTimersByTimeAsync(10_000))
+    await act(() => started)
+    expect(subjects.at(-1)).toEqual({ roles: ['member', 'tenant_admin'], tenantId: 't-1' })
+  })
+
+  it('a refusal the refresh shows ends the background retry: no more P-35 requests', async () => {
+    loadContext
+      .mockRejectedValueOnce(new NetworkError(false, 'req-1'))
+      .mockRejectedValueOnce(new NetworkError(false, 'req-2')) // the retry's first attempt; it backs off 2 s
+      .mockRejectedValueOnce(await parseProblemResponse(mockProblem(PlatformProblemTypes.Forbidden, { errorCode: 'TENANT_TRIAL_EXPIRED' })))
+    const started = bootstrap()
+    await act(() => vi.advanceTimersByTimeAsync(1_000))
+    later(MINUTE)
+    focus()
+    await settle()
+    expect(screen.getByRole('alertdialog', { name: 'Your trial has ended' })).toBeInTheDocument()
+    await act(() => vi.advanceTimersByTimeAsync(10_000))
+    await act(() => started)
+    expect(loadContext).toHaveBeenCalledTimes(3)
+  })
+
   it('stops listening after a sign-out', async () => {
     const removed = vi.spyOn(window, 'removeEventListener')
     await act(() => bootstrap())

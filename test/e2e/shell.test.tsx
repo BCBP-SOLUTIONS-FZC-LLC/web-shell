@@ -116,17 +116,26 @@ async function otherModule(name: string): Promise<{ default: ComponentType }> {
 }
 
 /**
- * The window `focus` listeners a page added (the shell's session-context refresh): a page load drops them,
- * so unload() removes them, and a focus fired in one test reaches only that test's page.
+ * The window `focus` listeners a page added while it was loaded (the shell's session-context refresh): a
+ * page load drops them, so unload() removes them, and a focus fired in one test reaches only that test's
+ * page. Only those added after load() started count. The page's `visibilitychange` listeners on `document`
+ * stay: removing them breaks the SDK sign-in in this harness, so no test here fires `visibilitychange` (the
+ * integration suite covers that trigger).
  */
-const focusListeners: EventListenerOrEventListenerObject[] = []
-const addToWindow = window.addEventListener.bind(window)
-window.addEventListener = ((type: string, listener: EventListenerOrEventListenerObject | null, o?: AddEventListenerOptions | boolean) => {
-  if (listener && type === 'focus') focusListeners.push(listener)
-  if (listener) addToWindow(type, listener, o)
-}) as typeof window.addEventListener
+const pageListeners: { target: Window | Document; type: string; listener: EventListenerOrEventListenerObject }[] = []
+let pageLoaded = false
+const originalAdd = new Map<Window | Document, typeof window.addEventListener>()
+for (const target of [window, document] as (Window | Document)[]) {
+  const add = target.addEventListener.bind(target) as typeof window.addEventListener
+  originalAdd.set(target, target.addEventListener)
+  target.addEventListener = ((type: string, listener: EventListenerOrEventListenerObject | null, o?: AddEventListenerOptions | boolean) => {
+    if (!listener) return
+    if (pageLoaded && target === window && type === 'focus') pageListeners.push({ target, type, listener })
+    add(type, listener, o)
+  }) as typeof window.addEventListener
+}
 afterAll(() => {
-  window.addEventListener = addToWindow
+  for (const [target, add] of originalAdd) target.addEventListener = add
 })
 
 /** The document goes: every root unmounted, the page's focus listeners removed, the body emptied. */
@@ -134,7 +143,8 @@ async function unload(): Promise<void> {
   await act(async () => {
     for (const r of roots.splice(0)) r.unmount()
   })
-  for (const listener of focusListeners.splice(0)) window.removeEventListener('focus', listener)
+  pageLoaded = false
+  for (const { target, type, listener } of pageListeners.splice(0)) target.removeEventListener(type, listener)
   document.body.replaceChildren()
 }
 
@@ -150,6 +160,7 @@ async function load(path?: string): Promise<void> {
   const app = document.createElement('div')
   app.id = 'app'
   document.body.appendChild(app)
+  pageLoaded = true
   const { bootstrap } = await import('../../src/app/bootstrap/bootstrap')
   // An anonymous page never settles bootstrap: it waits for the user, then for the redirect.
   await act(async () => void bootstrap().catch((e: unknown) => (bootError = e)))

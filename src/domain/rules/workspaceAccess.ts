@@ -32,3 +32,29 @@ export function workspaceBlock(status: number, errorCode: string | undefined): W
   const known = errorCode ? BLOCKS[errorCode.toUpperCase()] : undefined
   return known?.status === status ? known.block : undefined
 }
+
+/** What the refresh check needs of a session context (IAM P-35) and of the page's workspace. */
+interface PageContext {
+  readonly tenantId: string
+  readonly slug?: string | null | undefined
+}
+interface PageWorkspace {
+  readonly trial: boolean
+  readonly slug?: string | undefined
+}
+
+/**
+ * Whether a session context that a refresh loaded is for the workspace this page was opened for, so the
+ * page never rebinds to another one.
+ * - A trial with a slug: P-35's slug must equal it, as on the first load (§5 step 11b); a body without one
+ *   fails, since every trial tenant shares one realm.
+ * - Otherwise, against the context the page has: the same tenant, and the same slug when both name one (a
+ *   body without a slug keeps its context, §4.2).
+ * - Otherwise (no context yet, not a trial with a slug): nothing to compare, as on the first load.
+ */
+export function isPageWorkspace(next: PageContext, current: PageContext | undefined, w: PageWorkspace): boolean {
+  if (w.trial && w.slug !== undefined) return next.slug === w.slug
+  if (!current) return true
+  if (next.tenantId !== current.tenantId) return false
+  return typeof next.slug !== 'string' || typeof current.slug !== 'string' || next.slug === current.slug
+}
