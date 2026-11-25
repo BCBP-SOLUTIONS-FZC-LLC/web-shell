@@ -312,11 +312,13 @@ jobs:
           persist-credentials: false
           token: ${{ secrets.CI_REPO_READ_TOKEN || github.token }}
 
-      # Public repository: the default token reads it.
+      # A private repository: the default token cannot read it, so CI_REPO_READ_TOKEN needs read access
+      # to mfe-dashboard (contents: read). Without it this step fails with "repository not found".
       - name: Checkout mfe-dashboard
         uses: actions/checkout@v7.0.1
         with:
           repository: BCBP-SOLUTIONS-FZC-LLC/mfe-dashboard
+          token: ${{ secrets.CI_REPO_READ_TOKEN || github.token }}
           ref: ${{ vars.DASHBOARD_REF || 'main' }}
           path: .remote/mfe-dashboard
           persist-credentials: false

@@ -30,7 +30,7 @@ Image locally: `docker build --secret id=npm_token,env=NODE_AUTH_TOKEN -t web-sh
 | `Trivy CVE scan` | Unfixed CRITICAL/HIGH/UNKNOWN fail; `.trivyignore` with reason and expiry |
 | `Smoke tests` | Node 26 + `npm ci`, then `smoke-tests.sh`: ≤ 200 MB, `/healthz`, startup gate, `npm run test-smoke` (`SMOKE_MODE=image`), then the per-environment CSP and HSTS: none by default, added by mounted `security.d/csp.conf` and `hsts.conf` |
 | `Browser tests` | In the digest-pinned `mcr.microsoft.com/playwright:v<version>-noble` container (browsers, their libraries and Node 26 preinstalled; nothing from apt), `npm ci`, a check that the image holds this `@playwright/test`'s browsers, build, `npm run test-browser`; report uploaded on failure. Gates push. **Bump the container tag and digest with `@playwright/test`** |
-| `Dashboard contract` | Same container; builds mfe-dashboard (`vars.DASHBOARD_REF`, default `main`), runs `test-contract`. Informational |
+| `Dashboard contract` | Same container; builds mfe-dashboard (`vars.DASHBOARD_REF`, default `main`; a private repo, checked out with `CI_REPO_READ_TOKEN`, which needs read access to it), runs `test-contract`. Informational |
 | `PR summary` / `Push image → GHCR` | Comment on PRs / `main`: GHCR tags, Cosign |
 | `changelog` | `CHANGELOG.md` when `src/`, `package*.json`, `Dockerfile`, `nginx/`, `rsbuild.config.ts`, `config/**`, `public/config/**`, `index.html` change |
 
