@@ -34,7 +34,7 @@ import { loadManifest, startVersionPolling } from '@bcbp-solutions-fzc-llc/front
 import { registerNavigator } from '@bcbp-solutions-fzc-llc/frontend-sdk/nav'
 import { installTrustedTypesPolicy } from '@bcbp-solutions-fzc-llc/frontend-sdk/security'
 import { installGlobalErrorHandlers } from '@bcbp-solutions-fzc-llc/frontend-sdk/react'
-import App, { type AppNotices } from '../routes/App'
+import App, { type AppNotices, type RouterNavigate } from '../routes/App'
 import type { SignInUseCases } from '../../application/signIn'
 import { requestPasswordResetUseCase } from '../../application/use-cases/requestPasswordReset'
 import { resolveWorkspaceUseCase } from '../../application/use-cases/resolveWorkspace'
@@ -460,7 +460,7 @@ async function start(cfg: RuntimeConfig, report: { otlpBaseUrl: string }): Promi
   const render = () => {
     const base = basename
     // A remote's navigate() goes through this router when the path is under its basename.
-    const onRouter = (navigate: (to: string, o?: { replace?: boolean }) => void) =>
+    const onRouter = (navigate: RouterNavigate) =>
       registerNavigator(shellNavigator(navigate, base))
     app?.render(
       <StrictMode>

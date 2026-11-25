@@ -47,9 +47,10 @@ vi.mock('@bcbp-solutions-fzc-llc/frontend-sdk/react', async (original) => {
   }
 })
 
-const { default: App, ACCOUNT_REMOTE, ADMIN_REMOTE, DASHBOARD_REMOTE, DRAFTING_REMOTE, TENDERS_REMOTE, WORKFLOWS_REMOTE } = await import('../../src/app/routes/App')
+const { default: App, ACCOUNT_REMOTE, ADMIN_REMOTE, DASHBOARD_REMOTE, DRAFTING_REMOTE, TENDERS_REMOTE, WORKFLOWS_REMOTE, sameSection, sectionOf } = await import('../../src/app/routes/App')
 const { createStore } = await import('../../src/application/use-cases/loadSessionContext')
 type AppNotices = import('../../src/app/routes/App').AppNotices
+type RouterNavigate = import('../../src/app/routes/App').RouterNavigate
 
 describe('App', () => {
   it('renders the dashboard remote under the workspace basename, with no props', () => {
@@ -354,6 +355,110 @@ describe('App header (app-chrome handoff, option A)', () => {
     fireEvent.click(nav().getByRole('link', { name: 'Dashboard' }))
     expect(remoteMounted).toHaveBeenCalledTimes(3)
     expect(remoteMounted).toHaveBeenLastCalledWith(DASHBOARD_REMOTE)
+  })
+
+  it("hands the SDK's navigator a navigate that remounts the section already mounted (handoff §3.3)", async () => {
+    window.history.replaceState({}, '', '/t/acme/admin/settings')
+    let navigate!: RouterNavigate
+    render(<App basename="/t/acme" onRouter={(n) => (navigate = n)} />)
+    expect(remoteMounted).toHaveBeenCalledTimes(1)
+    // Another path in the same remote: the remote's own router would not follow, so it mounts again there.
+    await act(async () => navigate('/admin/users'))
+    expect(window.location.pathname).toBe('/t/acme/admin/users')
+    expect(remoteMounted).toHaveBeenCalledTimes(2)
+    expect(remoteMounted).toHaveBeenLastCalledWith(ADMIN_REMOTE)
+    // Another section: that remote mounts once, as a route change does anyway.
+    await act(async () => navigate('/me/profile', { replace: true }))
+    expect(window.location.pathname).toBe('/t/acme/me/profile')
+    expect(remoteMounted).toHaveBeenCalledTimes(3)
+    expect(remoteMounted).toHaveBeenLastCalledWith(ACCOUNT_REMOTE)
+  })
+
+  it("decides by the section the shell's routes show, not the address bar a remote's own router moved", async () => {
+    window.history.replaceState({}, '', '/t/acme/dashboard')
+    let navigate!: RouterNavigate
+    render(<App basename="/t/acme" onRouter={(n) => (navigate = n)} />)
+    expect(remoteMounted).toHaveBeenCalledTimes(1)
+    // The dashboard's own router moves to a tenders path: the shell's routes still show the dashboard.
+    window.history.pushState({}, '', '/t/acme/tenders/T-1')
+    await act(async () => navigate('/dashboard/x'))
+    // The dashboard element stays, so it is mounted again at the new path.
+    expect(window.location.pathname).toBe('/t/acme/dashboard/x')
+    expect(remoteMounted).toHaveBeenCalledTimes(2)
+    expect(screen.getByTestId('remote')).toHaveAttribute('data-remote', DASHBOARD_REMOTE)
+  })
+
+  it('remounts nothing for a move that changes neither the path nor the query (no lost state, no loop)', async () => {
+    window.history.replaceState({}, '', '/t/acme/admin/users?tab=1')
+    let navigate!: RouterNavigate
+    render(<App basename="/t/acme" onRouter={(n) => (navigate = n)} />)
+    await act(async () => navigate('/admin/users?tab=1', { replace: true }))
+    await act(async () => navigate('/admin/users?tab=1#row-3'))
+    expect(remoteMounted).toHaveBeenCalledTimes(1)
+    // A new query is a new page for the remote: it is mounted again there.
+    await act(async () => navigate('/admin/users?tab=2'))
+    expect(remoteMounted).toHaveBeenCalledTimes(2)
+  })
+
+  it('remounts the section already mounted from the site root too (no basename)', async () => {
+    window.history.replaceState({}, '', '/tenders/T-1')
+    let navigate!: RouterNavigate
+    render(<App onRouter={(n) => (navigate = n)} />)
+    expect(remoteMounted).toHaveBeenCalledTimes(1)
+    await act(async () => navigate('/tenders/T-2'))
+    expect(window.location.pathname).toBe('/tenders/T-2')
+    expect(remoteMounted).toHaveBeenCalledTimes(2)
+  })
+
+  it('compares sections without case, as the routes match them', async () => {
+    window.history.replaceState({}, '', '/t/acme/admin/settings')
+    let navigate!: RouterNavigate
+    render(<App basename="/t/acme" onRouter={(n) => (navigate = n)} />)
+    await act(async () => navigate('/Admin/users'))
+    expect(window.location.pathname).toBe('/t/acme/Admin/users')
+    expect(remoteMounted).toHaveBeenCalledTimes(2)
+    expect(sameSection('/Admin/users', '/admin/settings')).toBe(true)
+    expect(sameSection('/admin', '/me')).toBe(false)
+  })
+
+  it('does nothing once the app is gone: no page load, no URL change (the screen that replaced it stays)', async () => {
+    const assign = vi.spyOn(window.location, 'assign').mockImplementation(() => {})
+    const replace = vi.spyOn(window.location, 'replace').mockImplementation(() => {})
+    window.history.replaceState({}, '', '/t/acme/admin/settings')
+    let navigate!: RouterNavigate
+    const { unmount } = render(<App basename="/t/acme" onRouter={(n) => (navigate = n)} />)
+    // While mounted, re-registrations on each move keep the router reachable.
+    await act(async () => navigate('/admin/users'))
+    await act(async () => navigate('/admin/roles'))
+    expect(window.location.pathname).toBe('/t/acme/admin/roles')
+    unmount()
+    navigate('/tenders/T-2')
+    navigate('/me', { replace: true })
+    expect(window.location.pathname).toBe('/t/acme/admin/roles')
+    expect(assign).not.toHaveBeenCalled()
+    expect(replace).not.toHaveBeenCalled()
+    assign.mockRestore()
+    replace.mockRestore()
+  })
+
+  it('compares an encoded section as the routes decode it', async () => {
+    window.history.replaceState({}, '', '/t/acme/admin/settings')
+    let navigate!: RouterNavigate
+    render(<App basename="/t/acme" onRouter={(n) => (navigate = n)} />)
+    await act(async () => navigate('/%61dmin/users'))
+    expect(remoteMounted).toHaveBeenCalledTimes(2)
+    expect(sameSection('/%61dmin/users', '/admin')).toBe(true)
+    // A malformed escape is compared as written.
+    expect(sameSection('/%E0%A4%A/x', '/%e0%a4%a')).toBe(true)
+    expect(sameSection('/%E0%A4%A', '/admin')).toBe(false)
+  })
+
+  it('names a path’s section by its first segment', () => {
+    expect(sectionOf('/tenders/T-1/documents')).toBe('/tenders')
+    expect(sectionOf('/admin?tab=1')).toBe('/admin')
+    expect(sectionOf('/me#top')).toBe('/me')
+    expect(sectionOf('/')).toBe('/')
+    expect(sectionOf('')).toBe('/')
   })
 
   it('leaves a new-tab click to the browser', () => {
