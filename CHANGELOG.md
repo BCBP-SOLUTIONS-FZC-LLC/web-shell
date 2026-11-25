@@ -10,6 +10,10 @@ Pull requests that change the shell, its dependencies, or the image add an entry
 
 ## [Unreleased]
 
+### Changed (2026-11-25 — CI actions)
+
+- **Three GitHub Actions bumped** (Dependabot #70, #71, #72), in `ci.yml` and `release.yml`: `docker/login-action` 4.7.0 → 4.8.0, `github/codeql-action/upload-sarif` 4.39.1 → 4.39.4, `sigstore/cosign-installer` 4.1.2 → 4.1.3. Patch and minor releases; no workflow inputs change. The Dashboard contract job's `mfe-dashboard` checkout now passes `CI_REPO_READ_TOKEN`, since that repository is private.
+
 ### Added (2026-11-24 — IAM screens: the read-only notice)
 
 **A read-only workspace says so (IAM screen spec §7.10, handoff item 9).** While the SDK's `useReadOnly()` is true (P-35 `read_only`, or a `DENY_TENANT_READ_ONLY` answer seen on the page), `App` shows "Workspace is read-only (subscription ended)" at the bottom (`src/presentation/widgets/ReadOnlyNotice.tsx`, key `app.readOnly`). It has no action. It shares one bottom stack with the missing-permissions notice, so the two never overlap. The spec's wrapper that disables IAM mutation controls is not here: those controls are in the remotes, and the shell exposes nothing to them (handoff §3.3b). The grace end date needs P-1 (handoff item 8). Tests: `test/integration/app.test.tsx` (the notice, no action, the shared stack), `test/e2e/shell.test.tsx` (P-35 `read_only: true` shows it; a writable workspace does not). `test/browser/shell.spec.ts`: it shows under the production CSP in all three engines with a contrast ratio of at least 4.5, measured in the page, because axe cannot be injected into the signed-in page under its CSP. README, ARCHITECTURE (layer diagram, module table, session-context row, tests), the LLD (§2, §3, §6.6b, §12), CONTRIBUTING and `.claude/` updated. *(Previously: P-35 `read_only` reached remotes through `useReadOnly()`, but the shell showed nothing.)*
