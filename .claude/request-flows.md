@@ -10,7 +10,7 @@ Condensed from the [LLD](../docs/lld/web-shell-lld.md) §5–§6; the step numbe
 4. Anonymous → sign-in (below); return. Wrong workspace → `showWrongWorkspace`; return.
 5. `idp.subscribe` → `roleMapAuthorizer(permissions)` → P-35 into a store (`warn` and deny-all on failure; a refusal that `blockedWorkspace` names → `showWorkspaceUnavailable` (A6/A8) and return, after one more ask 5 s later for a membership refusal (`settleRefusal`)) → subject, context flags, `rememberWorkspace` (URL → `/t/<slug>/`) → `initializeI18n` (`detect`: P-35 `locale`) → `loadManifest` (`error` on failure) → `startVersionPolling` → render.
 
-After render: `registerNavigator` (router under the basename; other paths load in full). Without a context, and only after a transient first failure, P-35 is retried after 1 s, 2 s, 4 s (a network failure while online, a timeout, 429, 502, 503 or 504 (the SDK ApiClient's own rule); one request per attempt, `loadSessionContextOnce`) and applied live; a sign-out stops it, and a sign-out during boot stops before the app mounts. Any start-up throw after `initializeCore` is logged `error 'the app could not start'` before the unavailable page. A retry that answers with a workspace state unmounts the app and shows `showWorkspaceUnavailable`.
+After render: `registerNavigator` (router under the basename; other paths load in full). Without a context, and only after a transient first failure, P-35 is retried after 1 s, 2 s, 4 s (a network failure while online, a timeout, 429, 502, 503 or 504 (the SDK ApiClient's own rule); one request per attempt, `loadSessionContextOnce`) and applied live; a sign-out stops it, and a sign-out during boot stops before the app mounts. Any start-up throw after `initializeCore` is logged `error 'the app could not start'` before the unavailable page. A retry that answers with a workspace state unmounts the app and shows `showWorkspaceUnavailable`. Once the context is known, P-1 (and P-27 for `manage:members`) load in the background (`loadWorkspaceStatus`): banners, the read-only grace date, and the A5 welcome once per device after a recent upgrade; a failure logs `workspace status unavailable`.
 
 ## Sign-in
 
@@ -36,7 +36,7 @@ Typed email, workspace name or URL (`toIdentifier`) → PUB-1 (generic message o
 |---|---|
 | `expired` | "Session ended" over the app (text: `serverEnded`, `idle`, other); Sign in → `signInAgain` with the sign-in screen as `ask` |
 | `anonymous` / `signed-out` (here or another tab) | Unmount `#app`, then "You are signed out"; Sign in → `idp.login({ workspace })` |
-| P-35 `read_only`, or a `DENY_TENANT_READ_ONLY` answer seen on the page | "Workspace is read-only (subscription ended)" at the bottom (`useReadOnly`), no action |
+| P-35 `read_only`, or a `DENY_TENANT_READ_ONLY` answer seen on the page | "Workspace is read-only (subscription ended)" at the bottom (`useReadOnly`), no action; for a cancelled workspace, P-1's `read_only_until` adds "Access ends on <date>" |
 | New `/version.json` | "A new version is available." with Reload (`useAppUpdate`); never forced |
 | `switchWorkspace(id)` | PUB-1 → not found: "Workspace not found"; else `idp.switchWorkspace` |
 | Remote `useSignOut()` | `idp.logout()`; global by default: form POST to the realm's end-session endpoint (ID token out of URLs; CSP `form-action` must allow the IdP), then `/` shows the signed-out dialog |
@@ -53,5 +53,7 @@ Typed email, workspace name or URL (`toIdentifier`) → PUB-1 (generic message o
 | `GET /api/v1/public/tenants/resolve?identifier=` (PUB-1) | none | `workspaceResolver` |
 | `POST {idp}/realms/{realm}/protocol/openid-connect/token` | — | SDK |
 | `GET /api/v1/me/session-context` (P-35) | Bearer | `sessionContextSource` |
+| `GET /api/v1/tenants/:id` (P-1) | Bearer | `workspaceStatusSource` |
+| `GET /api/v1/tenants/:id/seat-usage` (P-27) | Bearer | `workspaceStatusSource` (`manage:members` only) |
 | `GET /remotes/manifest.json`, `/version.json` | — | SDK `/mfe` |
 | `POST /otel/v1/{traces,logs,metrics}` | — | SDK telemetry, consent-gated |

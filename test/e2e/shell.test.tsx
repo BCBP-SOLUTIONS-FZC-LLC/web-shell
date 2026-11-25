@@ -1,6 +1,6 @@
 // The shell booted end to end in-process, as platform-reactcommon test/e2e/shell.test.tsx does for
 // its reference shell: the real bootstrap, screens, App and the real SDK (nothing mocked), against a
-// FakeNetwork (runtime config, manifest, IAM PUB-1 and P-35) and a FakeKeycloak (PKCE).
+// FakeNetwork (runtime config, manifest, IAM PUB-1, P-35, P-1 and P-27) and a FakeKeycloak (PKCE).
 //
 // Each load() is a page load in the same tab: storage is kept, the SDK starts from nothing (its
 // runtime global is cleared and every module is evaluated again), and the bootstrap runs.
@@ -192,6 +192,9 @@ beforeEach(() => {
         ? Response.json({ tenant_id: TENANT, slug: 'acme', roles, feature_flags: [], read_only: false, locale: 'en' })
         : mockProblem(PlatformProblemTypes.Unauthorized),
     )
+    // IAM P-1 and P-27 for the banners: a paid workspace with free seats shows none.
+    .on(`GET /api/v1/tenants/${TENANT}`, { name: 'Acme', status: 'active' })
+    .on(`GET /api/v1/tenants/${TENANT}/seat-usage`, { active_users: 3, pending_invitations: 0, licensed_seats: 10 })
   vi.stubGlobal('fetch', net.fetch)
   vi.stubGlobal('BroadcastChannel', FakeBroadcastChannel)
   const record = (u: string | URL) => void assigned.push(String(u))
@@ -341,6 +344,57 @@ describe('the shell, end to end', () => {
     )
     await signInByEmail()
     expect(screen.getByRole('status')).toHaveTextContent('Workspace is read-only (subscription ended)')
+  })
+
+  it('a trial workspace shows the days left over the remote (P-1), loaded with the token after the app renders', async () => {
+    net.on(`GET /api/v1/tenants/${TENANT}`, (req) =>
+      bearerOf(req) ? Response.json({ name: 'Acme', status: 'trial', trial_ends_at: new Date(Date.now() + 5 * 86_400_000 - 60_000).toISOString() }) : mockProblem(PlatformProblemTypes.Unauthorized),
+    )
+    await signInByEmail()
+    expect(await screen.findByRole('status')).toHaveTextContent('5 days left in your trial')
+  })
+
+  it('an owner sees "all seats used" from P-27', async () => {
+    net.on(`GET /api/v1/tenants/${TENANT}/seat-usage`, { active_users: 8, pending_invitations: 2, licensed_seats: 10 })
+    await signInByEmail()
+    expect(await screen.findByRole('status')).toHaveTextContent('All 10 seats are in use.')
+  })
+
+  it('a member is never sent to P-27 (owner and tenant admin only)', async () => {
+    roles = ['member']
+    await signInByEmail()
+    await until(() => net.sent(`/api/v1/tenants/${TENANT}`).length > 0, 'the P-1 request')
+    expect(net.sent(`/api/v1/tenants/${TENANT}/seat-usage`)).toEqual([])
+  })
+
+  it('a cancelled workspace says when read-only access ends (P-1 read_only_until)', async () => {
+    net
+      .on('GET /api/v1/me/session-context', (req) =>
+        bearerOf(req)
+          ? Response.json({ tenant_id: TENANT, slug: 'acme', roles, feature_flags: [], read_only: true, locale: 'en' })
+          : mockProblem(PlatformProblemTypes.Unauthorized),
+      )
+      .on(`GET /api/v1/tenants/${TENANT}`, { name: 'Acme', status: 'cancelled', read_only_until: '2026-12-24T10:00:00Z' })
+    await signInByEmail()
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Access ends on Dec 24, 2026.'))
+  })
+
+  it('welcomes users once after the trial converted (A5), and not on the next page load', async () => {
+    net.on(`GET /api/v1/tenants/${TENANT}`, {
+      name: 'Acme',
+      status: 'active',
+      trial_ends_at: '2026-01-01T00:00:00Z',
+      subscription_started_at: new Date(Date.now() - 86_400_000).toISOString(),
+    })
+    await signInByEmail()
+    await userEvent.click(await screen.findByRole('button', { name: 'Continue' }))
+    expect(screen.queryByRole('dialog', { name: 'Welcome to your upgraded workspace' })).toBeNull()
+    await load('/t/acme/dashboard')
+    await until(() => assigned.length > 0 || screen.queryByRole('heading', { name: /Dashboard for Ada Lovelace/ }) !== null, 'the restore')
+    if (assigned.length > 0) await approveLogin()
+    await screen.findByRole('heading', { name: /Dashboard for Ada Lovelace/ }, { timeout: 5_000 })
+    await until(() => net.sent(`/api/v1/tenants/${TENANT}`).length > 1, 'the second P-1 request')
+    expect(screen.queryByRole('dialog')).toBeNull()
   })
 
   it('a writable workspace shows no read-only notice', async () => {

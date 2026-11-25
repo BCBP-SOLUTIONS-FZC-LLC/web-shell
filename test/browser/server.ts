@@ -4,7 +4,7 @@
 // - the app (https://127.0.0.1:<port>): the production build in dist/ with the PRODUCTION response
 //   headers (platform-reactcommon examples/cloudfront/csp.mjs, copied below), the nginx SPA rule, a
 //   runtime config pointed at the fake Keycloak, a manifest with one remote whose entry is a stub
-//   built only on the shared SDK (as mfe-dashboard is), IAM PUB-1 and P-35, and recorders for
+//   built only on the shared SDK (as mfe-dashboard is), IAM PUB-1, P-35, P-1 and P-27, and recorders for
 //   /otel/* and /csp-report;
 // - a fake Keycloak on a second origin (https://127.0.0.1:<port>): authorize (the user is taken as
 //   signed in), the token endpoint with PKCE and CORS, and the end-session endpoint the SDK's
@@ -231,6 +231,11 @@ export async function startServers(): Promise<{ app: string; idp: string; close:
         read_only: false,
         locale: 'en',
       })
+    }
+    // IAM P-1 and P-27 for the banners: a paid workspace with free seats shows none.
+    if (p === '/api/v1/tenants/7d3c1f9e-2b4a-4c6d-8e0f-1a2b3c4d5e6f') return json(res, 200, { name: 'Acme', status: 'active' })
+    if (p === '/api/v1/tenants/7d3c1f9e-2b4a-4c6d-8e0f-1a2b3c4d5e6f/seat-usage') {
+      return json(res, 200, { active_users: 3, pending_invitations: 0, licensed_seats: 10 })
     }
     // nginx's SPA rule: only extension-less paths are app routes; a missing file is 404.
     if (/^\/(api|otel|config|remotes|assets)(\/|$)/.test(p) || extname(p)) {

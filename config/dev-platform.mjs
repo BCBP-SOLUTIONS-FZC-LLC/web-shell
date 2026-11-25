@@ -72,8 +72,24 @@ export function devPlatformMiddleware(root) {
         // The signup owner: tenant_owner without tenant_admin (IAM P-35). DEV_ROLES overrides it.
         roles: (process.env.DEV_ROLES ?? 'member,tenant_owner').split(','),
         feature_flags: [],
-        read_only: false,
+        // A cancelled workspace is read-only (IAM: P-35 read_only for exactly that state).
+        read_only: process.env.DEV_TENANT_STATUS === 'cancelled',
       })
+    }
+    // IAM P-1 and P-27 for the banners. DEV_TENANT_STATUS picks the status: `trial` (days left),
+    // `past_due` (the owner's payment banner), `cancelled` (read-only, with its end date).
+    if (path === '/api/v1/tenants/local-tenant') {
+      const status = process.env.DEV_TENANT_STATUS ?? 'active'
+      const days = (n) => new Date(Date.now() + n * 86_400_000).toISOString()
+      return send(res, 200, {
+        name: 'Local workspace',
+        status,
+        ...(status === 'trial' ? { trial_ends_at: days(14) } : {}),
+        ...(status === 'cancelled' ? { read_only_until: days(30) } : {}),
+      })
+    }
+    if (path === '/api/v1/tenants/local-tenant/seat-usage') {
+      return send(res, 200, { active_users: 3, pending_invitations: 0, licensed_seats: 10 })
     }
     return sendProblem(res, PlatformProblemTypes.NotFound)
   }

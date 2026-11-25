@@ -134,6 +134,19 @@ async function contrastRatio(page: Page, selector: string): Promise<number> {
   return (hi! + 0.05) / (lo! + 0.05)
 }
 
+test('the workspace banner (IAM P-1) shows under the production CSP with AA contrast', async ({ page }) => {
+  await page.route('**/api/v1/tenants/*', (route) =>
+    route.request().url().endsWith('/seat-usage')
+      ? route.fallback()
+      : route.fulfill({ json: { name: 'Acme', status: 'trial', trial_ends_at: new Date(Date.now() + 3 * 86_400_000 - 60_000).toISOString() } }),
+  )
+  await signIn(page)
+  const banner = page.getByRole('status')
+  await expect(banner).toHaveText('3 days left in your trial')
+  expect(await contrastRatio(page, '[role="status"]')).toBeGreaterThanOrEqual(4.5)
+  expect(await violations(page)).toEqual([])
+})
+
 test('the read-only notice shows under the production CSP with AA contrast', async ({ page }) => {
   await page.route('**/api/v1/me/session-context', async (route) => {
     const response = await route.fetch()

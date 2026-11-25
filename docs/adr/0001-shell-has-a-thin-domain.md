@@ -10,7 +10,7 @@ web-shell is the shell (constitution, Module Federation: navigation, layout, aut
 
 `src/domain/` holds only what is the shell's own and framework-free: the role map (`rules/permissions.ts`, IAM's closed role set → UI permissions), the identifier rule (`rules/identifier.ts`, what the sign-in box accepts and may remember) and the repository contracts the shell defines (`repositories/rememberedEmail.ts`). The SDK's ports are the other domain contracts; the shell does not redefine them. There are no shell entities or value objects; `application/` holds the few use cases the screens need.
 
-*Note (2026-11-24): later rules — `rules/workspaceAccess.ts` (P-35 refusal → workspace state, A6/A8); `errors.ts` (`WorkspaceNotFoundError`) also lives here.*
+*Note (2026-11-24): later rules — `rules/workspaceAccess.ts` (P-35 refusal → workspace state, A6/A8); `rules/workspaceBanners.ts` (which banner to whom, the read-only date, A5); `repositories/workspaceStatus.ts` (`WorkspaceStatusSource`, `UpgradeWelcomeRepository`, defined by the shell). `TenantStatus`, `SeatUsage` and `WorkspaceBanner` are plain data shapes for P-1/P-27, not entities. `errors.ts` (`WorkspaceNotFoundError`) also lives here.*
 
 ## Consequences
 

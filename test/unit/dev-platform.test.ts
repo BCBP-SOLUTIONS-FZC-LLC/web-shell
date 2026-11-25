@@ -1,6 +1,6 @@
 // @vitest-environment node
-// config/dev-platform.mjs: the dev server's stand-in for CloudFront and the IAM ports. Its PUB-1 and
-// P-35 answers must map through the shell's own iam.ts, or local sign-in breaks.
+// config/dev-platform.mjs: the dev server's stand-in for CloudFront and the IAM ports. Its PUB-1, P-35,
+// P-1 and P-27 answers must map through the shell's own iam.ts, or local sign-in breaks.
 import { createServer, request, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { join } from 'node:path'
@@ -9,7 +9,7 @@ import { readFileSync } from 'node:fs'
 import { initializeCore } from '@bcbp-solutions-fzc-llc/frontend-sdk/core'
 import { setRuntimeConfig } from '@bcbp-solutions-fzc-llc/frontend-sdk/config'
 import { devPlatformMiddleware } from '../../config/dev-platform.mjs'
-import { toSessionContext, toWorkspace, type ResolveResponse, type SessionContextResponse } from '../../src/infrastructure/api/iam'
+import { toSessionContext, toWorkspace, type ResolveResponse, type SessionContextResponse, toTenantStatus, type TenantResponse } from '../../src/infrastructure/api/iam'
 
 const ROOT = join(import.meta.dirname, '../..')
 let server: Server
@@ -114,6 +114,19 @@ describe('dev platform middleware', () => {
     const r = await get('/api/v1/me/session-context', { headers: { authorization: 'Bearer token' } })
     const ctx = toSessionContext(r.json() as SessionContextResponse)
     expect(ctx).toMatchObject({ tenantId: 'local-tenant', slug: 'bcbp', roles: ['member', 'tenant_owner'], readOnly: false })
+  })
+
+  it('answers P-1 and P-27 for the banners: a paid workspace by default, DEV_TENANT_STATUS for the others', async () => {
+    await start()
+    expect(toTenantStatus((await get('/api/v1/tenants/local-tenant')).json() as TenantResponse)).toEqual({ name: 'Local workspace', status: 'active' })
+    expect((await get('/api/v1/tenants/local-tenant/seat-usage')).json()).toEqual({ active_users: 3, pending_invitations: 0, licensed_seats: 10 })
+    vi.stubEnv('DEV_TENANT_STATUS', 'trial')
+    expect(toTenantStatus((await get('/api/v1/tenants/local-tenant')).json() as TenantResponse)).toMatchObject({ status: 'trial', trialEndsAt: expect.any(String) })
+    vi.stubEnv('DEV_TENANT_STATUS', 'cancelled')
+    expect(toTenantStatus((await get('/api/v1/tenants/local-tenant')).json() as TenantResponse)).toMatchObject({ status: 'cancelled', readOnlyUntil: expect.any(String) })
+    // A cancelled workspace is read-only on P-35 too, so the notice and its date show in dev.
+    const ctx = (await get('/api/v1/me/session-context', { headers: { authorization: 'Bearer t' } })).json() as SessionContextResponse
+    expect(ctx.read_only).toBe(true)
   })
 
   it('answers other API paths 404 and passes non-API paths on', async () => {

@@ -9,6 +9,7 @@ import {
   SessionEndedDialog,
   SignedOutDialog,
   SignInScreen,
+  UpgradeWelcomeDialog,
   WorkspaceNotFoundDialog,
   WorkspaceUnavailableDialog,
   WrongWorkspaceDialog,
@@ -64,5 +65,18 @@ export function showWrongWorkspace(idp: IdentityProvider, useCases: SignInUseCas
 export function showWorkspaceUnavailable(block: WorkspaceBlock, idp: IdentityProvider, useCases: SignInUseCases): void {
   showScreen(
     <WorkspaceUnavailableDialog block={block} onSignOut={() => void idp.logout()} onSwitch={() => switchWorkspace(idp, useCases)} />,
+  )
+}
+
+/** The "workspace upgraded" welcome (A5) over the running app; `onSeen` runs when the user continues. */
+export function showUpgradeWelcome(name: string, onSeen: () => void): void {
+  showScreen(
+    <UpgradeWelcomeDialog
+      name={name}
+      onContinue={() => {
+        onSeen()
+        hideScreen()
+      }}
+    />,
   )
 }

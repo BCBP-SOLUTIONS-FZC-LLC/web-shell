@@ -34,6 +34,7 @@ None yet. The shell's signals today are SDK metrics (Tier 1, pending ratificatio
 |---|---|---|
 | `the app could not start` | essential error log | Alert `WebShellStartupFailures` (Loki, example rule): [runbook](runbook-startup-failure.md) |
 | `session context unavailable` | warning log (each failed retry carries `attempt`) | LLD §11 |
+| `workspace status unavailable` | warning log (`what`: `tenant` for P-1, `seats` for P-27; no `what` when the load itself throws); the banners are skipped. Not logged for a request a sign-out aborted | LLD §11 |
 | `manifest load failed` | error log | LLD §11 |
 | `remote failed to render` with `mfe: web-shell` | error log from the SDK's `MFEErrorBoundary` around the shell's own routes (the SDK uses this text for every boundary) | LLD §7 |
 | Remote loads, API calls, web vitals, uncaught errors | SDK logs and spans today; SDK Tier 1 metrics once ratified | platform-reactcommon `docs/observability/runbooks.md` |

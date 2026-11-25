@@ -33,7 +33,7 @@ npm run build             # tsc and the production bundle
 
 `npm test` runs the same Vitest suite without the coverage gate. Docker is required for Keycloak and for building the image. The test suite uses happy-dom and does not need Docker.
 
-The dev server serves `/config/runtime.json` and `/remotes/manifest.json` from `config/`, and stubs PUB-1 and P-35 so sign-in works with only Keycloak running (`config/dev-platform.mjs`). `DEV_API_URL=https://… npm run dev` proxies `/api` to a real API instead.
+The dev server serves `/config/runtime.json` and `/remotes/manifest.json` from `config/`, and stubs PUB-1, P-35, P-1 and P-27 so sign-in and the banners work with only Keycloak running (`config/dev-platform.mjs`). `DEV_API_URL=https://… npm run dev` proxies `/api` to a real API instead.
 
 The dashboard remote is a separate repo. Start `mfe-dashboard` so `http://localhost:5002/remoteEntry.js` is served (it builds as remote `dashboard` with the preset's Rsbuild plugin); otherwise `/t/bcbp/dashboard` shows the remote boundary's error. `mfe-tender` (`npm run dev` there) serves remote `tenders` at `http://localhost:5003/remoteEntry.js` for `/t/bcbp/tenders`. Tests never fetch those ports: the integration tests replace `RemoteBoundary`, and the e2e suite stubs the remote's entry script.
 
@@ -51,23 +51,24 @@ src/
     bootstrap/index.ts   ← Async boundary (Rsbuild's entry); "unavailable" message on a fatal start-up error
     bootstrap/bootstrap.tsx ← Composition root: SDK start-up sequence, session handling, wiring, render
     providers/ShellRoot.tsx ← PlatformProvider with the live session context
-    routes/App.tsx       ← Signed-in routes, dashboard RemoteBoundary, widgets with the SDK's state
+    routes/App.tsx       ← Signed-in routes, dashboard and tenders RemoteBoundary, widgets with the SDK's state and the bootstrap's notices
     layouts/             ← screen.tsx (full-screen host), sessionScreens.tsx (mounts the session screens)
   presentation/
     pages/login/         ← LoginPage, useEmailSignIn (the remembered-email repository is passed in)
-    features/session-screens/ ← Sign-in, signed out, session ended, device clock, wrong workspace, workspace not found, workspace unavailable (A6/A8) (components)
+    features/session-screens/ ← Sign-in, signed out, session ended, device clock, wrong workspace, workspace not found, workspace unavailable (A6/A8), workspace upgraded (A5) (components)
     components/          ← BrandLogo, PageLinks
-    widgets/             ← Update notice, read-only notice, missing-permissions notice (state passed in, or mounted only while it holds)
-  application/           ← Use cases (no React, no browser APIs): resolveWorkspace, requestPasswordReset, loadSessionContext; signIn.ts
-  domain/                ← Contracts, errors, rules: RememberedEmailRepository, WorkspaceNotFoundError, permissions (role map), identifier (sign-in box), workspaceAccess (P-35 refusals → workspace state)
+    widgets/             ← Update notice, workspace banners, read-only notice, missing-permissions notice (state passed in, or mounted only while it holds)
+  application/           ← Use cases (no React, no browser APIs): resolveWorkspace, requestPasswordReset, loadSessionContext, loadWorkspaceStatus; signIn.ts
+  domain/                ← Contracts, errors, rules: RememberedEmailRepository, WorkspaceNotFoundError, permissions (role map), identifier (sign-in box), workspaceAccess (P-35 refusals → workspace state), workspaceBanners (which banner, to whom)
   infrastructure/
-    api/iam.ts           ← PUB-1 resolver and P-35 session context (the SDK's /auth ports)
+    api/iam.ts           ← PUB-1 resolver and P-35 session context (the SDK's /auth ports); P-1 and P-27 for the banners
     auth/passwordReset.ts ← Keycloak reset-credentials URL for a workspace
     storage/rememberedEmail.ts ← "Remember Email" in localStorage (the one raw-storage file)
+    storage/upgradeWelcome.ts  ← A5 seen flag, through the SDK's storage('shell')
     federation/navigator.ts ← The router as the SDK's navigate() target
     i18n/shellMessages.ts ← Registers the shell's text before any screen
   shared/
-    i18n/                ← The shell's text: en.json (keys → English), catalogues.ts, useShellText, shellText
+    i18n/                ← The shell's text: en.json (keys → English), catalogues.ts, useShellText, shellText, shellDate
     constants/links.ts   ← Help and legal links (shown only with an official URL)
     ui/                  ← Images, theme, index.css
     types/globals.d.ts   ← __ENVIRONMENT__, __BUILD_VERSION__
@@ -144,13 +145,13 @@ docs/lld/web-shell-lld.md ← Low-level design (the contract)
 
 ### Adding a widget or component
 
-1. `src/presentation/widgets/` for a piece of the signed-in app that takes its state and actions as props, or is mounted only while that state holds (`UpdateAvailable`, `ContextUnavailable`, `ReadOnlyNotice`, `AppError`); `src/presentation/components/` for a reusable piece (`BrandLogo`, `PageLinks`). Neither imports the SDK, `infrastructure/` or `app/`.
+1. `src/presentation/widgets/` for a piece of the signed-in app that takes its state and actions as props, or is mounted only while that state holds (`UpdateAvailable`, `ContextUnavailable`, `ReadOnlyNotice`, `WorkspaceBanners`, `AppError`); `src/presentation/components/` for a reusable piece (`BrandLogo`, `PageLinks`). Neither imports the SDK, `infrastructure/` or `app/`.
 2. The route (`src/app/routes/App.tsx`) reads SDK hooks and passes plain props down.
 3. Tailwind classes for styling. A `style` prop only for a value computed at run time (`BrandLogo`'s size, `LoginPage`'s `--hero-shift`): React sets it through the CSSOM, which the CSP allows. No `<style>` element, no style attribute in HTML, no runtime CSS-in-JS (the CSP has no `unsafe-inline`).
 
 ### Adding a development stand-in
 
-`config/dev-platform.mjs` stands in for what CloudFront and the platform APIs provide during `npm run dev` (runtime config, manifest, PUB-1, P-35, `/otel`). Add a stub there, answer errors with the SDK's `mockProblem`, document it in README § Local development, and cover it in `test/unit/dev-platform.test.ts`. A stand-in must not change what the production bundle does.
+`config/dev-platform.mjs` stands in for what CloudFront and the platform APIs provide during `npm run dev` (runtime config, manifest, PUB-1, P-35, P-1, P-27, `/otel`). Add a stub there, answer errors with the SDK's `mockProblem`, document it in README § Local development, and cover it in `test/unit/dev-platform.test.ts`. A stand-in must not change what the production bundle does.
 
 ### Adding a development or tooling environment variable
 

@@ -2,6 +2,7 @@
 // platform-reactcommon/examples/shell/src/iam.ts:
 // - PUB-1 resolves a company slug or an invitation email to a Keycloak realm.
 // - IAM P-35 returns the signed-in user's session context (roles, plan, flags).
+// - IAM P-1 (tenant) and P-27 (seat usage) feed the workspace banners.
 import type {
   SessionContext,
   SessionContextSource,
@@ -10,6 +11,7 @@ import type {
 } from '@bcbp-solutions-fzc-llc/frontend-sdk/auth'
 import { getConfig } from '@bcbp-solutions-fzc-llc/frontend-sdk/config'
 import { createApiClient } from '@bcbp-solutions-fzc-llc/frontend-sdk/http'
+import type { SeatUsage, TenantStatus, WorkspaceStatusSource } from '../../domain/repositories/workspaceStatus'
 
 export interface ResolveResponse {
   found?: boolean
@@ -97,4 +99,50 @@ export const sessionContextSource: SessionContextSource = {
 export async function loadSessionContextOnce(signal?: AbortSignal): Promise<SessionContext> {
   const res = await client().get<SessionContextResponse>('/v1/me/session-context', { retry: false, ...(signal ? { signal } : {}) })
   return toSessionContext(res.data)
+}
+
+/** P-1 `GET /api/v1/tenants/:id`: the fields the banners use (absent optional keys mean no value). */
+export interface TenantResponse {
+  name: string
+  status: string
+  trial_ends_at?: string
+  subscription_started_at?: string
+  ownerless_since?: string
+  read_only_until?: string
+}
+
+/** P-27 `GET /api/v1/tenants/:id/seat-usage`. */
+export interface SeatUsageResponse {
+  active_users: number
+  pending_invitations: number
+  licensed_seats: number
+}
+
+/** P-1 → TenantStatus (snake_case → camelCase; an absent or null optional field stays absent). */
+export function toTenantStatus(r: TenantResponse): TenantStatus {
+  const optional = (key: keyof TenantStatus, v: string | null | undefined) => (typeof v === 'string' ? { [key]: v } : {})
+  return {
+    name: r.name,
+    status: r.status,
+    ...optional('trialEndsAt', r.trial_ends_at),
+    ...optional('subscriptionStartedAt', r.subscription_started_at),
+    ...optional('ownerlessSince', r.ownerless_since),
+    ...optional('readOnlyUntil', r.read_only_until),
+  }
+}
+
+export function toSeatUsage(r: SeatUsageResponse): SeatUsage {
+  return { activeUsers: r.active_users, pendingInvitations: r.pending_invitations, licensedSeats: r.licensed_seats }
+}
+
+/** P-1 and P-27 for the banners. The tenant id is P-35's `tenant_id`; IAM refuses any other. */
+export const workspaceStatusSource: WorkspaceStatusSource = {
+  async tenant(tenantId, signal) {
+    const res = await client().get<TenantResponse>('/v1/tenants/:id', { params: { id: tenantId }, ...(signal ? { signal } : {}) })
+    return toTenantStatus(res.data)
+  },
+  async seatUsage(tenantId, signal) {
+    const res = await client().get<SeatUsageResponse>('/v1/tenants/:id/seat-usage', { params: { id: tenantId }, ...(signal ? { signal } : {}) })
+    return toSeatUsage(res.data)
+  },
 }

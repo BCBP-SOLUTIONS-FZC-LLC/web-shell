@@ -16,7 +16,7 @@ The browser shell for the BCBP micro-frontend platform. It runs the platform SDK
 |---|---|
 | The SDK bootstrap (`src/app/bootstrap/bootstrap.tsx`) and the routes of the signed-in app: `/t/<slug>/dashboard/*` renders the dashboard remote, `/t/<slug>/tenders/*` the tenders remote | Dashboard pages, navigation inside the dashboard and dashboard data (`mfe-dashboard`, loaded as `dashboard`); tender screens (`mfe-tender`, loaded as `tenders`) |
 | The sign-in page (email, workspace name or URL) and the session screens. The SDK does Authorization Code + PKCE against the workspace's Keycloak realm and keeps tokens in memory | Credentials, password policy, MFA and token issuance (Keycloak). This repo ships a local realm and theme for development |
-| The IAM ports: PUB-1 (email or slug → realm) and P-35 (session context), over the SDK's `ApiClient` | The IAM APIs themselves, tenant membership, roles and audit |
+| The IAM ports: PUB-1 (email or slug → realm), P-35 (session context), and P-1/P-27 for the banners (tenant, seat usage), over the SDK's `ApiClient` | The IAM APIs themselves, tenant membership, roles and audit |
 | The shell value remotes read through SDK hooks: the user, workspace, session context and sign-out (`PlatformProvider`) | Any other remote. `dashboard` and `tenders` are in the local manifest |
 | Static hosting of `index.html`, hashed `/assets/`, `/config/runtime.json`, `/remotes/manifest.json`, `/version.json` and `GET /healthz` | Cluster deploy and each environment's runtime config and remote manifest. Publishing a tag pushes an image; it does not roll a cluster |
 
@@ -66,7 +66,7 @@ After sign-in the SDK moves the URL under `/t/<slug>/` (`rememberWorkspace`), an
 3. Signed out with a known workspace (the `/t/<slug>` in the URL, or the SDK's workspace cache): straight to that realm's authorize endpoint, with the remembered email as `login_hint` (a remembered workspace name is never sent as one).
 4. Otherwise the login page asks for a work email or workspace name (a pasted workspace URL works too: its `/t/<slug>` is used). `GET /api/v1/public/tenants/resolve?identifier=<email or slug>` (PUB-1) returns the realm. "Not found", 429 and "unreachable" show the same generic message.
 5. Keycloak redirects to `{origin}/auth/callback`. The SDK checks `state`, exchanges the code with the PKCE verifier, and keeps the tokens in memory.
-6. The bootstrap loads the session context (`GET /api/v1/me/session-context`, P-35), sets permissions and flags, caches the workspace, loads `/remotes/manifest.json`, and renders. If P-35 refuses the workspace (trial ended, suspended, access paused, not a member; a membership refusal is asked once more after 5 s), it shows that screen with Sign out and Switch workspace instead, and renders nothing (a refusal that a background retry receives unmounts the app).
+6. The bootstrap loads the session context (`GET /api/v1/me/session-context`, P-35), sets permissions and flags, caches the workspace, loads `/remotes/manifest.json`, and renders. If P-35 refuses the workspace (trial ended, suspended, access paused, not a member; a membership refusal is asked once more after 5 s), it shows that screen with Sign out and Switch workspace instead, and renders nothing (a refusal that a background retry receives unmounts the app). After render it loads the workspace's banners from IAM P-1 (and P-27 for owners and admins) in the background.
 
 **Forgot your password?** resolves what was typed (email, workspace name or URL) the same way and opens Keycloak's reset page for that realm (`/realms/{realm}/login-actions/reset-credentials`). Help and legal links appear only once their official URLs are set in `src/shared/constants/links.ts`. When a new deployment is live, "A new version is available." offers a reload. In a read-only workspace (P-35 `read_only`, such as a cancelled subscription in its grace period, or a request refused with `DENY_TENANT_READ_ONLY`), a notice at the bottom says "Workspace is read-only (subscription ended)".
 
@@ -144,9 +144,9 @@ web-shell/
 │   │   ├── routes/              # App.tsx: signed-in routes, dashboard and tenders RemoteBoundary
 │   │   └── layouts/             # Full-screen host and the session-screen mounting
 │   ├── presentation/            # pages/login, features/session-screens, components, widgets
-│   ├── application/             # Use cases: resolve workspace, password reset, session context retry and refusal mapping
-│   ├── domain/                  # Contracts, errors, the role map, the identifier rule, the workspace-access rule
-│   ├── infrastructure/          # api (PUB-1, P-35), auth (password reset), storage (remember email), federation (navigator), i18n
+│   ├── application/             # Use cases: resolve workspace, password reset, session context retry and refusal mapping, workspace status
+│   ├── domain/                  # Contracts, errors, the role map, the identifier, workspace-access and banner rules
+│   ├── infrastructure/          # api (PUB-1, P-35, P-1, P-27), auth (password reset), storage (remember email, the A5 seen flag), federation (navigator), i18n
 │   └── shared/                  # i18n (the shell's text), constants (links), ui (images, theme, CSS), types
 ├── .dependency-cruiser.cjs      # Architecture lint: components and their allowed dependencies
 ├── rsbuild.config.ts           # Platform plugin, React, Tailwind, dev server
@@ -192,8 +192,9 @@ The full component map is in CONTRIBUTING (§ Architecture lint); `test/unit/lay
 
 | Key or channel | Store | Purpose |
 |---|---|---|
-| `@bcbp-solutions-fzc-llc/frontend-sdk:*` | `localStorage` | SDK metadata: workspace cache (up to 20), session id, last activity, last user. No tokens |
+| `@bcbp-solutions-fzc-llc/frontend-sdk:*` | `localStorage` | SDK metadata: workspace cache (up to 20), session id, last activity, last user; also `storage()` values such as the A5 seen flag below. No tokens |
 | `bcbp.rememberEmail`, `bcbp.loginEmail` | `localStorage` | "Remember Email" on the login form only: an email or a bare workspace name, never a URL (`infrastructure/storage/rememberedEmail.ts`, the one raw-storage file) |
+| `…:storage:<workspace>:shell:upgradeWelcomeSeen` | `localStorage` (SDK `storage('shell')`) | The upgrade welcome (A5) was seen in this workspace on this device; cleared on sign-out |
 | `BroadcastChannel` `platform-auth` | Browser | SDK: sign-out and workspace switches reach every tab |
 | Session context, tokens | Memory | Per page; tokens are never written to storage |
 
@@ -295,7 +296,8 @@ The dev server stands in for what CloudFront and the platform APIs provide (`con
 | `/config/runtime.json` | `config/runtime.local.json` (Keycloak `http://localhost:8080`, client `app1`, environment `local`) |
 | `/remotes/manifest.json` | `config/remotes.local.json` (`dashboard` at `http://localhost:5002/remoteEntry.js`, `tenders` at `http://localhost:5003/remoteEntry.js`) |
 | `GET /api/v1/public/tenants/resolve` | Any identifier → realm `tenant-bcbp` |
-| `GET /api/v1/me/session-context` | Slug `bcbp`, roles `member`, `tenant_owner` (the signup owner; `DEV_ROLES=member,tenant_admin` overrides), 401 without a bearer token |
+| `GET /api/v1/me/session-context` | Slug `bcbp`, roles `member`, `tenant_owner` (the signup owner; `DEV_ROLES=member,tenant_admin` overrides), `read_only` only with `DEV_TENANT_STATUS=cancelled`, 401 without a bearer token |
+| `GET /api/v1/tenants/local-tenant` and `…/seat-usage` | P-1 `Local workspace`, status `DEV_TENANT_STATUS` (default `active`); P-27 3 of 10 seats |
 | `POST /otel/*` | `204`, dropped |
 
 Set `DEV_API_URL` to proxy `/api` to a real API instead of the stubs, or `DEV_REALM` to stub a different realm.
@@ -315,6 +317,7 @@ With Keycloak and the dev server running (`mfe-dashboard` too for the sign-out r
 | Session expiry | Set `auth.idleTimeoutMs` to `60000` (the SDK's minimum; lower values are refused) in `config/runtime.local.json` and leave the tab idle: "Session ended" appears over the app |
 | Missing permissions | Sign in once without it (that caches the workspace), then restart with `DEV_API_URL=http://localhost:9 npm run dev` (nothing listens there) and reload: P-35 gets a 503 problem, the amber notice says some actions are hidden, and the background retry runs. PUB-1 is proxied too, so the sign-in screen cannot resolve while it is set |
 | A different role | `DEV_ROLES=member,tenant_admin npm run dev` |
+| A workspace banner | `DEV_TENANT_STATUS=trial npm run dev` (or `past_due` as the default owner; `cancelled` also makes the P-35 stub `read_only`, so the read-only notice shows with its end date) |
 | Remote down | Stop `mfe-dashboard`: `/t/bcbp/dashboard` shows the boundary's error, the shell keeps running |
 
 ### Developer tools
@@ -413,11 +416,11 @@ REMOTE_DIST=../mfe-dashboard/dist npm run test-contract
 
 | Layer | Path | What it exercises |
 |---|---|---|
-| Unit | `test/unit/` | PUB-1 and P-35 mappings and ports, the entry point, remember-email, the screen host, `BrandLogo`, the session-context retry (and its agreement with the SDK ApiClient), the P-35 refusal codes → workspace state and their one re-ask, the navigator adapter, the dev server's platform middleware, the layer rules and arch-lint firing, the text catalogue and the hard-coded-text guard, the no-SDK-duplicates guard, metrics-check, the use cases, the links, the password reset URL |
-| Integration | `test/integration/` | The login page and the carousel, the session screens (A6/A8 included), `App` routes and its notices (read-only, missing permissions), and the bootstrap's order and branches; axe-core over every shell screen (`accessibility.test.tsx`) |
-| End to end | `test/e2e/` | The real bootstrap, screens, `App` and SDK against a fake Keycloak (PKCE) and network: email → PUB-1 → sign-in → the `dashboard` remote under `/t/<slug>/`, a workspace name or pasted URL reaching PUB-1 as the slug with no `login_hint` (and a URL with no workspace asking nothing), deep links (one to `/t/<slug>/tenders/…` loads only the tenders entry), role-map permissions in the remote, deny-all, P-35 refusals showing the trial-ended, access-paused and no-access screens (no remote load; Sign out POSTs to Keycloak), the read-only notice from P-35 `read_only`, a failing remote, global sign-out, the device clock |
+| Unit | `test/unit/` | PUB-1, P-35, P-1 and P-27 mappings and ports, which banner shows to whom and the A5 window, the entry point, remember-email, the screen host, `BrandLogo`, the session-context retry (and its agreement with the SDK ApiClient), the P-35 refusal codes → workspace state and their one re-ask, the navigator adapter, the dev server's platform middleware, the layer rules and arch-lint firing, the text catalogue and the hard-coded-text guard, the no-SDK-duplicates guard, metrics-check, the use cases, the links, the password reset URL |
+| Integration | `test/integration/` | The login page and the carousel, the session screens (A6/A8 and A5 included), `App` routes and its notices (banners, read-only with its date, missing permissions), and the bootstrap's order and branches; axe-core over every shell screen (`accessibility.test.tsx`) |
+| End to end | `test/e2e/` | The real bootstrap, screens, `App` and SDK against a fake Keycloak (PKCE) and network: email → PUB-1 → sign-in → the `dashboard` remote under `/t/<slug>/`, a workspace name or pasted URL reaching PUB-1 as the slug with no `login_hint` (and a URL with no workspace asking nothing), deep links (one to `/t/<slug>/tenders/…` loads only the tenders entry), role-map permissions in the remote, deny-all, P-35 refusals showing the trial-ended, access-paused and no-access screens (no remote load; Sign out POSTs to Keycloak), the trial, seats and read-only-date banners (no P-27 for a member), the upgrade welcome once, the read-only notice from P-35 `read_only`, a failing remote, global sign-out, the device clock |
 | Smoke | `test/smoke/` | `npm run test-smoke` against the served image (CI) or a deployment: the SPA rule, Cache-Control, script integrity, 404s, and the runtime files validated by the SDK. See [test/smoke/README.md](./test/smoke/README.md) |
-| Browser | `test/browser/` | `npm run test-browser` after a build: the production bundle in Chromium, Firefox and WebKit under the production CSP and Trusted Types, with a fake Keycloak on a second origin: fonts, PKCE sign-in, the remote with integrity, `navigate()`, the sign-out form POST, the start-up failure report, colour contrast (the login page, and the read-only notice) |
+| Browser | `test/browser/` | `npm run test-browser` after a build: the production bundle in Chromium, Firefox and WebKit under the production CSP and Trusted Types, with a fake Keycloak on a second origin: fonts, PKCE sign-in, the remote with integrity, `navigate()`, the sign-out form POST, the start-up failure report, colour contrast (the login page, the read-only notice and a workspace banner) |
 | Dashboard contract | `test/browser/dashboard.spec.ts`, CI `dashboard-contract` | The real mfe-dashboard build (`REMOTE_DIST`) in this shell, three engines, production CSP: integrity, share scope and CSS, the role map reaching it, its navigation, its Logout through the shell's form POST. Informational in CI |
 
 Vitest uses happy-dom and Testing Library. `vitest.config.ts` defines `__ENVIRONMENT__` and `__BUILD_VERSION__` as `test`. The bootstrap test replaces every SDK subpath with a recording fake. The e2e suite runs the real SDK (Vitest inlines it, so each simulated page load gets a fresh one) against `test/fixtures/` fakes, modelled on platform-reactcommon's. No suite calls Keycloak, the IAM APIs or ports 5002 and 5003.
@@ -479,6 +482,7 @@ The image takes `PLATFORM_ENVIRONMENT`, `BUILD_VERSION` and `SOURCE_DATE_EPOCH` 
 | `DEV_API_URL` | `config/dev-platform.mjs` | Proxy `/api` to a real API instead of the stubs (unreachable → 503 problem) |
 | `DEV_REALM` | `config/dev-platform.mjs` | The realm the PUB-1 stub returns (default `tenant-bcbp`) |
 | `DEV_ROLES` | `config/dev-platform.mjs` | The roles the P-35 stub returns (default `member,tenant_owner`) |
+| `DEV_TENANT_STATUS` | `config/dev-platform.mjs` | The `status` the P-1 stub returns (default `active`; `trial` adds a trial end in 14 days; `cancelled` adds a read-only end in 30 and makes the P-35 stub `read_only: true`) |
 | `SMOKE_BASE_URL` | `test/smoke` | The image or deployment the smoke suite checks (required) |
 | `SMOKE_MODE` | `test/smoke` | `image` (adds nginx's headers) or `live` (adds the CSP, HSTS and the `environment` check) |
 | `ENVIRONMENT` | `test/smoke` | The page environment the runtime config is validated with (default `prod` for `image`, `dev` for `live`); in `live` also the environment the deployed `runtime.json` must name |
@@ -522,7 +526,7 @@ One alert is defined here: `WebShellStartupFailures` (Loki, on `the app could no
 
 ### Tracing and logs
 
-OTLP/HTTP to the same-origin `telemetry.otlpBaseUrl` (`/otel`), sampled by `telemetry.sampleRatio`. API calls carry `x-request-id`, `traceparent` and `x-session-id`. v1 consent is essential only, so error logs and essential warnings leave the page and the rest stays in it. The shell's own events: `the app could not start` (error), `manifest load failed` (error), `session context unavailable` (warning, kept in the page under v1 consent). Error boundaries (`RemoteBoundary`, `MFEErrorBoundary` `web-shell`) log render errors with their `mfe`.
+OTLP/HTTP to the same-origin `telemetry.otlpBaseUrl` (`/otel`), sampled by `telemetry.sampleRatio`. API calls carry `x-request-id`, `traceparent` and `x-session-id`. v1 consent is essential only, so error logs and essential warnings leave the page and the rest stays in it. The shell's own events: `the app could not start` (error), `manifest load failed` (error), `session context unavailable` and `workspace status unavailable` (warnings, kept in the page under v1 consent). Error boundaries (`RemoteBoundary`, `MFEErrorBoundary` `web-shell`) log render errors with their `mfe`.
 
 ---
 
@@ -654,6 +658,8 @@ Plus, until CloudFront: `nginx/security.d/csp.conf.example` (with that environme
 | Call | When |
 |---|---|
 | `GET /api/v1/public/tenants/resolve?identifier=` (PUB-1) | The sign-in screen, and workspace switching. No token |
+| `GET /api/v1/tenants/:id` (P-1) | In the background after render, once the session context is known (its `tenant_id`): the banners, the read-only grace date and A5. A failure only hides them |
+| `GET /api/v1/tenants/:id/seat-usage` (P-27) | With P-1, only for owners and tenant admins (`manage:members`): "all seats used" |
 | `GET /api/v1/me/session-context` (P-35) | Once after sign-in (with the SDK's own retries); after a network failure while online, a timeout, 429, 502, 503 or 504 (the SDK ApiClient's own rule), again after 1 s, 2 s, 4 s, one request each. Until it answers the app renders with deny-all permissions. A refusal that is a workspace state (trial ended, workspace suspended, access paused, not a member) shows that screen instead of the app, with Sign out and Switch workspace |
 
 #### Dashboard remote (`dashboard`)

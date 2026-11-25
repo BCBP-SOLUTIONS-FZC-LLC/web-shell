@@ -19,6 +19,11 @@ export function showScreen(node: ReactNode): void {
   root.render(node)
 }
 
+/** Whether a screen (a dialog or the sign-in page) is showing now. */
+export function isScreenShown(): boolean {
+  return host !== undefined && !host.hidden
+}
+
 export function hideScreen(): void {
   root?.render(null)
   if (host) host.hidden = true

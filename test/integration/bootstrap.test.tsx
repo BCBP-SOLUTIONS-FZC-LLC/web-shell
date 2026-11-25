@@ -43,6 +43,9 @@ const signInAgain = vi.fn(async (o: { ask: () => Promise<Workspace> }) => {
 })
 const isWrongWorkspace = vi.fn(() => false)
 const loadContext = vi.fn()
+const loadTenant = vi.fn()
+const loadSeats = vi.fn()
+let appNotices: { get(): { banners: unknown[]; readOnlyUntil?: string } } | undefined
 const resolve = vi.fn<(id: string) => Promise<Workspace | undefined>>()
 const logger = { warn: vi.fn(), error: vi.fn() }
 const loadManifest = vi.fn(async () => ({}))
@@ -87,7 +90,9 @@ vi.mock('@bcbp-solutions-fzc-llc/frontend-sdk/auth', () => ({
   slugFromPath: (p: string) => /^\/t\/([a-z0-9-]+)/.exec(p)?.[1],
 }))
 vi.mock('@bcbp-solutions-fzc-llc/frontend-sdk/http', () => ({ setTokenSource: record('setTokenSource') }))
+const granted = new Set<string>()
 vi.mock('@bcbp-solutions-fzc-llc/frontend-sdk/authz', () => ({
+  hasPermission: (action: string, resource: string) => granted.has(`${action}:${resource}`),
   roleMapAuthorizer: () => 'authorizer',
   setAuthorizer: record('setAuthorizer'),
   setAuthzSubject: record('setAuthzSubject'),
@@ -132,8 +137,9 @@ const routerNavigate = vi.fn()
 vi.mock('../../src/app/routes/App', async () => {
   const { useEffect } = await import('react')
   return {
-    default: function App({ basename, onRouter }: { basename?: string; onRouter?: (n: typeof routerNavigate) => void }) {
+    default: function App({ basename, onRouter, notices }: { basename?: string; onRouter?: (n: typeof routerNavigate) => void; notices?: unknown }) {
       useEffect(() => onRouter?.(routerNavigate), [onRouter])
+      appNotices = notices as typeof appNotices
       return <main>app at {basename ?? '(root)'}</main>
     },
   }
@@ -142,6 +148,11 @@ vi.mock('../../src/infrastructure/api/iam', () => ({
   workspaceResolver: { resolve: (i: string) => resolve(i) },
   sessionContextSource: { load: () => loadContext() },
   loadSessionContextOnce: () => loadContext(),
+  workspaceStatusSource: { tenant: (id: string) => loadTenant(id), seatUsage: (id: string) => loadSeats(id) },
+}))
+const welcomeSeen = { value: false }
+vi.mock('../../src/infrastructure/storage/upgradeWelcome', () => ({
+  upgradeWelcomeStorage: { seen: () => welcomeSeen.value, markSeen: () => void (welcomeSeen.value = true) },
 }))
 
 const { bootstrap } = await import('../../src/app/bootstrap/bootstrap')
@@ -164,6 +175,11 @@ beforeEach(() => {
   window.history.replaceState({}, '', '/')
   initResult = { status: 'authenticated', user, workspace: acme, expiresAt: Date.now() + 60_000 }
   loadContext.mockResolvedValue({ tenantId: 't-1', slug: 'acme', roles: ['member'] })
+  loadTenant.mockResolvedValue({ name: 'Acme', status: 'active' })
+  loadSeats.mockResolvedValue({ activeUsers: 1, pendingInvitations: 0, licensedSeats: 10 })
+  granted.clear()
+  welcomeSeen.value = false
+  appNotices = undefined
   chooseWorkspace.mockResolvedValue(undefined)
   isWrongWorkspace.mockReturnValue(false)
   loadManifest.mockResolvedValue({})
@@ -556,5 +572,109 @@ describe('bootstrap, signed out', () => {
     await act(() => bootstrap())
     await userEvent.setup().click(screen.getByRole('button', { name: 'Try again' }))
     await waitFor(() => expect(idp.login).toHaveBeenCalledOnce())
+  })
+})
+
+describe('bootstrap, workspace banners (IAM P-1, P-27) and the upgrade welcome (A5)', () => {
+  const DAY = 86_400_000
+  const notices = () => appNotices?.get()
+
+  it("loads P-1 for the context's tenant after render, and gives a member the trial banner (no P-27)", async () => {
+    loadTenant.mockResolvedValue({ name: 'Acme', status: 'trial', trialEndsAt: new Date(Date.now() + 3 * DAY - 1000).toISOString() })
+    await act(() => bootstrap())
+    await waitFor(() => expect(notices()).toEqual({ banners: [{ kind: 'trial', days: 3 }] }))
+    expect(loadTenant).toHaveBeenCalledWith('t-1')
+    expect(loadSeats).not.toHaveBeenCalled()
+  })
+
+  it('asks P-27 for an owner, and shows "all seats used", the payment problem and the read-only grace date', async () => {
+    granted.add('manage:members').add('manage:tenant-settings')
+    loadTenant.mockResolvedValue({ name: 'Acme', status: 'past_due' })
+    loadSeats.mockResolvedValue({ activeUsers: 9, pendingInvitations: 1, licensedSeats: 10 })
+    await act(() => bootstrap())
+    await waitFor(() => expect(notices()?.banners).toEqual([{ kind: 'past-due' }, { kind: 'seats-full', seats: 10 }]))
+    expect(loadSeats).toHaveBeenCalledWith('t-1')
+
+    loadTenant.mockResolvedValue({ name: 'Acme', status: 'cancelled', readOnlyUntil: '2026-12-24T10:00:00Z' })
+    act(() => resetScreen())
+    await act(() => bootstrap())
+    await waitFor(() => expect(notices()?.readOnlyUntil).toBe('2026-12-24T10:00:00Z'))
+  })
+
+  it('logs a failure and shows no banner', async () => {
+    loadTenant.mockRejectedValue(new Error('403'))
+    await act(() => bootstrap())
+    await waitFor(() => expect(logger.warn).toHaveBeenCalledWith('workspace status unavailable', { error: expect.any(Error), what: 'tenant' }))
+    expect(notices()).toEqual({ banners: [] })
+  })
+
+  it('logs an unexpected failure of the load itself and keeps the app', async () => {
+    loadTenant.mockImplementation(() => {
+      throw new Error('bug')
+    })
+    await act(() => bootstrap())
+    await waitFor(() => expect(logger.warn).toHaveBeenCalledWith('workspace status unavailable', { error: expect.any(Error) }))
+    expect(screen.getByRole('main')).toBeInTheDocument()
+  })
+
+  it('welcomes the user once on this device after the trial converted (A5)', async () => {
+    loadTenant.mockResolvedValue({ name: 'Acme', status: 'active', trialEndsAt: '2026-01-01T00:00:00Z', subscriptionStartedAt: new Date(Date.now() - DAY).toISOString() })
+    await act(() => bootstrap())
+    const dialog = await screen.findByRole('dialog', { name: 'Welcome to your upgraded workspace' })
+    expect(dialog).toHaveTextContent('Acme is now on a paid plan.')
+    expect(dialog).not.toHaveTextContent(/error/i)
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Continue' }))
+    expect(welcomeSeen.value).toBe(true)
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    // Seen: the next page load does not show it again.
+    await act(() => bootstrap())
+    await waitFor(() => expect(loadTenant).toHaveBeenCalledTimes(2))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('loads the banners when a late session context arrives', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout'] })
+    loadContext.mockRejectedValueOnce(new NetworkError(false, 'req-1'))
+    const started = bootstrap()
+    await act(() => vi.advanceTimersByTimeAsync(0))
+    expect(loadTenant).not.toHaveBeenCalled()
+    await act(() => vi.advanceTimersByTimeAsync(1_000))
+    await act(() => started)
+    expect(loadTenant).toHaveBeenCalledOnce()
+  })
+
+  it('sets nothing, and logs nothing, when the user signs out while P-1 loads', async () => {
+    let reject: (e: unknown) => void = () => {}
+    loadTenant.mockReturnValue(new Promise((_r, j) => (reject = j)))
+    await act(() => bootstrap())
+    act(() => subscriber?.({ status: 'anonymous', reason: 'signed-out' } as SessionState))
+    // The ApiClient rejects an aborted request: not a failure worth a warning.
+    await act(async () => reject(new Error('aborted')))
+    expect(notices()).toEqual({ banners: [] })
+    expect(logger.warn).not.toHaveBeenCalledWith('workspace status unavailable', expect.anything())
+  })
+
+  const upgraded = () => ({ name: 'Acme', status: 'active', trialEndsAt: '2026-01-01T00:00:00Z', subscriptionStartedAt: new Date(Date.now() - DAY).toISOString() })
+
+  it('never covers "Session ended" with the welcome when the session expires while P-1 loads', async () => {
+    let answer: (t: unknown) => void = () => {}
+    loadTenant.mockReturnValue(new Promise((r) => (answer = r)))
+    await act(() => bootstrap())
+    act(() => subscriber?.({ status: 'expired', idle: true } as SessionState))
+    await act(async () => answer(upgraded()))
+    expect(screen.getByRole('alertdialog', { name: 'Session ended' })).toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: 'Welcome to your upgraded workspace' })).not.toBeInTheDocument()
+    expect(welcomeSeen.value).toBe(false)
+  })
+
+  it('never covers another screen with the welcome', async () => {
+    let answer: (t: unknown) => void = () => {}
+    loadTenant.mockReturnValue(new Promise((r) => (answer = r)))
+    resolve.mockResolvedValue(undefined)
+    await act(() => bootstrap())
+    await act(() => (shellProps.switchWorkspace as (id: string) => Promise<void>)('nowhere'))
+    await act(async () => answer(upgraded()))
+    expect(screen.getByRole('alertdialog', { name: 'Workspace not found' })).toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: 'Welcome to your upgraded workspace' })).not.toBeInTheDocument()
   })
 })

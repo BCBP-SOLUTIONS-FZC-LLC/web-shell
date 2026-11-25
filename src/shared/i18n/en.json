@@ -3,6 +3,13 @@
   "app.loadingDashboard": "Loading dashboard…",
   "app.loadingTenders": "Loading tenders…",
   "app.readOnly": "Workspace is read-only (subscription ended)",
+  "app.readOnlyUntil": "Workspace is read-only (subscription ended). Access ends on {date}.",
+  "app.banner.trialDays": "{days} days left in your trial",
+  "app.banner.trialOneDay": "1 day left in your trial",
+  "app.banner.trialEndsToday": "Your trial ends today",
+  "app.banner.pastDue": "Payment issue — update your card to keep your workspace active.",
+  "app.banner.seatsFull": "All {seats} seats are in use. New invitations will be refused until seats are added.",
+  "app.banner.ownerless": "This workspace has no owner. Contact support to assign one.",
   "app.contextUnavailable": "We couldn't load your permissions, so some actions are hidden.",
   "app.updateAvailable": "A new version is available.",
   "app.error": "Something went wrong on this page.",
@@ -71,5 +78,8 @@
   "session.accessPaused.title": "Your access is paused",
   "session.accessPaused.text": "Your access to this workspace is paused — contact your administrator.",
   "session.noAccess.title": "You don't have access to this workspace",
-  "session.noAccess.text": "Your access to this workspace was removed or paused. Contact your administrator, or switch to another workspace."
+  "session.noAccess.text": "Your access to this workspace was removed or paused. Contact your administrator, or switch to another workspace.",
+  "session.upgraded.title": "Welcome to your upgraded workspace",
+  "session.upgraded.text": "{name} is now on a paid plan.",
+  "common.continue": "Continue"
 }

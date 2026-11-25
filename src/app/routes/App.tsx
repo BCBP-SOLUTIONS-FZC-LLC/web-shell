@@ -1,6 +1,6 @@
 // The signed-in shell. The bootstrap renders this only with an authenticated session, so there is
 // no signed-out route here: sign-in screens are mounted by the bootstrap outside this tree.
-import { useEffect } from 'react'
+import { useEffect, useSyncExternalStore } from 'react'
 import { BrowserRouter, Navigate, Route, Routes, useNavigate, type NavigateFunction } from 'react-router-dom'
 import {
   MFEErrorBoundary,
@@ -15,6 +15,7 @@ import { AppError } from '../../presentation/widgets/AppError'
 import { ContextUnavailable } from '../../presentation/widgets/ContextUnavailable'
 import { ReadOnlyNotice } from '../../presentation/widgets/ReadOnlyNotice'
 import { UpdateAvailable } from '../../presentation/widgets/UpdateAvailable'
+import { WorkspaceBanners, type BannerProps } from '../../presentation/widgets/WorkspaceBanners'
 
 /** The remote that renders the dashboard, as named in /remotes/manifest.json. */
 export const DASHBOARD_REMOTE = 'dashboard'
@@ -60,9 +61,25 @@ function Update() {
   return <UpdateAvailable available={update.available} onReload={() => update.reload()} />
 }
 
+/** What the workspace banners show (IAM P-1 and P-27, loaded by the bootstrap after render). */
+export interface AppNotices {
+  banners: readonly BannerProps[]
+  /** RFC 3339: a cancelled workspace's read-only grace end. */
+  readOnlyUntil?: string
+}
+
+/** A value that changes after render (the bootstrap's store), read with useSyncExternalStore. */
+export interface Live<T> {
+  get(): T
+  subscribe(listener: () => void): () => void
+}
+
+const NO_NOTICES: AppNotices = { banners: [] }
+const noNotices: Live<AppNotices> = { get: () => NO_NOTICES, subscribe: () => () => {} }
+
 /** The read-only notice, while P-35 says so or the page has seen a DENY_TENANT_READ_ONLY answer. */
-function ReadOnly() {
-  return useReadOnly() ? <ReadOnlyNotice /> : null
+function ReadOnly({ until }: { until: string | undefined }) {
+  return useReadOnly() ? <ReadOnlyNotice until={until} /> : null
 }
 
 /** Hands the router's navigate to the bootstrap, which registers it as the SDK's navigator. */
@@ -79,11 +96,14 @@ function RouterBridge({ onRouter }: { onRouter: (navigate: NavigateFunction) => 
 export default function App({
   basename,
   onRouter,
+  notices = noNotices,
 }: {
   basename?: string
   onRouter?: (navigate: NavigateFunction) => void
+  notices?: Live<AppNotices>
 }) {
   const context = useSessionContext()
+  const { banners, readOnlyUntil } = useSyncExternalStore(notices.subscribe, notices.get, notices.get)
   // The shell's own screens in an error boundary (the SDK's): a render error is logged and counted
   // under `web-shell` and replaced by AppError instead of a blank page. The remote has its own
   // (RemoteBoundary), so a remote's error never reaches this one.
@@ -94,7 +114,8 @@ export default function App({
         <Update />
         {/* The page's notices, stacked at the bottom so two never cover each other. */}
         <div className="fixed inset-x-0 bottom-0 z-40 flex flex-col">
-          <ReadOnly />
+          <WorkspaceBanners banners={banners} />
+          <ReadOnly until={readOnlyUntil} />
           {context ? null : <ContextUnavailable onReload={() => window.location.reload()} />}
         </div>
         <Routes>
