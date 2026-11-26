@@ -10,6 +10,10 @@ Pull requests that change the shell, its dependencies, or the image add an entry
 
 ## [Unreleased]
 
+### Fixed (2026-11-26 — a remote's Tailwind no longer undoes the sidebar's wide layout)
+
+**The sidebar's `lg:` classes are now `!important` (`lg:sticky!`, `lg:hidden!`, `lg:flex!`, …), so a remote's own stylesheet cannot override them.** Each remote ships its own global Tailwind. Its unconditional `.fixed` (mfe-admin's dialogs, mfe-dashboard's sidebar) comes later in the cascade than the shell's `.lg\:sticky` at the same specificity and wins, so on a wide screen the sidebar stayed a fixed drawer over the page instead of sitting beside it (seen with mfe-admin and mfe-dashboard mounted). `src/presentation/widgets/AppSidebar.tsx`, `src/app/routes/App.tsx`. A durable fix is the platform's CSS ownership decision (LLD §15 #23, mfe-admin LLD §15 #11); the shell's other unlayered utilities are open to the same collision. *(Previously: plain `lg:` variants.)*
+
 ### Fixed (2026-11-26 — one theme for every remote)
 
 **The theme a user picks now follows them into every remote and across reloads.** Every remote draws with `html[data-theme]`, but only mfe-dashboard set it (from its own storage), so mfe-admin and the others showed the default after a reload or when opened first. The shell now puts its saved theme on the page before a remote mounts and saves whatever theme a remote sets, in `storage('shell')` (new key `…:shell:theme`, cleared on sign-out and workspace switch; `src/infrastructure/storage/sharedTheme.ts`). Remotes change nothing. Not breaking for remotes or environments.
