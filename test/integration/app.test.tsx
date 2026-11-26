@@ -337,6 +337,22 @@ describe('App sidebar (app-chrome handoff, option A)', () => {
     expect(nav().queryByRole('link', { name: 'Admin' })).toBeNull()
   })
 
+  it('draws Admin\'s sections as a tree under it while an admin page is open, and nowhere else', () => {
+    frame.admin = true
+    window.history.replaceState({}, '', '/t/acme/dashboard')
+    const { unmount } = render(<App basename="/t/acme" remotes={ALL} />)
+    expect(nav().queryByRole('link', { name: 'Users' })).toBeNull()
+    unmount()
+    window.history.replaceState({}, '', '/t/acme/admin/departments')
+    render(<App basename="/t/acme" remotes={ALL} />)
+    expect(nav().getAllByRole('link').map((l) => l.textContent)).toEqual([
+      'Dashboard', 'Tenders', 'Drafting', 'Workflows', 'Admin', 'Users', 'Departments', 'Group mappings', 'Settings', 'Audit log',
+    ])
+    expect(nav().getByRole('link', { name: 'Audit log' })).toHaveAttribute('href', '/t/acme/admin/audit')
+    expect(nav().getByRole('link', { name: 'Departments' })).toHaveAttribute('aria-current', 'page')
+    expect(nav().getByRole('link', { name: 'Users' })).not.toHaveAttribute('aria-current')
+  })
+
   it.each([
     ['admin', '/t/acme/admin/users', 'Loading admin…'],
     ['me', '/t/acme/me/profile', 'Loading your account…'],
