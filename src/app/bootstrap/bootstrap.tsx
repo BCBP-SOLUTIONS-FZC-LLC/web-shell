@@ -182,13 +182,15 @@ async function start(cfg: RuntimeConfig, report: { otlpBaseUrl: string }): Promi
 
   if (session.status === 'anonymous') {
     // init() has already moved the URL off the callback path to the page the user opened.
-    const signIn = async () => {
+    const signIn = async (afterSignOut = false) => {
       // A failed silent attempt names its workspace (a trial one re-checked with PUB-1). Without one, PUB-1
       // no longer knows it (the SDK dropped it): ask for the email, never another cached workspace (SDK
       // alpha.7 SessionState). Otherwise /t/<slug> → cached or resolved workspace, else the most recent
       // cached one, else ask for the email.
-      const known: Workspace | undefined =
-        session.reason === 'login-required'
+      // After a sign-out the user always gets the shell's own login page, never a straight redirect.
+      const known: Workspace | undefined = afterSignOut
+        ? undefined
+        : session.reason === 'login-required'
           ? session.workspace
           : await chooseWorkspace({ pathname: window.location.pathname, resolver: workspaceResolver, cfg: cfg.auth })
       // The remembered value may be a workspace name: only an email becomes login_hint.
@@ -207,8 +209,8 @@ async function start(cfg: RuntimeConfig, report: { otlpBaseUrl: string }): Promi
       })
     }
     // After a logout, wait for the user: an automatic login would ride the live SSO session.
-    if (session.reason === 'signed-out') showSignedOut(signIn)
-    else if (session.reason === 'device-clock') showDeviceClock(signIn)
+    if (session.reason === 'signed-out') showSignedOut(() => signIn(true))
+    else if (session.reason === 'device-clock') showDeviceClock(() => signIn())
     else await signIn()
     return
   }
@@ -269,7 +271,15 @@ async function start(cfg: RuntimeConfig, report: { otlpBaseUrl: string }): Promi
       signedOutDuringBoot.abort()
       app?.unmount()
       app = undefined
-      showSignedOut(() => idp.login({ workspace: s.workspace ?? session.workspace }))
+      // "Sign in" opens the shell's login page (workspace or email), not Keycloak directly.
+      showSignedOut(async () => {
+        const choice = await askForWorkspace(signInUseCases)
+        await idp.login({
+          workspace: choice.workspace,
+          ...(choice.loginHint ? { loginHint: choice.loginHint } : {}),
+          ...credentialsFor(choice.workspace),
+        })
+      })
     }
   })
 

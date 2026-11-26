@@ -496,13 +496,23 @@ describe('bootstrap, signed in', () => {
     await act(() => bootstrap())
     act(() => subscriber!({ status: 'anonymous', reason: 'signed-out' }))
     expect(screen.queryByRole('main')).not.toBeInTheDocument()
+    // "Sign in" opens the shell's login page, never Keycloak directly.
+    resolve.mockResolvedValue(acme)
     await userEvent.setup().click(screen.getByRole('button', { name: 'Sign in' }))
-    expect(idp.login).toHaveBeenCalledWith({ workspace: acme })
+    expect(idp.login).not.toHaveBeenCalled()
+    await typeEmail('ada@acme.com')
+    await waitFor(() =>
+      expect(idp.login).toHaveBeenCalledWith({ workspace: acme, loginHint: 'ada@acme.com' }),
+    )
+  })
 
-    const other: Workspace = { realm: 'tenant-other', trial: false }
-    act(() => subscriber!({ status: 'anonymous', reason: 'signed-out', workspace: other }))
+  it('after a sign-out, a workspace name typed on the login page signs in with no login_hint', async () => {
+    await act(() => bootstrap())
+    act(() => subscriber!({ status: 'anonymous', reason: 'signed-out' }))
+    resolve.mockResolvedValue(acme)
     await userEvent.setup().click(screen.getByRole('button', { name: 'Sign in' }))
-    expect(idp.login).toHaveBeenLastCalledWith(expect.objectContaining({ workspace: other }))
+    await typeEmail('acme')
+    await waitFor(() => expect(idp.login).toHaveBeenCalledWith({ workspace: acme }))
   })
 
   it('ignores other session changes', async () => {
@@ -1556,7 +1566,10 @@ describe('bootstrap, signed out', () => {
     chooseWorkspace.mockResolvedValue(acme)
     await act(() => bootstrap())
     expect(idp.login).not.toHaveBeenCalled()
+    resolve.mockResolvedValue(acme)
     await userEvent.setup().click(screen.getByRole('button', { name: 'Sign in' }))
+    expect(idp.login).not.toHaveBeenCalled() // the login page, not a redirect
+    await typeEmail('ada@acme.com')
     await waitFor(() => expect(idp.login).toHaveBeenCalledOnce())
   })
 

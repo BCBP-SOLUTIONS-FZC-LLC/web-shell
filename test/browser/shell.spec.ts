@@ -112,9 +112,12 @@ test('sign-out POSTs to Keycloak under form-action, ends the SSO session and wai
   await expect(page.getByRole('heading', { name: 'You are signed out' })).toBeVisible()
   expect(await violations(page)).toEqual([])
 
-  // Sign in again: credentials are asked for (prompt=login), not a silent pass on a live session.
+  // Sign in again: the shell's login page comes first (no redirect on the click), then credentials are asked
+  // for (prompt=login), not a silent pass on a live session.
   const authorize = page.waitForRequest((r) => r.url().startsWith(`${IDP}/realms/tenant-acme/protocol/openid-connect/auth`))
   await page.getByRole('button', { name: 'Sign in' }).click()
+  await page.getByRole('textbox', { name: /work email or workspace name/i }).fill(EMAIL)
+  await page.getByRole('button', { name: /^continue$/i }).click()
   expect(new URL((await authorize).url()).searchParams.get('prompt')).toBe('login')
 })
 

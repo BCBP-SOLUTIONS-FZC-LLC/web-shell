@@ -18,6 +18,10 @@ Pull requests that change the shell, its dependencies, or the image add an entry
 
 Tests: `test/integration/bootstrap.test.tsx` (App gets the SDK storage), `test/integration/app.test.tsx` (the modal drawer's focus, the page inert, closing on a wide screen, the workspace and user, the drawer and its toggle, collapsing to the rail, Switch workspace closing, icons and the Admin group, the published sizes), `test/e2e/shell.test.tsx` (sidebar links, Sign out and Switch workspace with the real SDK), `test/unit/workspace-status.test.ts` (the saved choice, per workspace), `test/browser/shell.spec.ts` (at a desktop width beside the page with `--shell-sidebar-width` equal to its width and AA contrast, collapsed to the 64 px rail, and still collapsed after a reload; at a phone width the modal drawer, Close menu and Escape; the new-version notice clear of the sidebar and the bar; at a phone width a drawer; mouse clicks in three engines). *(Previously: a header across the top with an "Account menu" holding My account, Switch workspace and Sign out.)*
 
+### Fixed (2026-11-26 — "Sign in" after a sign-out opens the login page)
+
+**"Sign in" on the "You are signed out" screen now opens the shell's login page (work email, workspace name or link) instead of redirecting straight to Keycloak.** The screen reused the remembered workspace and went to the identity provider with no input from the user. It still waits for a click after a sign-out, and the sign-in then asks for credentials as before (`src/app/bootstrap/bootstrap.tsx`, LLD §6.5). Not breaking for remotes or environments.
+
 ### Known gaps
 
 - **The banners (P-1, P-27) follow the first session context only**: a user promoted by a refresh (on focus, or a remote's `useRefreshSessionContext`) gets no seats banner until a reload.

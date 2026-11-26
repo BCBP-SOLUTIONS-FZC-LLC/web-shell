@@ -772,8 +772,11 @@ describe('the shell, end to end', () => {
     await screen.findByRole('heading', { name: 'You are signed out' }, { timeout: 5_000 })
     expect(assigned).toEqual([]) // no silent sign-in on the live SSO session
 
-    // Signing in again asks for credentials (a shared device).
+    // Signing in again opens the shell's login page first, then asks for credentials (a shared device).
     await userEvent.click(screen.getByRole('button', { name: 'Sign in' }))
+    expect(assigned).toEqual([])
+    await userEvent.type(await emailBox(), EMAIL)
+    await userEvent.click(continueButton())
     await until(() => assigned.length > 0, 'the redirect to Keycloak')
     const again = new URL(assigned[0]!)
     expect(again.pathname).toBe('/realms/tenant-acme/protocol/openid-connect/auth')

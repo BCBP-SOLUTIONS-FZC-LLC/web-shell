@@ -420,7 +420,7 @@ A refusal screen stays when the session then expires: once a refusal replaced th
 
 ### 6.5 Sign-out
 
-Here (a remote's `useSignOut()`) or in another tab (`BroadcastChannel('platform-auth')`): `anonymous`/`signed-out` → the app root is unmounted (so the previous user's data is not left under the dialog), then `showSignedOut(() => idp.login({ workspace }))`. A global sign-out POSTs a hidden form to the realm's end-session endpoint (`id_token_hint`, `client_id`, `post_logout_redirect_uri`; the ID token stays out of URLs and history), which returns to `/`. The CSP `form-action` must allow the IdP origin, or the browser blocks the POST and the SSO session stays alive; that load shows the signed-out dialog (§6.1). The SDK clears per-workspace storage.
+Here (a remote's `useSignOut()`) or in another tab (`BroadcastChannel('platform-auth')`): `anonymous`/`signed-out` → the app root is unmounted (so the previous user's data is not left under the dialog), then `showSignedOut(...)`, whose "Sign in" opens the shell's login page (`askForWorkspace`) and only then `idp.login`; it never redirects to Keycloak straight from the signed-out screen (a reload after sign-out does the same). A global sign-out POSTs a hidden form to the realm's end-session endpoint (`id_token_hint`, `client_id`, `post_logout_redirect_uri`; the ID token stays out of URLs and history), which returns to `/`. The CSP `form-action` must allow the IdP origin, or the browser blocks the POST and the SSO session stays alive; that load shows the signed-out dialog (§6.1). The SDK clears per-workspace storage.
 
 ### 6.6 Workspace switch
 
