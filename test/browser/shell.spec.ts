@@ -81,12 +81,17 @@ test("a reload checks the saved paid realm's discovery document under the produc
   expect(await violations(page)).toEqual([])
 })
 
-test("a remote's navigate() stays in the single-page app", async ({ page }) => {
+test("a remote's navigate() stays in the single-page app, and the mounted remote follows it", async ({ page }) => {
   await signIn(page)
+  await expect(page.getByText('Mounted at /t/acme/dashboard')).toBeVisible()
   await page.evaluate(() => ((window as unknown as { __samePage: boolean }).__samePage = true))
   await page.getByRole('button', { name: 'Members' }).click()
   await expect(page).toHaveURL(`${APP}/t/acme/dashboard/members`)
+  // The dashboard is already mounted and its router does not see the shell's navigation: the shell mounts it
+  // again at the new path (handoff §3.3), still without a page load.
+  await expect(page.getByText('Mounted at /t/acme/dashboard/members')).toBeVisible()
   expect(await page.evaluate(() => (window as unknown as { __samePage?: boolean }).__samePage)).toBe(true)
+  expect(await violations(page)).toEqual([])
 })
 
 test('sign-out POSTs to Keycloak under form-action, ends the SSO session and waits for a click', async ({ page }) => {
@@ -125,9 +130,12 @@ test('a deploy without its runtime config shows the unavailable page and reports
     .toContain('the app could not start')
 })
 
-/** WCAG 2 contrast ratio of an element's text on its background, read in the page (a canvas turns any CSS colour, oklch included, into sRGB). */
-async function contrastRatio(page: Page, selector: string): Promise<number> {
-  const [fg, bg] = await page.locator(selector).evaluate((el) => {
+/**
+ * WCAG 2 contrast ratio of an element's text on its background (or on `background`'s, for text on a
+ * transparent element), read in the page (a canvas turns any CSS colour, oklch included, into sRGB).
+ */
+async function contrastRatio(page: Page, selector: string, background?: string): Promise<number> {
+  const [fg, bg] = await page.locator(selector).first().evaluate((el, background) => {
     const ctx = document.createElement('canvas').getContext('2d', { willReadFrequently: true })!
     const rgb = (c: string) => {
       ctx.clearRect(0, 0, 1, 1)
@@ -135,9 +143,9 @@ async function contrastRatio(page: Page, selector: string): Promise<number> {
       ctx.fillRect(0, 0, 1, 1)
       return [...ctx.getImageData(0, 0, 1, 1).data.slice(0, 3)]
     }
-    const style = getComputedStyle(el)
-    return [rgb(style.color), rgb(style.backgroundColor)]
-  })
+    const back = background ? el.closest(background)! : el
+    return [rgb(getComputedStyle(el).color), rgb(getComputedStyle(back).backgroundColor)]
+  }, background)
   const luminance = (c: number[]) =>
     c.map((v) => v / 255).map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4)).reduce((l, v, i) => l + v * [0.2126, 0.7152, 0.0722][i]!, 0)
   const [hi, lo] = [luminance(fg!), luminance(bg!)].sort((a, b) => b - a)
@@ -176,6 +184,55 @@ test('the workspace banner (IAM P-1) shows under the production CSP with AA cont
   expect(layout.height).toBeGreaterThan(0)
   expect(layout.contentBottom).toBeLessThanOrEqual(layout.stackTop + 0.5)
   expect(Math.abs(layout.stackBottom - layout.view)).toBeLessThanOrEqual(0.5)
+})
+
+test("the shell's header shows under the production CSP with AA contrast, and publishes its height", async ({ page }) => {
+  await signIn(page)
+  const header = page.getByRole('banner')
+  await expect(header.getByRole('link', { name: 'Dashboard' })).toHaveAttribute('aria-current', 'page')
+  expect(await contrastRatio(page, 'header nav a', 'header')).toBeGreaterThanOrEqual(4.5)
+  expect(await contrastRatio(page, 'header button', 'header')).toBeGreaterThanOrEqual(4.5)
+  await header.getByRole('button', { name: /Account menu/ }).click()
+  await expect(header.getByRole('button', { name: 'Sign out' })).toBeVisible()
+  expect(await violations(page)).toEqual([])
+  // Its height reaches remotes as --shell-header-height (CSSOM, allowed by the CSP), and it stays at the
+  // top while the page scrolls.
+  await page.setViewportSize({ width: 800, height: 300 })
+  const layout = await page.evaluate(() => {
+    window.scrollTo(0, document.documentElement.scrollHeight)
+    const frame = document.querySelector('header')!.parentElement!
+    return {
+      published: getComputedStyle(document.documentElement).getPropertyValue('--shell-header-height'),
+      height: frame.offsetHeight,
+      top: frame.getBoundingClientRect().top,
+    }
+  })
+  expect(layout.published).toBe(`${layout.height}px`)
+  expect(layout.height).toBeGreaterThan(0)
+  expect(layout.top).toBe(0)
+})
+
+// A clicked button is not focused in WebKit: the menu's items must work with a real mouse click in every engine.
+test("the header's Switch workspace works with a mouse click", async ({ page }) => {
+  await signIn(page)
+  const header = page.getByRole('banner')
+  const menu = header.getByRole('button', { name: /Account menu/ })
+  await menu.click()
+  await header.getByRole('button', { name: 'Switch workspace' }).click()
+  await header.getByLabel('Work email or workspace name').fill(EMAIL)
+  const authorize = page.waitForRequest((r) => r.url().startsWith(`${IDP}/realms/tenant-acme/protocol/openid-connect/auth`))
+  // The click lands: PUB-1 resolves the name and the browser leaves for that workspace's sign-in.
+  await header.getByRole('button', { name: 'Continue' }).click()
+  await authorize
+})
+
+test("the header's Sign out works with a mouse click", async ({ page }) => {
+  await signIn(page)
+  const header = page.getByRole('banner')
+  await header.getByRole('button', { name: /Account menu/ }).click()
+  await header.getByRole('button', { name: 'Sign out' }).click()
+  await expect(page.getByRole('heading', { name: 'You are signed out' })).toBeVisible()
+  await expect.poll(async () => (await state(page)).logouts.length).toBe(1)
 })
 
 test('the read-only notice shows under the production CSP with AA contrast', async ({ page }) => {

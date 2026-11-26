@@ -54,9 +54,11 @@ graph LR
     comps --> text
     links -. types .-> text
     app --> widgets
+    app --> domain
     app --> text
     app --> sdk
     widgets --> text
+    widgets --> comps
     usecases --> domain
     usecases -. types, /problem .-> sdk
     remember --> domain

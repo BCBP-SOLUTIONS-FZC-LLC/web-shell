@@ -39,3 +39,13 @@ export const permissions: Record<Role, readonly Permission[]> = {
   tenant_admin: TENANT_ADMIN,
   tenant_owner: TENANT_OWNER,
 }
+
+/** IAM's admin grants in this map: the rights mfe-admin's screens (`/admin/*`) are for. */
+export const ADMIN_PERMISSIONS: readonly Permission[] = TENANT_OWNER.filter((p) => !TENDER_ADMIN.includes(p))
+
+/**
+ * What shows the Admin entry point in the shell's header. mfe-admin's rule (`useAdminAccess`) is
+ * `manage:members` or any admin permission; in this map every role holding an admin grant holds
+ * `manage:members` (test/unit/platform-misc.test.tsx proves it), so this one check is the same rule.
+ */
+export const ADMIN_ENTRY = { action: 'manage', resource: 'members' } as const

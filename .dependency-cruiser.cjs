@@ -60,12 +60,14 @@ const deps = {
   constants: { mayDependOn: ['i18n'] },
   ui_assets: {},
   components: { mayDependOn: ['ui_assets', 'i18n', 'constants'], vendors: [REACT] },
-  widgets: { mayDependOn: ['i18n'], vendors: [REACT] },
+  // The header shows the brand mark (components/BrandLogo).
+  widgets: { mayDependOn: ['i18n', 'components'], vendors: [REACT] },
   pages: { mayDependOn: ['components', 'ui_assets', 'i18n', 'constants', 'domain'], typeOnlyDependOn: ['application'], vendors: [REACT] },
   features: { mayDependOn: ['pages', 'components', 'i18n', 'domain'], typeOnlyDependOn: ['application'], vendors: [REACT], typeOnlyVendors: [sdk('auth')] },
   layouts: { mayDependOn: ['features', 'i18n', 'application'], vendors: [REACT], typeOnlyVendors: [sdk('auth')] },
   providers: { mayDependOn: ['application'], vendors: [REACT, sdk('react')], typeOnlyVendors: [sdk('auth')] },
-  routes: { mayDependOn: ['widgets', 'i18n'], vendors: [REACT, '^node_modules/react-router(-dom)?/', sdk('react')] },
+  // The Admin entry check (domain/rules/permissions: ADMIN_ENTRY).
+  routes: { mayDependOn: ['widgets', 'i18n', 'domain'], vendors: [REACT, '^node_modules/react-router(-dom)?/', sdk('react')] },
   // Composition root: wires everything.
   bootstrap: {
     mayDependOn: ['domain', 'application', 'infrastructure', 'i18n', 'ui_assets', 'layouts', 'providers', 'routes'],

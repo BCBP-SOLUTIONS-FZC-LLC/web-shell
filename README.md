@@ -1,12 +1,12 @@
 # web-shell
 
-The browser shell for the BCBP micro-frontend platform. It runs the platform SDK's start-up sequence once for the whole page: identity, runtime config, telemetry, the Keycloak session, the workspace, permissions and flags. Then it renders the Module Federation remotes `dashboard`, `tenders` (mfe-tender), `drafting` (mfe-drafting) and `workflows` (mfe-workflow-designer) inside this origin. The sign-in page and the session screens (signed out, session ended and so on) belong to the shell. Remotes initialise nothing; they read the shell's state through the SDK's hooks.
+The browser shell for the BCBP micro-frontend platform. It runs the platform SDK's start-up sequence once for the whole page: identity, runtime config, telemetry, the Keycloak session, the workspace, permissions and flags. Then it renders the Module Federation remotes `dashboard`, `tenders` (mfe-tender), `drafting` (mfe-drafting) and `workflows` (mfe-workflow-designer), and `admin` (mfe-admin) and `me` (mfe-me) once they are built, inside this origin, under the shell's header. The sign-in page and the session screens (signed out, session ended and so on) belong to the shell. Remotes initialise nothing; they read the shell's state through the SDK's hooks.
 
 **Repository:** `github.com/BCBP-SOLUTIONS-FZC-LLC/web-shell`
-**Runtime:** Node.js 26 · Rsbuild 2 (Rspack) · React 19.3 · `@bcbp-solutions-fzc-llc/frontend-sdk` `1.0.0-alpha.9` · private npm package `web-shell` (`"private": true`) · production image is nginx on port **8080**
+**Runtime:** Node.js 26 · Rsbuild 2 (Rspack) · React 19.3 · `@bcbp-solutions-fzc-llc/frontend-sdk` `1.0.0-alpha.10` · private npm package `web-shell` (`"private": true`) · production image is nginx on port **8080**
 **Contract:** Module Federation host `shell`, built with `@bcbp-solutions-fzc-llc/webpack-preset`. It provides React, React DOM, the OTel API and every SDK subpath to remotes, and exposes nothing. Versioning of the image and that contract is in [VERSIONING.md](./VERSIONING.md).
 **Design:** [docs/lld/web-shell-lld.md](./docs/lld/web-shell-lld.md) is the contract (where it and the code disagree, fix one in the same PR). The platform SDK's design doc (`platform-reactcommon` `docs/design/frontend-sdk-design.md`, §C1 ports, §C2 shell bootstrap) defines what a shell must own. The structure follows the Frontend Architecture Constitution ([assessment](./docs/architecture/constitution-assessment.md), [ADRs](./docs/adr/README.md)).
-**Status:** Released: **`v0.4.0`** (2026-11-11; remotes `dashboard` and `tenders`, SDK `1.0.0-alpha.6`, pairs with mfe-dashboard `v0.3.0`; mfe-tender unreleased) is current and `latest`; **`v0.3.0`** (2026-11-06; remote `dashboard` only, same SDK) is its rollback; **`v0.2.0`** (SDK alpha.5) and **`v0.1.0`** (remote `app2`) are superseded. All were published by `release.yml` (signed, SBOM, SLSA provenance, tags added after signing). Not deployed yet. Deploy web-shell `0.4.0` with mfe-dashboard `0.3.0` (rollback: web-shell `0.3.0`, same dashboard); `tenders` turns on when an environment's manifest gets mfe-tender's entry. mfe-dashboard `0.4.0` (alpha.6) needs web-shell `0.3.0` or later. Until CloudFront exists (next month) environments follow [docs/hosting-without-cloudfront.md](./docs/hosting-without-cloudfront.md). What is still open: [LLD §15](./docs/lld/web-shell-lld.md#15-open-items).
+**Status:** Released: **`v0.5.0`** (2026-11-25; SDK `1.0.0-alpha.10`; the header, IAM's workspace screens and notices, live roles; routes for `dashboard`, `tenders`, `drafting`, `workflows`, `admin`, `me`; pairs with mfe-dashboard `v0.4.0`, contract suite 12/12, and `v0.3.0`; the other remotes unreleased) is current and `latest`; **`v0.4.0`** (2026-11-11; remotes `dashboard` and `tenders`, SDK alpha.6) is its rollback; **`v0.3.0`**, **`v0.2.0`** and **`v0.1.0`** (remote `app2`) are superseded. All were published by `release.yml` (signed, SBOM, SLSA provenance, tags added after signing). Not deployed yet. Deploy web-shell `0.5.0` with mfe-dashboard `0.4.0` (or `0.3.0`); rollback: web-shell `0.4.0`, same dashboard. Every environment with trial users must serve IAM P-35; set `shell.frame: false` while mfe-dashboard and mfe-tender still draw their own frames. Each other remote turns on when an environment's manifest gets its entry. Until CloudFront exists (next month) environments follow [docs/hosting-without-cloudfront.md](./docs/hosting-without-cloudfront.md). What is still open: [LLD §15](./docs/lld/web-shell-lld.md#15-open-items).
 
 ---
 
@@ -14,10 +14,11 @@ The browser shell for the BCBP micro-frontend platform. It runs the platform SDK
 
 | This shell owns | Lives elsewhere |
 |---|---|
-| The SDK bootstrap (`src/app/bootstrap/bootstrap.tsx`) and the routes of the signed-in app: `/t/<slug>/dashboard/*` renders the dashboard remote, `/t/<slug>/tenders/*` the tenders remote, `/t/<slug>/drafting/*` the drafting remote, `/t/<slug>/workflows/*` the workflow designer | Dashboard pages, navigation inside the dashboard and dashboard data (`mfe-dashboard`, loaded as `dashboard`); tender screens (`mfe-tender`, loaded as `tenders`); drafting (`mfe-drafting`, `drafting`); the workflow designer (`mfe-workflow-designer`, `workflows`) |
+| The SDK bootstrap (`src/app/bootstrap/bootstrap.tsx`) and the routes of the signed-in app: `/t/<slug>/dashboard/*` renders the dashboard remote, `/t/<slug>/tenders/*` the tenders remote, `/t/<slug>/drafting/*` the drafting remote, `/t/<slug>/workflows/*` the workflow designer, `/t/<slug>/admin/*` workspace administration, `/t/<slug>/me/*` the user's account | Dashboard pages, navigation inside the dashboard and dashboard data (`mfe-dashboard`, loaded as `dashboard`); tender screens (`mfe-tender`, loaded as `tenders`); drafting (`mfe-drafting`, `drafting`); the workflow designer (`mfe-workflow-designer`, `workflows`); administration (`mfe-admin`, `admin`) and the user's account (`mfe-me`, `me`), not built yet |
+| The header around every remote: links to the remotes the manifest serves, Admin for those who may manage members, and the user menu (My account, Switch workspace, Sign out). Flag `shell.frame: false` turns it off | Each remote's own section navigation inside its pages |
 | The sign-in page (email, workspace name or URL) and the session screens. The SDK does Authorization Code + PKCE against the workspace's Keycloak realm and keeps tokens in memory | Credentials, password policy, MFA and token issuance (Keycloak). This repo ships a local realm and theme for development |
 | The IAM ports: PUB-1 (email or slug → realm), P-35 (session context), and P-1/P-27 for the banners (tenant, seat usage), over the SDK's `ApiClient` | The IAM APIs themselves, tenant membership, roles and audit |
-| The shell value remotes read through SDK hooks: the user, workspace, session context and sign-out (`PlatformProvider`) | Any other remote. `dashboard`, `tenders`, `drafting` and `workflows` are in the local manifest |
+| The shell value remotes read through SDK hooks: the user, workspace, session context, sign-out and the session-context refresh (`useRefreshSessionContext`, SDK alpha.10) (`PlatformProvider`) | Any other remote. `dashboard`, `tenders`, `drafting` and `workflows` are in the local manifest |
 | Static hosting of `index.html`, hashed `/assets/`, `/config/runtime.json`, `/remotes/manifest.json`, `/version.json` and `GET /healthz` | Cluster deploy and each environment's runtime config and remote manifest. Publishing a tag pushes an image; it does not roll a cluster |
 
 Everything environment-specific is read at run time from `/config/runtime.json`. Only the identity environment and build version are compiled into the bundle.
@@ -56,10 +57,14 @@ Only an authenticated session renders the app. Before that, the bootstrap mounts
 | `/t/<slug>/tenders/*` | `tenders` `./App` (mfe-tender) inside `RemoteBoundary` |
 | `/t/<slug>/drafting/*` | `drafting` `./App` (mfe-drafting) inside `RemoteBoundary` |
 | `/t/<slug>/workflows/*` | `workflows` `./App` (mfe-workflow-designer) inside `RemoteBoundary` |
+| `/t/<slug>/admin/*` | `admin` `./App` (mfe-admin) inside `RemoteBoundary` |
+| `/t/<slug>/me/*` | `me` `./App` (mfe-me) inside `RemoteBoundary` |
 | anything else under `/t/<slug>/` | Redirect to `/t/<slug>/dashboard` |
 | `/auth/callback` | Handled by the SDK, then moved to the page the user opened |
 
 After sign-in the SDK moves the URL under `/t/<slug>/` (`rememberWorkspace`), and the router uses that prefix as its basename. Without a session context there is no slug, and the routes start at the site root.
+
+The header above the routes links to Dashboard, Tenders, Drafting and Workflows when the manifest lists that remote and it is not switched off, and to Admin when the user also has `manage:members`. Its user menu names the user and the workspace and offers My account (when `me` is served), Switch workspace and Sign out. A link is followed by the shell's router, without a page load. Details: LLD §6.6d.
 
 ### Sign-in sequence
 
@@ -68,7 +73,7 @@ After sign-in the SDK moves the URL under `/t/<slug>/` (`rememberWorkspace`), an
 3. Signed out with a known workspace (the `/t/<slug>` in the URL, or the SDK's workspace cache): straight to that realm's authorize endpoint (a cached trial is re-checked with PUB-1 first), with the remembered email as `login_hint` (a remembered workspace name is never sent as one). After a failed silent sign-in for a trial PUB-1 no longer knows, the login page asks instead (step 4), even with a slug in the URL.
 4. Otherwise the login page asks for a work email or workspace name (a pasted workspace URL works too: its `/t/<slug>` is used). `GET /api/v1/public/tenants/resolve?identifier=<email or slug>` (PUB-1) returns the realm. "Not found", 429 and "unreachable" show the same generic message.
 5. Keycloak redirects to `{origin}/auth/callback`. The SDK checks `state`, exchanges the code with the PKCE verifier, and keeps the tokens in memory.
-6. The bootstrap loads the session context (`GET /api/v1/me/session-context`, P-35), sets permissions and flags, caches the workspace, loads `/remotes/manifest.json`, and renders. If P-35 refuses the workspace (trial ended, suspended, access paused, not a member; a membership refusal is asked once more after 5 s), it shows that screen with Sign out and Switch workspace instead, and renders nothing (a refusal that a background retry receives is asked again the same way, then unmounts the app). A trial workspace with a slug waits for P-35 before anything mounts: another trial tenant's session shows "You signed in to a different workspace", and a context that never loads shows "We couldn't load your workspace" (it stays closed: the slug cannot be checked without P-35) with Try again, Sign out and Switch workspace. After render it loads the workspace's banners from IAM P-1 (and P-27 for owners and admins) in the background.
+6. The bootstrap loads the session context (`GET /api/v1/me/session-context`, P-35), sets permissions and flags, caches the workspace, loads `/remotes/manifest.json`, and renders. If P-35 refuses the workspace (trial ended, suspended, access paused, not a member; a membership refusal is asked once more after 5 s), it shows that screen with Sign out and Switch workspace instead, and renders nothing (a refusal that a background retry receives is asked again the same way, then unmounts the app). A trial workspace with a slug waits for P-35 before anything mounts: another trial tenant's session shows "You signed in to a different workspace", and a context that never loads shows "We couldn't load your workspace" (it stays closed: the slug cannot be checked without P-35) with Try again, Sign out and Switch workspace. After render it loads the workspace's banners from IAM P-1 (and P-27 for owners and admins) in the background, and asks P-35 again when the page gets focus (at most once a minute), so a role or plan change made elsewhere reaches the page without a reload.
 
 **Forgot your password?** resolves what was typed (email, workspace name or URL) the same way and opens Keycloak's reset page for that realm (`/realms/{realm}/login-actions/reset-credentials`). Help and legal links appear only once their official URLs are set in `src/shared/constants/links.ts`. When a new deployment is live, "A new version is available." offers a reload. In a read-only workspace (P-35 `read_only`, such as a cancelled subscription in its grace period, or a request refused with `DENY_TENANT_READ_ONLY`), a notice at the bottom says "Workspace is read-only (subscription ended)".
 
@@ -80,8 +85,9 @@ Sign-out is global by default: the Keycloak session ends, every tab drops its to
 |---|---|
 | Host | `shell` (`rsbuild.config.ts`, `pluginPlatform({ role: 'shell' })`) |
 | Remote entries | `/remotes/manifest.json`: `{ "<name>": { "entry", "version", "ownerDomain", "integrity" } }`. `integrity` is required outside `local`, `dev` and `test` |
-| Remotes the shell renders | `dashboard`, `tenders`, `drafting` and `workflows`, module `./App` |
+| Remotes the shell renders | `dashboard`, `tenders`, `drafting`, `workflows`, `admin` and `me`, module `./App` |
 | Props this shell passes to any remote's `./App` | None. The remote uses `useCurrentUser()` and `useSignOut()` |
+| Header height | `--shell-header-height` on `<html>` (px; absent while the header is off): a remote's fixed elements can start below the shell's header with `top: var(--shell-header-height, 0px)`. A remote should not draw a second global navigation |
 | Notice stack height | `--shell-notices-height` on `<html>` (px; `0px` with no notice): a remote's fixed elements can end above the shell's bottom notices with `bottom: var(--shell-notices-height, 0px)`. Optional: a remote that ignores it keeps working |
 | Shared | `react`, `react-dom` (and their JSX and client entries), `@opentelemetry/api`, every SDK subpath. Strict singletons; a remote takes the SDK from the shell (`import: false`) |
 
@@ -185,7 +191,7 @@ web-shell/
 | `domain/` | SDK types | React, the browser, any other layer |
 | `application/` | `domain/`; SDK types and the `/problem` error classes | React, the browser, `infrastructure/`, `presentation/`, `app/` (ports are injected) |
 | `infrastructure/` | `domain/`, `shared/i18n`, the SDK | `presentation/`, `application/`, `app/` |
-| `presentation/` | `pages/`: `components/`, `domain/`, `application/` types, `shared/i18n`, `shared/constants`, `shared/ui`; `features/`: `pages/`, `components/`, `domain/`, `application/` types, `shared/i18n`, SDK `/auth` types; `components/`: `shared/i18n`, `shared/constants`, `shared/ui`; `widgets/`: `shared/i18n` | `infrastructure/`, `app/`, the SDK (features: `/auth` types only), `application/` values, `fetch`, storage, `location`, `history`, `navigator`, `open` |
+| `presentation/` | `pages/`: `components/`, `domain/`, `application/` types, `shared/i18n`, `shared/constants`, `shared/ui`; `features/`: `pages/`, `components/`, `domain/`, `application/` types, `shared/i18n`, SDK `/auth` types; `components/`: `shared/i18n`, `shared/constants`, `shared/ui`; `widgets/`: `shared/i18n`, `components/` | `infrastructure/`, `app/`, the SDK (features: `/auth` types only), `application/` values, `fetch`, storage, `location`, `history`, `navigator`, `open` |
 | `shared/` | SDK `/i18n` and `/react` (`shared/i18n`); `shared/constants` → `shared/i18n` | Any shell layer |
 | `app/` | `bootstrap.tsx` wires every layer except presentation and `shared/constants`; routes, providers and layouts only what they render or provide | — |
 
@@ -207,9 +213,9 @@ Remotes that need storage use `storage(appId)` from the SDK's `/storage`, namesp
 
 | Package | Version | What it provides |
 |---|---|---|
-| `@bcbp-solutions-fzc-llc/frontend-sdk` | `1.0.0-alpha.9` (exact) | Identity, runtime config, Keycloak sign-in (PKCE, tokens in memory), `ApiClient`, telemetry, authorization hints, flags, i18n, remote loading, navigation, Trusted Types, React hooks and `PlatformProvider`, test helpers |
-| `@bcbp-solutions-fzc-llc/webpack-preset` | `1.0.0-alpha.9` (exact) | `pluginPlatform({ role: 'shell' })`: Module Federation host, the shared map, chunk integrity, `SdkVersionPlugin` |
-| `@bcbp-solutions-fzc-llc/eslint-plugin` | `1.0.0-alpha.9` (exact) | Public-subpath imports, no identity headers, no raw storage, no unsafe HTML, API route templates |
+| `@bcbp-solutions-fzc-llc/frontend-sdk` | `1.0.0-alpha.10` (exact) | Identity, runtime config, Keycloak sign-in (PKCE, tokens in memory), `ApiClient`, telemetry, authorization hints, flags, i18n, remote loading, navigation, Trusted Types, React hooks and `PlatformProvider`, test helpers |
+| `@bcbp-solutions-fzc-llc/webpack-preset` | `1.0.0-alpha.10` (exact) | `pluginPlatform({ role: 'shell' })`: Module Federation host, the shared map, chunk integrity, `SdkVersionPlugin` |
+| `@bcbp-solutions-fzc-llc/eslint-plugin` | `1.0.0-alpha.10` (exact) | Public-subpath imports, no identity headers, no raw storage, no unsafe HTML, API route templates |
 | `react`, `react-dom` | 19.3 | Strict singletons shared with remotes |
 | `react-router-dom` | 7 | The signed-in routes under `/t/<slug>/` |
 | `@opentelemetry/api` | `1.10.0` (exact) | Strict singleton shared with remotes; the SDK's telemetry runs on it |
@@ -250,7 +256,7 @@ The remote never runs its own Keycloak client, never reads tokens, and never imp
 
 ### 5. Navigation
 
-`navigate()` from the SDK's `/nav` goes through the shell's router when the path is under the current `/t/<slug>` basename (no reload), and is a full load otherwise (`infrastructure/federation/navigator.ts`).
+`navigate()` from the SDK's `/nav` goes through the shell's router when the path is under the current `/t/<slug>` basename (no reload), and is a full load otherwise (`infrastructure/federation/navigator.ts`). The path decides: `appId` is ignored, so a cross-remote path carries the workspace prefix (`/t/acme/admin/users`). A move that stays in the section the shell's routes show, and changes the path or query, mounts that remote again at the new path, because its own router does not see the shell's navigation; a move that changes nothing (the same path and query, or a hash) remounts nothing. Within its own section a remote uses its own router: its own `navigate()` there would remount it and lose its state.
 
 ### 6. Errors
 
@@ -419,11 +425,11 @@ REMOTE_DIST=../mfe-dashboard/dist npm run test-contract
 
 | Layer | Path | What it exercises |
 |---|---|---|
-| Unit | `test/unit/` | PUB-1, P-35, P-1 and P-27 mappings and ports, which banner shows to whom and the A5 window, the entry point, remember-email, the screen host, `BrandLogo`, the session-context retry (and its agreement with the SDK ApiClient), the P-35 refusal codes → workspace state and their one re-ask, the navigator adapter, the dev server's platform middleware, the layer rules and arch-lint firing, the text catalogue and the hard-coded-text guard, the no-SDK-duplicates guard, metrics-check, the use cases, the links, the password reset URL |
-| Integration | `test/integration/` | The login page and the carousel, the session screens (A6/A8 and A5 included), `App` routes and its notices (banners, read-only with its date, missing permissions), and the bootstrap's order and branches; axe-core over every shell screen (`accessibility.test.tsx`) |
-| End to end | `test/e2e/` | The real bootstrap, screens, `App` and SDK against a fake Keycloak (PKCE) and network: email → PUB-1 → sign-in → the `dashboard` remote under `/t/<slug>/`, a workspace name or pasted URL reaching PUB-1 as the slug with no `login_hint` (and a URL with no workspace asking nothing), deep links (one to `/t/<slug>/tenders/…`, `/drafting/…` or `/workflows/…` loads only that remote's entry), role-map permissions in the remote, deny-all, P-35 refusals showing the trial-ended, access-paused and no-access screens (no remote load; Sign out POSTs to Keycloak), the trial, seats and read-only-date banners (no P-27 for a member), the upgrade welcome once, the read-only notice from P-35 `read_only`, a failing remote, global sign-out, the device clock, a trial deep link whose P-35 slug is another tenant's (wrong-workspace screen), a trial whose P-35 never loads ("We couldn't load your workspace"), a silent restore of a trial PUB-1 no longer knows (the email screen, one PUB-1 call), a WAF challenge page in place of PUB-1 (the saved workspace kept), a reload of a paid workspace Keycloak still serves (no PUB-1 call), a reload after a revert deleted the paid realm (restored into the trial realm, one PUB-1 call) |
+| Unit | `test/unit/` | The role map and its Admin entry check, PUB-1, P-35, P-1 and P-27 mappings and ports, which banner shows to whom and the A5 window, the entry point, remember-email, the screen host, `BrandLogo`, the session-context retry (and its agreement with the SDK ApiClient), the P-35 refusal codes → workspace state and their one re-ask, the focus refresh's workspace check (`isPageWorkspace`), the navigator adapter, the dev server's platform middleware, the layer rules and arch-lint firing, the text catalogue and the hard-coded-text guard, the no-SDK-duplicates guard, metrics-check, the use cases, the links, the password reset URL |
+| Integration | `test/integration/` | The login page and the carousel, the session screens (A6/A8 and A5 included), `App` routes, the header (links, Admin, the user menu, Switch workspace, `shell.frame`) and its notices (banners, read-only with its date, missing permissions), and the bootstrap's order and branches (the focus refresh included); axe-core over every shell screen (`accessibility.test.tsx`) |
+| End to end | `test/e2e/` | The real bootstrap, screens, `App` and SDK against a fake Keycloak (PKCE) and network: email → PUB-1 → sign-in → the `dashboard` remote under `/t/<slug>/`, a workspace name or pasted URL reaching PUB-1 as the slug with no `login_hint` (and a URL with no workspace asking nothing), deep links (one to `/t/<slug>/tenders/…`, `/drafting/…`, `/workflows/…`, `/admin/…` or `/me/…` loads only that remote's entry), the header (links followed without a page load, Admin for an owner only, the user menu's Sign out and Switch workspace), role-map permissions in the remote, a role given elsewhere reaching the remote on focus, deny-all, P-35 refusals showing the trial-ended, access-paused and no-access screens (no remote load; Sign out POSTs to Keycloak), the trial, seats and read-only-date banners (no P-27 for a member), the upgrade welcome once, the read-only notice from P-35 `read_only`, a failing remote, global sign-out, the device clock, a trial deep link whose P-35 slug is another tenant's (wrong-workspace screen), a trial whose P-35 never loads ("We couldn't load your workspace"), a silent restore of a trial PUB-1 no longer knows (the email screen, one PUB-1 call), a WAF challenge page in place of PUB-1 (the saved workspace kept), a reload of a paid workspace Keycloak still serves (no PUB-1 call), a reload after a revert deleted the paid realm (restored into the trial realm, one PUB-1 call) |
 | Smoke | `test/smoke/` | `npm run test-smoke` against the served image (CI) or a deployment: the SPA rule, Cache-Control, script integrity, 404s, and the runtime files validated by the SDK; `live` also checks that IAM P-35 is routed (trial workspaces with a slug never open without it). See [test/smoke/README.md](./test/smoke/README.md) |
-| Browser | `test/browser/` | `npm run test-browser` after a build: the production bundle in Chromium, Firefox and WebKit under the production CSP and Trusted Types, with a fake Keycloak on a second origin: fonts, PKCE sign-in, the remote with integrity, `navigate()`, the sign-out form POST, the start-up failure report, colour contrast (the login page, the read-only notice and a workspace banner), at a 300 px window the content ending above the sticky notice stack with `--shell-notices-height` equal to its height, a reload loading the saved paid realm's discovery document under `connect-src` (SDK alpha.9) |
+| Browser | `test/browser/` | `npm run test-browser` after a build: the production bundle in Chromium, Firefox and WebKit under the production CSP and Trusted Types, with a fake Keycloak on a second origin: fonts, PKCE sign-in, the remote with integrity, `navigate()`, the sign-out form POST, the start-up failure report, colour contrast (the login page, the read-only notice, a workspace banner and the header), the sticky header with `--shell-header-height` equal to its height, at a 300 px window the content ending above the sticky notice stack with `--shell-notices-height` equal to its height, a reload loading the saved paid realm's discovery document under `connect-src` (SDK alpha.9) |
 | Dashboard contract | `test/browser/dashboard.spec.ts`, CI `dashboard-contract` | The real mfe-dashboard build (`REMOTE_DIST`) in this shell, three engines, production CSP: integrity, share scope and CSS, the role map reaching it, its navigation, its Logout through the shell's form POST. Informational in CI |
 
 Vitest uses happy-dom and Testing Library. `vitest.config.ts` defines `__ENVIRONMENT__` and `__BUILD_VERSION__` as `test`. The bootstrap test replaces every SDK subpath with a recording fake. The e2e suite runs the real SDK (Vitest inlines it, so each simulated page load gets a fresh one) against `test/fixtures/` fakes, modelled on platform-reactcommon's. No suite calls Keycloak, the IAM APIs or ports 5002 to 5005.
@@ -462,7 +468,7 @@ The SDK reads no environment variables in the browser. It loads `/config/runtime
 | `telemetry` | `/otel`, sample `0.1`, `info` | `/otel`, sample `1`, `debug` |
 | `remotes.allowedOrigins` | `[]` | `["http://localhost:5002", "http://localhost:5003", "http://localhost:5004", "http://localhost:5005"]` |
 | `i18n` | `en` | `en` |
-| `flags` | `{}` (platform flags; tenant flags come from P-35) | `{}` |
+| `flags` | `{}` (platform flags; tenant flags come from P-35). `shell.frame: false` turns the shell's header off; `remote.<name>.disabled` switches a remote off | `{}` |
 
 The full schema is in the SDK's README (Runtime configuration) and the SDK LLD §12.1.
 
@@ -529,7 +535,7 @@ One alert is defined here: `WebShellStartupFailures` (Loki, on `the app could no
 
 ### Tracing and logs
 
-OTLP/HTTP to the same-origin `telemetry.otlpBaseUrl` (`/otel`), sampled by `telemetry.sampleRatio`. API calls carry `x-request-id`, `traceparent` and `x-session-id`. v1 consent is essential only, so error logs and essential warnings leave the page and the rest stays in it. The shell's own events: `the app could not start` (error), `manifest load failed` (error), `session context unavailable` and `workspace status unavailable` (warnings, kept in the page under v1 consent). Error boundaries (`RemoteBoundary`, `MFEErrorBoundary` `web-shell`) log render errors with their `mfe`.
+OTLP/HTTP to the same-origin `telemetry.otlpBaseUrl` (`/otel`), sampled by `telemetry.sampleRatio`. API calls carry `x-request-id`, `traceparent` and `x-session-id`. v1 consent is essential only, so error logs and essential warnings leave the page and the rest stays in it. The shell's own events: `the app could not start` (error), `manifest load failed` (error), `session context unavailable`, `session context refresh failed` and `workspace status unavailable` (warnings, kept in the page under v1 consent). Error boundaries (`RemoteBoundary`, `MFEErrorBoundary` `web-shell`) log render errors with their `mfe`.
 
 ---
 
@@ -541,8 +547,8 @@ A tag publishes a signed image; nothing in this repository deploys it.
 |---|---|
 | Image | `ghcr.io/bcbp-solutions-fzc-llc/web-shell`, nginx on 8080 as uid 101 (§ Docker); tags, Cosign verification and how to cut a release in [VERSIONING.md](./VERSIONING.md) |
 | Per environment | `/config/runtime.json` (with its `environment`), `/remotes/manifest.json`, the redirect URIs in each realm, and the CSP (§ Docker, Minimum per-environment configuration) |
-| Until CloudFront | The ingress routes `/api`, `/otel`, `/csp-report`, `/remotes/dashboard/` (and `/remotes/tenders/`, `/remotes/drafting/`, `/remotes/workflows/` once each remote is released) and the image gets the CSP and HSTS as mounted files: [docs/hosting-without-cloudfront.md](./docs/hosting-without-cloudfront.md) |
-| Pairs | web-shell `0.4.0` + mfe-dashboard `0.3.0` (remote `dashboard`) and, once released, mfe-tender (remote `tenders`), mfe-drafting (`drafting`) and mfe-workflow-designer (`workflows`); rollback web-shell `0.3.0` with the same dashboard (no tenders route). mfe-dashboard `0.4.0` (alpha.6) needs web-shell `0.3.0` or later. On an SDK upgrade the shell deploys first |
+| Until CloudFront | The ingress routes `/api`, `/otel`, `/csp-report`, `/remotes/dashboard/` (and `/remotes/tenders/`, `/remotes/drafting/`, `/remotes/workflows/`, `/remotes/admin/`, `/remotes/me/` once each remote is released) and the image gets the CSP and HSTS as mounted files: [docs/hosting-without-cloudfront.md](./docs/hosting-without-cloudfront.md) |
+| Pairs | web-shell `0.5.0` + mfe-dashboard `0.4.0` (contract suite 12/12) or `0.3.0` (remote `dashboard`) and, once released, mfe-tender (remote `tenders`), mfe-drafting (`drafting`), mfe-workflow-designer (`workflows`), mfe-admin (`admin`) and mfe-me (`me`); rollback web-shell `0.4.0` with the same dashboard. mfe-dashboard `0.4.0` (alpha.6) needs web-shell `0.3.0` or later; a remote on SDK alpha.10 needs web-shell `0.5.0`. On an SDK upgrade the shell deploys first |
 | Deploy check | `SMOKE_BASE_URL=https://<host> SMOKE_MODE=live ENVIRONMENT=<target> npm run test-smoke` |
 | Rollback | Redeploy the previous image; `index.html` and the config are `no-cache`, so it takes effect on the next load (ARCHITECTURE § Release and rollback safety) |
 
@@ -593,7 +599,7 @@ docker run --rm -p 18080:8080 \
   web-shell:local
 ```
 
-**Without CloudFront** (until it is available): the load balancer or ingress routes `/api`, `/otel`, `/csp-report` and `/remotes/dashboard/` (and `/remotes/tenders/`, `/remotes/drafting/`, `/remotes/workflows/` once each remote is released) on the same origin, and the image gets the CSP and HSTS as mounted files. See [docs/hosting-without-cloudfront.md](./docs/hosting-without-cloudfront.md); remove those mounts when CloudFront arrives.
+**Without CloudFront** (until it is available): the load balancer or ingress routes `/api`, `/otel`, `/csp-report` and `/remotes/dashboard/` (and `/remotes/tenders/`, `/remotes/drafting/`, `/remotes/workflows/`, `/remotes/admin/`, `/remotes/me/` once each remote is released) on the same origin, and the image gets the CSP and HSTS as mounted files. See [docs/hosting-without-cloudfront.md](./docs/hosting-without-cloudfront.md); remove those mounts when CloudFront arrives.
 
 Two stages, both digest-pinned: `node:26-bookworm` runs `npm ci` and `npm run build`, then deletes the source maps; `nginxinc/nginx-unprivileged:1.31-alpine` serves `/usr/share/nginx/html` as uid 101. The CI smoke job fails the image above 200 MB, requires `/healthz`, `/` (a document that contains `id="app"`), `/config/runtime.json` and `/version.json` to return 200, fails when the image contains a `.map` file, and then runs the smoke suite against the container (`npm run test-smoke`, [test/smoke/README.md](./test/smoke/README.md)). To run it locally: `docker run -d --rm -p 127.0.0.1:18080:8080 web-shell:local`, then `SMOKE_BASE_URL=http://127.0.0.1:18080 npm run test-smoke`.
 
@@ -664,7 +670,7 @@ Plus, until CloudFront: `nginx/security.d/csp.conf.example` (with that environme
 | `GET /api/v1/public/tenants/resolve?identifier=` (PUB-1) | The sign-in screen, and workspace switching. No token |
 | `GET /api/v1/tenants/:id` (P-1) | In the background after render, once the session context is known (its `tenant_id`): the banners, the read-only grace date and A5. A failure only hides them |
 | `GET /api/v1/tenants/:id/seat-usage` (P-27) | With P-1, only for owners and tenant admins (`manage:members`): "all seats used" |
-| `GET /api/v1/me/session-context` (P-35) | Once after sign-in (with the SDK's own retries); after a network failure while online, a timeout, 429, 502, 503 or 504 (the SDK ApiClient's own rule), again after 1 s, 2 s, 4 s, one request each. Until it answers the app renders with deny-all permissions. A refusal that is a workspace state (trial ended, workspace suspended, access paused, not a member) shows that screen instead of the app, with Sign out and Switch workspace |
+| `GET /api/v1/me/session-context` (P-35) | Once after sign-in (with the SDK's own retries); after a network failure while online, a timeout, 429, 502, 503 or 504 (the SDK ApiClient's own rule), again after 1 s, 2 s, 4 s, one request each; and again when the page gets focus, at most once a minute (one request: a changed context is applied, a refusal or another workspace's context replaces the app). Until it answers the app renders with deny-all permissions. A refusal that is a workspace state (trial ended, workspace suspended, access paused, not a member) shows that screen instead of the app, with Sign out and Switch workspace |
 
 #### Dashboard remote (`dashboard`)
 
@@ -678,12 +684,16 @@ The same for mfe-tender's `tenders` at `/t/<slug>/tenders/*`; its manifest entry
 
 The same for mfe-drafting's `drafting` at `/t/<slug>/drafting/*` and mfe-workflow-designer's `workflows` at `/t/<slug>/workflows/*`, both `ownerDomain: portal`, both on SDK alpha.6. Neither is released yet (LLD §15 #22): locally they serve on ports 5004 and 5005.
 
+#### Administration and account remotes (`admin`, `me`)
+
+The same for mfe-admin's `admin` at `/t/<slug>/admin/*` and mfe-me's `me` at `/t/<slug>/me/*` (proposed `ownerDomain: iam`). Neither is built yet (LLD §15 #23). The header shows Admin and My account only once the environment's manifest lists them.
+
 ### 2. Inbound callers (what depends on the shell)
 
 | Caller | Contract |
 |---|---|
 | Browsers | The document, `/config/runtime.json`, `/remotes/manifest.json`, `/version.json`, `/assets/*`, `GET /healthz` (§ nginx paths) |
-| The `dashboard`, `tenders`, `drafting` and `workflows` remotes, and any future remote | The share scope (React, React DOM, the OTel API, every SDK subpath at the shell's version), the `PlatformProvider` shell value through SDK hooks, the router through `navigate()` |
+| The `dashboard`, `tenders`, `drafting`, `workflows`, `admin` and `me` remotes, and any future remote | The share scope (React, React DOM, the OTel API, every SDK subpath at the shell's version), the `PlatformProvider` shell value through SDK hooks, the router through `navigate()`, `--shell-header-height` and `--shell-notices-height` |
 
 ### 3. Async dependencies
 
@@ -701,7 +711,7 @@ Traces, logs and metrics are exported over OTLP/HTTP to `telemetry.otlpBaseUrl` 
 
 | System | Role |
 |---|---|
-| CloudFront (or, until next month, the ingress) | Routes `/api`, `/otel`, `/csp-report`, `/remotes/dashboard/` (and `/remotes/tenders/`, `/remotes/drafting/`, `/remotes/workflows/` once each remote is released); sends the CSP and HSTS |
+| CloudFront (or, until next month, the ingress) | Routes `/api`, `/otel`, `/csp-report`, `/remotes/dashboard/` (and `/remotes/tenders/`, `/remotes/drafting/`, `/remotes/workflows/`, `/remotes/admin/`, `/remotes/me/` once each remote is released); sends the CSP and HSTS |
 | An OTLP collector behind `/otel`, Loki | Telemetry intake; the `WebShellStartupFailures` alert |
 | GitHub Packages | `@bcbp-solutions-fzc-llc/*` at build time (`NODE_AUTH_TOKEN`; the Dependabot secret `PACKAGES_READ_TOKEN`) |
 | GHCR | The signed image |
@@ -717,6 +727,7 @@ Traces, logs and metrics are exported over OTLP/HTTP to `telemetry.otlpBaseUrl` 
 | Tender screens | `mfe-tender` (remote `tenders`) |
 | Drafting screens | `mfe-drafting` (remote `drafting`) |
 | Workflow designer | `mfe-workflow-designer` (remote `workflows`) |
+| Workspace administration, the user's own account | `mfe-admin` (remote `admin`), `mfe-me` (remote `me`) |
 | Tenant resolution, session context, authorization decisions | IAM services and the gateway. UI permissions here are hints |
 | Each environment's runtime config, remote manifest and CSP headers | The deploy pipeline and CloudFront |
 | Notifications and live updates | Not implemented in this repository |
@@ -742,7 +753,7 @@ Setup, how to extend the shell, the test gate, and the pull request checklist ar
 | [test/browser/README.md](./test/browser/README.md), [test/smoke/README.md](./test/smoke/README.md) | The browser and contract suites; the smoke suite and its modes |
 | [.claude/architecture.md](./.claude/architecture.md), [request-flows.md](./.claude/request-flows.md), [operations.md](./.claude/operations.md) | Condensed reference for Claude Code: layout and rules, flows, commands and CI |
 | [VERSIONING.md](./VERSIONING.md) | SemVer rules, image tags, Cosign verify, how to cut a release |
-| [CHANGELOG.md](./CHANGELOG.md) | User-facing history: released `0.1.0`, `0.2.0`, `0.3.0` and `0.4.0`; `[Unreleased]` for `main` |
+| [CHANGELOG.md](./CHANGELOG.md) | User-facing history: released `0.1.0`, `0.2.0`, `0.3.0`, `0.4.0` and `0.5.0`; `[Unreleased]` for `main` |
 | [SECURITY.md](./.github/SECURITY.md) | How to report a vulnerability |
 | [.github/pull_request_template.md](./.github/pull_request_template.md) | What a pull request needs, including `npm run test:ci` |
 | [.claude/CLAUDE.md](./.claude/CLAUDE.md) | Guidance for Claude Code: critical rules, commands, reference files |
