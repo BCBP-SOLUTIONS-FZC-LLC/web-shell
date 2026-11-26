@@ -23,6 +23,8 @@ export interface FrameLink {
   to: string
   href: string
   current: boolean
+  /** Sub-menu items, drawn as a tree under the link while its section is the current one. */
+  children?: readonly FrameLink[] | undefined
 }
 
 export interface AppSidebarProps {
@@ -161,7 +163,7 @@ export function AppSidebar({
 
   // The panel's labels: hidden on a wide screen while collapsed (kept for assistive technology, and as the
   // rail icon's tooltip); the drawer of a narrow screen always shows them, so it shows no tooltips either.
-  const label = collapsed ? 'lg:sr-only' : ''
+  const label = collapsed ? 'lg:sr-only!' : ''
   const railOnly = collapsed && !drawer
   const tip = (t: string | undefined) => (railOnly ? t : undefined)
   const closeSwitch = () => {
@@ -177,6 +179,7 @@ export function AppSidebar({
   }
   const item = (l: FrameLink) => {
     const Icon = ICONS[l.id] ?? DashboardIcon
+    const subs = l.children ?? []
     return (
       <li key={l.id}>
         <a
@@ -193,6 +196,28 @@ export function AppSidebar({
             {l.label}
           </span>
         </a>
+        {/* The section's sub-menu, a tree in the panel under the parent's label: one unbroken line down its left
+            edge, with a short curved elbow into each row. The labels are indented from the parent's. */}
+        {l.current && subs.length > 0 && !railOnly ? (
+          <ul className="mb-1 ms-[5rem] me-3">
+            {subs.map((sub, i) => (
+              <li key={sub.id} className="relative ps-5">
+                {i < subs.length - 1 ? <span aria-hidden="true" className="absolute inset-y-0 start-0 border-s border-[#52525b]" /> : null}
+                <span aria-hidden="true" className="absolute start-0 top-0 h-1/2 w-4 rounded-bl-xl border-b border-s border-[#52525b]" />
+                <a
+                  href={sub.href}
+                  onClick={(e) => follow(e, sub.to)}
+                  aria-current={sub.current ? 'page' : undefined}
+                  className={`my-0.5 block truncate rounded-lg px-2 py-2 text-sm font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#fafafa] ${
+                    sub.current ? CURRENT : `${MUTED} hover:bg-[#1f1f23] hover:text-[#fafafa]`
+                  }`}
+                >
+                  {sub.label}
+                </a>
+              </li>
+            ))}
+          </ul>
+        ) : null}
       </li>
     )
   }
@@ -231,7 +256,7 @@ export function AppSidebar({
   return (
     <>
       {/* Narrow screens: a bar at the top opens the sidebar as a drawer below it, so its Close menu stays in view. */}
-      <div ref={topBarRef} className={`sticky top-0 z-[60] flex items-center gap-3 px-4 py-2 font-sans shadow lg:hidden ${RAIL} text-[#fafafa]`}>
+      <div ref={topBarRef} className={`sticky top-0 z-[60] flex items-center gap-3 px-4 py-2 font-sans shadow lg:hidden! ${RAIL} text-[#fafafa]`}>
         <button
           ref={toggleRef}
           type="button"
@@ -245,7 +270,7 @@ export function AppSidebar({
         </button>
         <span className="truncate font-semibold">{workspace}</span>
       </div>
-      {drawer ? <div aria-hidden="true" className="fixed inset-x-0 bottom-0 top-[var(--shell-header-height,0px)] z-40 bg-black/60 lg:hidden" onClick={closeDrawer} /> : null}
+      {drawer ? <div aria-hidden="true" className="fixed inset-x-0 bottom-0 top-[var(--shell-header-height,0px)] z-40 bg-black/60 lg:hidden!" onClick={closeDrawer} /> : null}
 
       <aside
         id={sidebarId}
@@ -255,8 +280,8 @@ export function AppSidebar({
         }}
         aria-label={text('app.frame.sidebar')}
         onKeyDown={onKeyDown}
-        className={`fixed bottom-0 start-0 top-[var(--shell-header-height,0px)] z-50 flex w-80 flex-col font-sans transition-[transform,width] lg:sticky lg:top-0 lg:h-dvh ${switching ? 'lg:z-50' : 'lg:z-30'} lg:translate-x-0 lg:visible rtl:lg:translate-x-0 ${PANEL} ${
-          collapsed ? 'lg:w-16' : 'lg:w-80'
+        className={`fixed bottom-0 start-0 top-[var(--shell-header-height,0px)] z-50 flex w-80 flex-col font-sans transition-[transform,width] lg:sticky! lg:top-0! lg:h-dvh! ${switching ? 'lg:z-50!' : 'lg:z-30!'} lg:translate-x-0! lg:visible! rtl:lg:translate-x-0! ${PANEL} ${
+          collapsed ? 'lg:w-16!' : 'lg:w-80!'
         } ${drawer ? 'translate-x-0 shadow-2xl' : 'invisible -translate-x-full rtl:translate-x-full'}`}
       >
         {/* The rail: a darker column under the icons. */}
@@ -288,7 +313,7 @@ export function AppSidebar({
               <span className="block truncate text-lg font-semibold">{workspace ?? text('app.frame.switchWorkspace')}</span>
               {showSlug ? <span className={`block truncate text-sm ${MUTED}`}>{workspaceSlug}</span> : null}
             </span>
-            <ChevronsIcon className={`me-4 size-4 ${MUTED} ${collapsed ? 'lg:hidden' : ''}`} />
+            <ChevronsIcon className={`me-4 size-4 ${MUTED} ${collapsed ? 'lg:hidden!' : ''}`} />
           </button>
           {switching ? (
             <form
@@ -366,7 +391,7 @@ export function AppSidebar({
               setCollapsed(!collapsed)
               onCollapsedChange?.(!collapsed)
             }}
-            className={`${ROW} hidden lg:grid`}
+            className={`${ROW} hidden lg:grid!`}
           >
             <span className={`${CELL} ${IDLE}`}>{collapsed ? <ExpandIcon /> : <CollapseIcon />}</span>
             <span className={`me-3 rounded-lg px-3 py-2 text-sm ${MUTED} ${label}`}>
