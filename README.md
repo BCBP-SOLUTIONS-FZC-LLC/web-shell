@@ -304,7 +304,7 @@ The dev server stands in for what CloudFront and the platform APIs provide (`con
 | Path | Dev server answer |
 |---|---|
 | `/config/runtime.json` | `config/runtime.local.json` (Keycloak `http://localhost:8080`, client `app1`, environment `local`) |
-| `/remotes/manifest.json` | `config/remotes.local.json` (`dashboard` at `http://localhost:5002/remoteEntry.js`, `tenders` at `http://localhost:5003/remoteEntry.js`, `drafting` at `:5004`, `workflows` at `:5005`) |
+| `/remotes/manifest.json` | `config/remotes.local.json` (`dashboard` at `http://localhost:5002/remoteEntry.js`, `tenders` at `http://localhost:5003/remoteEntry.js`, `drafting` at `:5004`, `workflows` at `:5005`, `admin` at `:5006`, `me` at `:5007`) |
 | `GET /api/v1/public/tenants/resolve` | Any identifier → realm `tenant-bcbp` |
 | `GET /api/v1/me/session-context` | Slug `bcbp`, roles `member`, `tenant_owner` (the signup owner; `DEV_ROLES=member,tenant_admin` overrides), `read_only` only with `DEV_TENANT_STATUS=cancelled`, 401 without a bearer token |
 | `GET /api/v1/tenants/local-tenant` and `…/seat-usage` | P-1 `Local workspace`, status `DEV_TENANT_STATUS` (default `active`); P-27 3 of 10 seats |
@@ -312,7 +312,7 @@ The dev server stands in for what CloudFront and the platform APIs provide (`con
 
 Set `DEV_API_URL` to proxy `/api` to a real API instead of the stubs, or `DEV_REALM` to stub a different realm.
 
-The dashboard is a second process. Start `mfe-dashboard` (`npm run dev` there) so it serves `remoteEntry.js` at `http://localhost:5002`. While it is not running, `/t/bcbp/dashboard` shows the remote boundary's error and the rest of the shell keeps working. The same holds for `mfe-tender` at `http://localhost:5003` and `/t/bcbp/tenders`. So do `mfe-drafting` at `http://localhost:5004` (`/t/bcbp/drafting`) and `mfe-workflow-designer` at `http://localhost:5005` (`/t/bcbp/workflows`).
+The dashboard is a second process. Start `mfe-dashboard` (`npm run dev` there) so it serves `remoteEntry.js` at `http://localhost:5002`. While it is not running, `/t/bcbp/dashboard` shows the remote boundary's error and the rest of the shell keeps working. The same holds for `mfe-tender` at `http://localhost:5003` and `/t/bcbp/tenders`. So do `mfe-drafting` at `http://localhost:5004` (`/t/bcbp/drafting`) and `mfe-workflow-designer` at `http://localhost:5005` (`/t/bcbp/workflows`), `mfe-admin` at `http://localhost:5006` (`/t/bcbp/admin`) and `mfe-me` at `http://localhost:5007` (`/t/bcbp/me`, the sidebar's **My account**). `mfe-me` needs IAM's User Profile, Delegation and Org & Membership routes, which the dev stubs do not serve: run `npm run dev:mock-iam` in `mfe-me` (port 5090) and start the shell with `DEV_API_URL=http://localhost:5090`; its model and event-type lists come from the `me.*` flags in `config/runtime.local.json`.
 
 ### Trying the flows locally
 
@@ -467,7 +467,7 @@ The SDK reads no environment variables in the browser. It loads `/config/runtime
 | `auth.trialRealm` · `paidRealmPrefix` · `workspacePathPrefix` | `trial` · `tenant-` · `/t/` | same |
 | `auth.idleTimeoutMs` | `1800000` | `1800000` |
 | `telemetry` | `/otel`, sample `0.1`, `info` | `/otel`, sample `1`, `debug` |
-| `remotes.allowedOrigins` | `[]` | `["http://localhost:5002", "http://localhost:5003", "http://localhost:5004", "http://localhost:5005"]` |
+| `remotes.allowedOrigins` | `[]` | `["http://localhost:5002", "http://localhost:5003", "http://localhost:5004", "http://localhost:5005", "http://localhost:5006", "http://localhost:5007"]` |
 | `i18n` | `en` | `en` |
 | `flags` | `{}` (platform flags; tenant flags come from P-35). `shell.frame: false` turns the shell's sidebar off; `remote.<name>.disabled` switches a remote off | `{}` |
 
