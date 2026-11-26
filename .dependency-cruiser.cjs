@@ -60,7 +60,7 @@ const deps = {
   constants: { mayDependOn: ['i18n'] },
   ui_assets: {},
   components: { mayDependOn: ['ui_assets', 'i18n', 'constants'], vendors: [REACT] },
-  // The header shows the brand mark (components/BrandLogo).
+  // The sidebar draws its icons (components/Icons).
   widgets: { mayDependOn: ['i18n', 'components'], vendors: [REACT] },
   pages: { mayDependOn: ['components', 'ui_assets', 'i18n', 'constants', 'domain'], typeOnlyDependOn: ['application'], vendors: [REACT] },
   features: { mayDependOn: ['pages', 'components', 'i18n', 'domain'], typeOnlyDependOn: ['application'], vendors: [REACT], typeOnlyVendors: [sdk('auth')] },

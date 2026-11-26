@@ -17,8 +17,9 @@ import {
   useWorkspace,
 } from '@bcbp-solutions-fzc-llc/frontend-sdk/react'
 import { ADMIN_ENTRY } from '../../domain/rules/permissions'
+import type { SidebarPreferenceRepository } from '../../domain/repositories/sidebarPreference'
 import { useShellText, type ShellKey } from '../../shared/i18n'
-import { AppHeader, type FrameLink } from '../../presentation/widgets/AppHeader'
+import { AppSidebar, type FrameLink } from '../../presentation/widgets/AppSidebar'
 import { AppError } from '../../presentation/widgets/AppError'
 import { ContextUnavailable } from '../../presentation/widgets/ContextUnavailable'
 import { ReadOnlyNotice } from '../../presentation/widgets/ReadOnlyNotice'
@@ -44,7 +45,7 @@ export const ADMIN_REMOTE = 'admin'
 export const ACCOUNT_REMOTE = 'me'
 
 /**
- * The runtime-config flag that turns the shell's header off in an environment (`"flags": { "shell.frame": false }`),
+ * The runtime-config flag that turns the shell's sidebar off in an environment (`"flags": { "shell.frame": false }`),
  * e.g. while a remote that still draws its own frame is the only one served. On when absent.
  */
 export const FRAME_FLAG = 'shell.frame'
@@ -115,7 +116,7 @@ function Account() {
   return <RemoteBoundary remote={ACCOUNT_REMOTE} module="./App" fallback={<Loading>{text('app.loadingAccount')}</Loading>} />
 }
 
-/** The header's section links: the remote, its route and its label. Shown only when the remote is served. */
+/** The sidebar's section links: the remote, its route and its label. Shown only when the remote is served. */
 const SECTIONS: readonly { remote: string; to: string; label: ShellKey }[] = [
   { remote: DASHBOARD_REMOTE, to: '/dashboard', label: 'app.frame.dashboard' },
   { remote: TENDERS_REMOTE, to: '/tenders', label: 'app.frame.tenders' },
@@ -134,7 +135,7 @@ export interface AppNotices {
   banners: readonly BannerProps[]
   /** RFC 3339: a cancelled workspace's read-only grace end. */
   readOnlyUntil?: string
-  /** The workspace's name (P-1), for the header's user menu. */
+  /** The workspace's name (P-1), for the sidebar. */
   workspaceName?: string
 }
 
@@ -225,28 +226,45 @@ function RouterBridge({ onRouter, onVisit }: { onRouter: (navigate: RouterNaviga
 /** The CSS custom property remotes read for the notice stack's height. */
 export const NOTICES_HEIGHT_VAR = '--shell-notices-height'
 
-/** The CSS custom property remotes read for the shell header's height (absent while the header is off). */
+/**
+ * The CSS custom property remotes read for the height of the shell's bar at the top of the page: the bar that
+ * opens the sidebar on a narrow screen, `0px` on a wide one (the sidebar is beside the page then). Absent
+ * while the frame is off.
+ */
 export const HEADER_HEIGHT_VAR = '--shell-header-height'
 
 /**
- * Publishes an element's height as a custom property on <html>, kept current by a ResizeObserver and
- * removed on unmount. Set through the CSSOM, which the platform CSP allows (no inline style).
+ * The CSS custom property remotes read for the width of the shell's sidebar beside the page: its width on a
+ * wide screen, `0px` on a narrow one (a drawer over the page then). Absent while the frame is off.
  */
-function usePublishedHeight(ref: RefObject<HTMLElement | null>, name: string) {
+export const SIDEBAR_WIDTH_VAR = '--shell-sidebar-width'
+
+/**
+ * Publishes a size of an element as a custom property on <html>, kept current by a ResizeObserver and window
+ * resizes, and removed on unmount. Set through the CSSOM, which the platform CSP allows (no inline style).
+ */
+function usePublishedSize(ref: RefObject<HTMLElement | null>, name: string, measure: (el: HTMLElement) => number) {
   useLayoutEffect(() => {
     const el = ref.current!
     const root = document.documentElement
-    const publish = () => root.style.setProperty(name, `${el.offsetHeight}px`)
+    const publish = () => root.style.setProperty(name, `${measure(el)}px`)
     publish()
-    // Every engine the shell supports has ResizeObserver (the browser suite runs all three).
+    // Every engine the shell supports has ResizeObserver (the browser suite runs all three). A breakpoint
+    // can move an element in or out of the page's flow without resizing it: window resizes catch that.
     const observer = new ResizeObserver(publish)
     observer.observe(el)
+    window.addEventListener('resize', publish)
     return () => {
       observer.disconnect()
+      window.removeEventListener('resize', publish)
       root.style.removeProperty(name)
     }
-  }, [ref, name])
+  }, [ref, name, measure])
 }
+
+const heightOf = (el: HTMLElement) => el.offsetHeight
+/** The sidebar's width while it is beside the page; a drawer over it (fixed) takes no room. */
+const widthBeside = (el: HTMLElement) => (getComputedStyle(el).position === 'fixed' ? 0 : el.offsetWidth)
 
 /**
  * Publishes the bottom notice stack's height as `--shell-notices-height` on <html> (0px when empty), so a
@@ -255,7 +273,7 @@ function usePublishedHeight(ref: RefObject<HTMLElement | null>, name: string) {
  */
 function NoticeStack({ children }: { children: ReactNode }) {
   const ref = useRef<HTMLDivElement>(null)
-  usePublishedHeight(ref, NOTICES_HEIGHT_VAR)
+  usePublishedSize(ref, NOTICES_HEIGHT_VAR, heightOf)
   return (
     <div ref={ref} className="sticky bottom-0 z-40 flex flex-col">
       {children}
@@ -264,15 +282,31 @@ function NoticeStack({ children }: { children: ReactNode }) {
 }
 
 /**
- * The shell's header (option A of the app-chrome handoff): links to the served remotes, the Admin entry
- * point for those who may administer the workspace, and the user menu. Its height is published as
- * `--shell-header-height`, so a remote's fixed elements can start below it.
+ * The shell's frame (option A of the app-chrome handoff), a sidebar: the workspace with Switch workspace,
+ * links to the served remotes, the Admin entry point for those who may administer the workspace, My account
+ * and Sign out. On a narrow screen it is a drawer under a bar at the top. Its width beside the page is
+ * published as `--shell-sidebar-width` and the bar's height as `--shell-header-height`, so a remote's fixed
+ * elements can start beside or below them.
  *
  * A link is followed by this router. Each remote runs its own router, which does not see this one's
  * navigation, so a link to the section the user is in remounts the routes (`onVisit`): it opens that
  * section's start page instead of changing only the URL (§6.6d; a remote's navigate(): §4.5).
  */
-function Frame({ basename, remotes, workspaceName, onVisit }: { basename: string | undefined; remotes: ReadonlySet<string>; workspaceName: string | undefined; onVisit: () => void }) {
+function Frame({
+  basename,
+  remotes,
+  workspaceName,
+  onVisit,
+  preference,
+  onDrawerChange,
+}: {
+  basename: string | undefined
+  remotes: ReadonlySet<string>
+  workspaceName: string | undefined
+  onVisit: () => void
+  preference: SidebarPreferenceRepository | undefined
+  onDrawerChange: (open: boolean) => void
+}) {
   const text = useShellText()
   const navigate = useNavigate()
   const { pathname } = useLocation()
@@ -281,8 +315,10 @@ function Frame({ basename, remotes, workspaceName, onVisit }: { basename: string
   const signOut = useSignOut()
   const switchWorkspace = useSwitchWorkspace()
   const mayAdminister = useHasPermission(ADMIN_ENTRY.action, ADMIN_ENTRY.resource)
-  const ref = useRef<HTMLDivElement>(null)
-  usePublishedHeight(ref, HEADER_HEIGHT_VAR)
+  const topBar = useRef<HTMLDivElement>(null)
+  const sidebar = useRef<HTMLElement>(null)
+  usePublishedSize(topBar, HEADER_HEIGHT_VAR, heightOf)
+  usePublishedSize(sidebar, SIDEBAR_WIDTH_VAR, widthBeside)
   const inSection = (to: string) => sameSection(to, pathname)
   const link = (id: string, to: string, label: ShellKey): FrameLink => ({
     id,
@@ -292,22 +328,26 @@ function Frame({ basename, remotes, workspaceName, onVisit }: { basename: string
     current: inSection(to),
   })
   return (
-    <div ref={ref} className="sticky top-0 z-50">
-      <AppHeader
-        links={SECTIONS.filter((s) => remotes.has(s.remote)).map((s) => link(s.remote, s.to, s.label))}
-        admin={mayAdminister && remotes.has(ADMIN_REMOTE) ? link(ADMIN_REMOTE, '/admin', 'app.frame.admin') : undefined}
-        account={remotes.has(ACCOUNT_REMOTE) ? link(ACCOUNT_REMOTE, '/me', 'app.frame.account') : undefined}
-        user={user}
-        workspace={workspaceName ?? workspace?.slug}
-        onNavigate={(to) => {
-          // Another section mounts its remote anyway; the same section's remote is mounted again.
-          if (inSection(to)) onVisit()
-          navigate(to)
-        }}
-        onSwitchWorkspace={switchWorkspace}
-        onSignOut={() => void signOut()}
-      />
-    </div>
+    <AppSidebar
+      topBarRef={topBar}
+      sidebarRef={sidebar}
+      initiallyCollapsed={preference?.collapsed() ?? false}
+      onCollapsedChange={(collapsed) => preference?.setCollapsed(collapsed)}
+      onDrawerChange={onDrawerChange}
+      links={SECTIONS.filter((s) => remotes.has(s.remote)).map((s) => link(s.remote, s.to, s.label))}
+      admin={mayAdminister && remotes.has(ADMIN_REMOTE) ? link(ADMIN_REMOTE, '/admin', 'app.frame.admin') : undefined}
+      account={remotes.has(ACCOUNT_REMOTE) ? link(ACCOUNT_REMOTE, '/me', 'app.frame.account') : undefined}
+      user={user}
+      workspace={workspaceName ?? workspace?.slug}
+      workspaceSlug={workspace?.slug}
+      onNavigate={(to) => {
+        // Another section mounts its remote anyway; the same section's remote is mounted again.
+        if (inSection(to)) onVisit()
+        navigate(to)
+      }}
+      onSwitchWorkspace={switchWorkspace}
+      onSignOut={() => void signOut()}
+    />
   )
 }
 
@@ -322,20 +362,25 @@ export default function App({
   onRouter,
   notices = noNotices,
   remotes = NO_REMOTES,
+  sidebar,
 }: {
   basename?: string
   onRouter?: (navigate: RouterNavigate) => void
   notices?: Live<AppNotices>
-  /** The remotes this environment serves (the manifest's, less those switched off): the header links to these. */
+  /** The remotes this environment serves (the manifest's, less those switched off): the sidebar links to these. */
   remotes?: ReadonlySet<string>
+  /** Where the sidebar's collapsed state is saved (the bootstrap's SDK storage); none keeps it for the page only. */
+  sidebar?: SidebarPreferenceRepository
 }) {
   const context = useSessionContext()
   const { banners, readOnlyUntil, workspaceName } = useSyncExternalStore(notices.subscribe, notices.get, notices.get)
   const frame = useFeatureFlag(FRAME_FLAG, true)
-  // Bumped by a move into the section the user is in (a header link, or a remote's navigate()): the routes are
+  // Bumped by a move into the section the user is in (a sidebar link, or a remote's navigate()): the routes are
   // keyed by it, so that remote mounts afresh at the new URL (Frame, RouterBridge).
   const [visit, setVisit] = useState(0)
   const remount = useCallback(() => setVisit((v) => v + 1), [])
+  // While the narrow-screen drawer is open the page behind it is inert: Tab stays in the drawer.
+  const [drawerOpen, setDrawerOpen] = useState(false)
   // The shell's own screens in an error boundary (the SDK's): a render error is logged and counted
   // under `web-shell` and replaced by AppError instead of a blank page. The remote has its own
   // (RemoteBoundary), so a remote's error never reaches this one.
@@ -343,27 +388,32 @@ export default function App({
     <MFEErrorBoundary mfe={SHELL_MFE} fallback={(e) => <AppError reference={e.traceId ?? e.requestId} onRetry={e.retry} />}>
       <BrowserRouter {...(basename ? { basename } : {})}>
         {onRouter ? <RouterBridge onRouter={onRouter} onVisit={remount} /> : null}
-        <Update />
-        <div className="flex min-h-screen flex-col">
-          {frame ? <Frame basename={basename} remotes={remotes} workspaceName={workspaceName} onVisit={remount} /> : null}
-          <div className="flex-1" key={visit}>
-            <Routes>
-              <Route path="/dashboard/*" element={<Dashboard />} />
-              <Route path="/tenders/*" element={<Tenders />} />
-              <Route path="/drafting/*" element={<Drafting />} />
-              <Route path="/workflows/*" element={<Workflows />} />
-              <Route path="/admin/*" element={<Admin />} />
-              <Route path="/me/*" element={<Account />} />
-              <Route path="*" element={<Navigate to="/dashboard" replace />} />
-            </Routes>
+        {/* The sidebar beside the page on a wide screen (a bar and a drawer on a narrow one), then the page: the
+            remote's routes and, under them, the notices. */}
+        <div className="min-h-screen lg:flex">
+          {frame ? <Frame basename={basename} remotes={remotes} workspaceName={workspaceName} onVisit={remount} preference={sidebar} onDrawerChange={setDrawerOpen} /> : null}
+          <div className="flex min-h-screen min-w-0 flex-1 flex-col" inert={drawerOpen}>
+            {/* The update notice heads the page, beside the sidebar and under the narrow-screen bar. */}
+            <Update />
+            <div className="flex-1" key={visit}>
+              <Routes>
+                <Route path="/dashboard/*" element={<Dashboard />} />
+                <Route path="/tenders/*" element={<Tenders />} />
+                <Route path="/drafting/*" element={<Drafting />} />
+                <Route path="/workflows/*" element={<Workflows />} />
+                <Route path="/admin/*" element={<Admin />} />
+                <Route path="/me/*" element={<Account />} />
+                <Route path="*" element={<Navigate to="/dashboard" replace />} />
+              </Routes>
+            </div>
+            {/* The page's notices, stacked at the bottom so two never cover each other. Sticky, in the page's
+                flow: they stay in view, and the page ends below them, so the remote's last controls scroll clear. */}
+            <NoticeStack>
+              <WorkspaceBanners banners={banners} />
+              <ReadOnly until={readOnlyUntil} />
+              {context ? null : <ContextUnavailable onReload={() => window.location.reload()} />}
+            </NoticeStack>
           </div>
-          {/* The page's notices, stacked at the bottom so two never cover each other. Sticky, in the page's
-              flow: they stay in view, and the page ends below them, so the remote's last controls scroll clear. */}
-          <NoticeStack>
-            <WorkspaceBanners banners={banners} />
-            <ReadOnly until={readOnlyUntil} />
-            {context ? null : <ContextUnavailable onReload={() => window.location.reload()} />}
-          </NoticeStack>
         </div>
       </BrowserRouter>
     </MFEErrorBoundary>

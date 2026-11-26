@@ -15,6 +15,7 @@ const EMAIL = 'ada@acme.test'
 test.skip(!!process.env.REMOTE_DIST, 'REMOTE_DIST: the dashboard contract run')
 
 const state = async (page: Page): Promise<State> => (await page.request.get(`${APP}/__test/state`)).json()
+const sidebar = (page: Page) => page.getByRole('complementary', { name: 'Workspace and sections' })
 
 /** securitypolicyviolation events in every document the page loads (an init script runs before CSP applies). */
 async function watchViolations(page: Page): Promise<void> {
@@ -96,7 +97,8 @@ test("a remote's navigate() stays in the single-page app, and the mounted remote
 
 test('sign-out POSTs to Keycloak under form-action, ends the SSO session and waits for a click', async ({ page }) => {
   await signIn(page)
-  await page.getByRole('button', { name: 'Sign out' }).click()
+  // The remote's own Sign out (in the page), not the sidebar's.
+  await page.getByRole('main').getByRole('button', { name: 'Sign out' }).click()
   await expect(page.getByRole('heading', { name: 'You are signed out' })).toBeVisible()
   // The dialog shows as soon as the SDK reports the sign-out, before the form POST reaches
   // Keycloak and the browser comes back: wait for the POST, not for the dialog.
@@ -189,51 +191,127 @@ test('the workspace banner (IAM P-1) shows under the production CSP with AA cont
   expect(Math.abs(layout.stackBottom - layout.view)).toBeLessThanOrEqual(0.5)
 })
 
-test("the shell's header shows under the production CSP with AA contrast, and publishes its height", async ({ page }) => {
+test("the shell's sidebar shows beside the page under the production CSP with AA contrast, and publishes its width", async ({ page }) => {
   await signIn(page)
-  const header = page.getByRole('banner')
-  await expect(header.getByRole('link', { name: 'Dashboard' })).toHaveAttribute('aria-current', 'page')
-  expect(await contrastRatio(page, 'header nav a', 'header')).toBeGreaterThanOrEqual(4.5)
-  expect(await contrastRatio(page, 'header button', 'header')).toBeGreaterThanOrEqual(4.5)
-  await header.getByRole('button', { name: /Account menu/ }).click()
-  await expect(header.getByRole('button', { name: 'Sign out' })).toBeVisible()
+  const sidebar = page.getByRole('complementary', { name: 'Workspace and sections' })
+  await expect(sidebar.getByRole('link', { name: 'Dashboard' })).toHaveAttribute('aria-current', 'page')
+  expect(await contrastRatio(page, 'aside nav a[aria-current="page"] [data-label]')).toBeGreaterThanOrEqual(4.5)
+  // The first button, the workspace switcher: #fafafa on the panel's colour.
+  expect(await contrastRatio(page, 'aside button', 'aside')).toBeGreaterThanOrEqual(4.5)
   expect(await violations(page)).toEqual([])
-  // Its height reaches remotes as --shell-header-height (CSSOM, allowed by the CSP), and it stays at the
-  // top while the page scrolls.
-  await page.setViewportSize({ width: 800, height: 300 })
+  // Beside the page on a wide screen: full height, the page's content starts after it, and its width reaches
+  // remotes as --shell-sidebar-width (CSSOM, allowed by the CSP); no bar at the top (--shell-header-height 0px).
   const layout = await page.evaluate(() => {
-    window.scrollTo(0, document.documentElement.scrollHeight)
-    const frame = document.querySelector('header')!.parentElement!
+    const aside = document.querySelector('aside')!
+    const main = document.querySelector('main')!
+    const root = getComputedStyle(document.documentElement)
     return {
-      published: getComputedStyle(document.documentElement).getPropertyValue('--shell-header-height'),
-      height: frame.offsetHeight,
-      top: frame.getBoundingClientRect().top,
+      width: aside.offsetWidth,
+      height: aside.getBoundingClientRect().height,
+      view: window.innerHeight,
+      mainLeft: main.getBoundingClientRect().left,
+      published: root.getPropertyValue('--shell-sidebar-width'),
+      bar: root.getPropertyValue('--shell-header-height'),
     }
   })
-  expect(layout.published).toBe(`${layout.height}px`)
-  expect(layout.height).toBeGreaterThan(0)
-  expect(layout.top).toBe(0)
+  expect(layout.width).toBeGreaterThan(200)
+  expect(layout.published).toBe(`${layout.width}px`)
+  expect(Math.abs(layout.height - layout.view)).toBeLessThanOrEqual(0.5)
+  expect(layout.mainLeft).toBeGreaterThanOrEqual(layout.width - 0.5)
+  expect(layout.bar).toBe('0px')
+  await expect(page.getByRole('button', { name: 'Open menu' })).toBeHidden()
+  // Collapsed to the icon rail: narrower, and the published width follows.
+  await sidebar.getByRole('button', { name: 'Collapse sidebar' }).click()
+  await expect
+    .poll(() => page.evaluate(() => [document.querySelector('aside')!.offsetWidth, getComputedStyle(document.documentElement).getPropertyValue('--shell-sidebar-width')]))
+    .toEqual([64, '64px'])
+  await expect(sidebar.getByRole('link', { name: 'Dashboard' })).toHaveAttribute('title', 'Dashboard')
+  // The choice is saved (SDK storage, this workspace): a reload starts collapsed.
+  await page.reload()
+  await expect(page.getByRole('heading', { name: 'Dashboard for Ada Lovelace in acme' })).toBeVisible()
+  await expect(sidebar.getByRole('button', { name: 'Expand sidebar' })).toBeVisible()
+  expect(await page.evaluate(() => document.querySelector('aside')!.offsetWidth)).toBe(64)
+  expect(await violations(page)).toEqual([])
 })
 
-// A clicked button is not focused in WebKit: the menu's items must work with a real mouse click in every engine.
-test("the header's Switch workspace works with a mouse click", async ({ page }) => {
+test("on a phone the sidebar is a drawer: the bar opens it, a link closes it, and the sizes follow", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 780 })
   await signIn(page)
-  const header = page.getByRole('banner')
-  const menu = header.getByRole('button', { name: /Account menu/ })
-  await menu.click()
-  await header.getByRole('button', { name: 'Switch workspace' }).click()
-  await header.getByLabel('Work email or workspace name').fill(EMAIL)
+  const sidebar = page.getByRole('complementary', { name: 'Workspace and sections' })
+  await expect(sidebar).toBeHidden()
+  const sizes = () =>
+    page.evaluate(() => {
+      const root = getComputedStyle(document.documentElement)
+      return { bar: root.getPropertyValue('--shell-header-height'), width: root.getPropertyValue('--shell-sidebar-width') }
+    })
+  const closed = await sizes()
+  expect(closed.width).toBe('0px')
+  expect(parseFloat(closed.bar)).toBeGreaterThan(0)
+  await page.getByRole('button', { name: 'Open menu' }).click()
+  await expect(sidebar).toBeVisible()
+  expect(await contrastRatio(page, 'aside button', 'aside')).toBeGreaterThanOrEqual(4.5)
+  // Modal: focus moved into it, and Tab past its last control stays out of the inert page behind it.
+  await expect(sidebar.getByRole('button', { name: /^Switch workspace:/ })).toBeFocused()
+  for (let i = 0; i < 12; i++) await page.keyboard.press('Tab')
+  expect(await page.evaluate(() => !!document.activeElement?.closest('main'))).toBe(false)
+  // Close menu stays in view above it, and a real click on it closes it.
+  await page.getByRole('button', { name: 'Close menu' }).click()
+  await expect(sidebar).toBeHidden()
+  // Escape from inside the drawer closes it and puts focus back on the menu button (WebKit's Tab skips links,
+  // so focus is put in the drawer directly).
+  await page.getByRole('button', { name: 'Open menu' }).click()
+  await sidebar.getByRole('link', { name: 'Dashboard' }).focus()
+  await page.keyboard.press('Escape')
+  await expect(sidebar).toBeHidden()
+  await expect(page.getByRole('button', { name: 'Open menu' })).toBeFocused()
+  await page.getByRole('button', { name: 'Open menu' }).click()
+  await sidebar.getByRole('link', { name: 'Dashboard' }).click()
+  await expect(sidebar).toBeHidden()
+  expect(await violations(page)).toEqual([])
+})
+
+test('the new-version notice heads the page beside the sidebar, and under the bar on a phone, with Reload clickable', async ({ page }) => {
+  // A short poll and a newer /version.json than the build's.
+  await page.route('**/config/runtime.json', async (route) => {
+    const response = await route.fetch()
+    const json = await response.json()
+    await route.fulfill({ response, json: { ...json, appUpdate: { ...json.appUpdate, pollIntervalMs: 10_000 } } })
+  })
+  await page.route('**/version.json', (route) => route.fulfill({ json: { version: 'newer' } }))
+  await signIn(page)
+  const notice = page.getByRole('status').filter({ hasText: 'A new version is available.' })
+  await expect(notice).toBeVisible({ timeout: 25_000 })
+  const at = (sel: string) => page.locator(sel).first().evaluate((el) => el.getBoundingClientRect().toJSON() as DOMRect)
+  // Wide: it starts after the sidebar, which stays uncovered.
+  expect((await at('[role="status"]')).left).toBeGreaterThanOrEqual((await at('aside')).width - 0.5)
+  await sidebar(page).getByRole('button', { name: /^Switch workspace:/ }).click()
+  await expect(sidebar(page).getByLabel('Work email or workspace name')).toBeVisible()
+  // Phone: under the bar, and Reload takes a real click.
+  await page.setViewportSize({ width: 390, height: 780 })
+  await page.keyboard.press('Escape')
+  const bar = await page.getByRole('button', { name: 'Open menu' }).evaluate((el) => el.parentElement!.getBoundingClientRect().bottom)
+  expect((await at('[role="status"]')).top).toBeGreaterThanOrEqual(bar - 0.5)
+  const reloaded = page.waitForEvent('framenavigated')
+  await notice.getByRole('button', { name: 'Reload' }).click()
+  await reloaded
+  expect(await violations(page)).toEqual([])
+})
+
+// A clicked button is not focused in WebKit: Switch workspace must work with a real mouse click in every engine.
+test("the sidebar's Switch workspace works with a mouse click", async ({ page }) => {
+  await signIn(page)
+  const sidebar = page.getByRole('complementary', { name: 'Workspace and sections' })
+  await sidebar.getByRole('button', { name: /^Switch workspace:/ }).click()
+  await sidebar.getByLabel('Work email or workspace name').fill(EMAIL)
   const authorize = page.waitForRequest((r) => r.url().startsWith(`${IDP}/realms/tenant-acme/protocol/openid-connect/auth`))
   // The click lands: PUB-1 resolves the name and the browser leaves for that workspace's sign-in.
-  await header.getByRole('button', { name: 'Continue' }).click()
+  await sidebar.getByRole('button', { name: 'Continue' }).click()
   await authorize
 })
 
-test("the header's Sign out works with a mouse click", async ({ page }) => {
+test("the sidebar's Sign out works with a mouse click", async ({ page }) => {
   await signIn(page)
-  const header = page.getByRole('banner')
-  await header.getByRole('button', { name: /Account menu/ }).click()
-  await header.getByRole('button', { name: 'Sign out' }).click()
+  await page.getByRole('complementary', { name: 'Workspace and sections' }).getByRole('button', { name: 'Sign out' }).click()
   await expect(page.getByRole('heading', { name: 'You are signed out' })).toBeVisible()
   await expect.poll(async () => (await state(page)).logouts.length).toBe(1)
 })

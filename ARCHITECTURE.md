@@ -2,7 +2,7 @@
 
 This document describes the internal structure, dependency direction, browser flows, data, caching, observability, security and deployment of `web-shell`.
 
-`web-shell` is a **private Rsbuild application** (`github.com/BCBP-SOLUTIONS-FZC-LLC/web-shell`, Node.js 26, React 19.3) built on the platform SDK (`@bcbp-solutions-fzc-llc/frontend-sdk` `1.0.0-alpha.10`). The npm package name is `web-shell` and `"private": true`. Nothing installs it. What ships is a static bundle: the SDK bootstrap, the sign-in and session screens, and a Module Federation host (`shell`) that renders the `dashboard`, `tenders`, `drafting`, `workflows`, `admin` and `me` remotes under its header. The production process is nginx on port **8080**, uid **101**. There is no API server, database, or message bus in this repository.
+`web-shell` is a **private Rsbuild application** (`github.com/BCBP-SOLUTIONS-FZC-LLC/web-shell`, Node.js 26, React 19.3) built on the platform SDK (`@bcbp-solutions-fzc-llc/frontend-sdk` `1.0.0-alpha.10`). The npm package name is `web-shell` and `"private": true`. Nothing installs it. What ships is a static bundle: the SDK bootstrap, the sign-in and session screens, and a Module Federation host (`shell`) that renders the `dashboard`, `tenders`, `drafting`, `workflows`, `admin` and `me` remotes beside its sidebar. The production process is nginx on port **8080**, uid **101**. There is no API server, database, or message bus in this repository.
 
 Current release: `v0.5.0` (SDK alpha.10; the header, IAM's workspace screens, live roles; routes for six remotes); `v0.4.0` (remotes `dashboard` and `tenders`, SDK alpha.6) is its rollback; `v0.3.0`, `v0.2.0` and `v0.1.0` (remote `app2`) are superseded. `package.json` `version` matches the latest tag. Image tags, the SemVer contract, and how to cut a release are in [VERSIONING.md](./VERSIONING.md).
 
@@ -11,7 +11,7 @@ Current release: `v0.5.0` (SDK alpha.10; the header, IAM's workspace screens, li
 | The SDK start-up sequence, the sign-in page (email, workspace name or URL), the session screens | Passwords, MFA, registration, token issuance (Keycloak). PKCE, token handling, refresh and idle timeout (the SDK's `/auth`) |
 | The IAM ports: PUB-1 resolver, P-35 session context, and P-1/P-27 for the banners | The IAM APIs, tenant membership, authorization decisions (IAM services, the gateway) |
 | Federation host `shell` and the shared map from `@bcbp-solutions-fzc-llc/webpack-preset` | Dashboard screens (`mfe-dashboard`, loaded as `dashboard`); tender screens (`mfe-tender`, loaded as `tenders`); drafting (`mfe-drafting`, `drafting`); the workflow designer (`mfe-workflow-designer`, `workflows`); administration (`mfe-admin`, `admin`) and the user's account (`mfe-me`, `me`), not built yet |
-| The header around every remote: section links to the served remotes, Admin (`manage:members`), the user menu (My account, Switch workspace, Sign out) | Each remote's own section navigation |
+| The sidebar beside every remote (a drawer on a narrow screen): the workspace with Switch workspace, section links with icons to the served remotes, Admin (`manage:members`), My account, Sign out | Each remote's own section navigation |
 | The shell value remotes read through SDK hooks (`user`, `signOut`, `workspace`, `context`, `refreshContext`) | Each environment's `/config/runtime.json` and `/remotes/manifest.json` (deploy pipeline, CloudFront) |
 | `GET /healthz` and the static files nginx serves | Cluster rollout. A tag publishes an image. It does not deploy |
 
@@ -30,7 +30,7 @@ graph TD
     subgraph app["app/ — composition root"]
         index["bootstrap/index.ts\nasync boundary, unavailable message"]
         boot["bootstrap/bootstrap.tsx\nSDK start-up, session handling, wiring, render"]
-        routes["routes/App.tsx\nsigned-in routes, the header (Frame),\na RemoteBoundary per remote"]
+        routes["routes/App.tsx\nsigned-in routes, the sidebar (Frame),\na RemoteBoundary per remote"]
         providers["providers/ShellRoot.tsx\nPlatformProvider"]
         layouts["layouts/\nscreen host, session-screen mounting"]
     end
@@ -38,8 +38,8 @@ graph TD
     subgraph presentation["presentation/"]
         pages["pages/login\nLoginPage, useEmailSignIn"]
         features["features/session-screens\nsign-in, signed out, session ended, …"]
-        widgets["widgets/\nheader, update notice, workspace banners,\nread-only notice, missing permissions, error page"]
-        components["components/\nBrandLogo, PageLinks"]
+        widgets["widgets/\nsidebar, update notice, workspace banners,\nread-only notice, missing permissions, error page"]
+        components["components/\nBrandLogo, Icons, PageLinks"]
     end
 
     subgraph application["application/"]
@@ -51,7 +51,7 @@ graph TD
     end
 
     subgraph infrastructure["infrastructure/ — implements domain contracts"]
-        infra["api/iam (PUB-1, P-35, P-1, P-27), auth/passwordReset,\nstorage/rememberedEmail, storage/upgradeWelcome,\nfederation/navigator, i18n/shellMessages"]
+        infra["api/iam (PUB-1, P-35, P-1, P-27), auth/passwordReset,\nstorage/rememberedEmail, storage/upgradeWelcome,\nstorage/sidebarPreference, federation/navigator, i18n/shellMessages"]
     end
 
     subgraph shared["shared/"]
@@ -99,7 +99,7 @@ graph TD
     sh --> sdkmods
 ```
 
-**Direction:** presentation never imports infrastructure, `app/` or the SDK (the session screens take `/auth` types only); it gets use cases, repositories and state as props from `app/`. `bootstrap.tsx` is the only module that wires the layers together and the only one that renders the app root. `App.tsx` reads session state through SDK hooks, and the banners from the bootstrap's `notices` store (a prop, read with `useSyncExternalStore`), and passes them to the widgets (the header's user, workspace, sign-out and switch too); the remote reads its own through SDK hooks (`useCurrentUser`, `useSignOut`).
+**Direction:** presentation never imports infrastructure, `app/` or the SDK (the session screens take `/auth` types only); it gets use cases, repositories and state as props from `app/`. `bootstrap.tsx` is the only module that wires the layers together and the only one that renders the app root. `App.tsx` reads session state through SDK hooks, and the banners from the bootstrap's `notices` store (a prop, read with `useSyncExternalStore`), and passes them to the widgets (the sidebar's user, workspace, sign-out and switch too); the remote reads its own through SDK hooks (`useCurrentUser`, `useSignOut`).
 
 The SDK is imported through public subpaths only. `@bcbp-solutions-fzc-llc/eslint-plugin` fails a root import (`@bcbp-solutions-fzc-llc/frontend-sdk`) or a deep import, and `npm run lint` runs in `validate-quality`.
 
@@ -122,13 +122,14 @@ graph LR
     screens(["presentation/features/session-screens"])
     login(["presentation/pages/login\nLoginPage, useEmailSignIn"])
     widgets(["presentation/widgets"])
-    comps(["presentation/components\nBrandLogo, PageLinks"])
+    comps(["presentation/components\nBrandLogo, Icons, PageLinks"])
     usecases(["application/use-cases\nresolveWorkspace, requestPasswordReset,\nloadSessionContext, loadWorkspaceStatus"])
-    domain(["domain/\nRememberedEmailRepository, WorkspaceStatusSource, UpgradeWelcomeRepository,\nWorkspaceNotFoundError, rules/permissions, rules/identifier,\nrules/workspaceAccess, rules/workspaceBanners"])
+    domain(["domain/\nRememberedEmailRepository, WorkspaceStatusSource, UpgradeWelcomeRepository,\nSidebarPreferenceRepository, WorkspaceNotFoundError, rules/permissions, rules/identifier,\nrules/workspaceAccess, rules/workspaceBanners"])
     iam(["infrastructure/api/iam.ts"])
     reset(["infrastructure/auth/passwordReset.ts"])
     remember(["infrastructure/storage/rememberedEmail.ts\n(localStorage)"])
     welcome(["infrastructure/storage/upgradeWelcome.ts\n(SDK storage)"])
+    sidebarPref(["infrastructure/storage/sidebarPreference.ts\n(SDK storage)"])
     nav(["infrastructure/federation/navigator.ts"])
     msgs(["infrastructure/i18n/shellMessages.ts"])
     text(["shared/i18n\nshell namespace, en.json"])
@@ -147,6 +148,7 @@ graph LR
     boot --> reset
     boot --> remember
     boot --> welcome
+    boot --> sidebarPref
     boot --> nav
     boot --> msgs
     boot --> sdk
@@ -178,6 +180,8 @@ graph LR
     remember --> domain
     welcome -. types .-> domain
     welcome --> sdk
+    sidebarPref -. types .-> domain
+    sidebarPref --> sdk
     iam -. types .-> domain
     iam --> sdk
     reset --> sdk
@@ -192,17 +196,17 @@ graph LR
 |---|---|
 | `domain/` (contracts, errors, `rules/permissions.ts`, `rules/identifier.ts`, `rules/workspaceAccess.ts`, `rules/workspaceBanners.ts`) | Nothing but SDK types |
 | `application/` (use cases) | `domain/`, SDK types and the `/problem` error classes. No React, no browser APIs (ports injected) |
-| `infrastructure/` | `domain/`, `shared/i18n`, SDK subpaths. `storage/rememberedEmail.ts` implements `RememberedEmailRepository` over `localStorage`; `storage/upgradeWelcome.ts` implements `UpgradeWelcomeRepository` over the SDK's `storage('shell')`; `api/iam.ts` implements `WorkspaceStatusSource` (P-1, P-27); `i18n/shellMessages.ts` (`registerNamespace` + `setLocale`) changes the page's locale, so only the bootstrap calls it |
+| `infrastructure/` | `domain/`, `shared/i18n`, SDK subpaths. `storage/rememberedEmail.ts` implements `RememberedEmailRepository` over `localStorage`; `storage/upgradeWelcome.ts` implements `UpgradeWelcomeRepository` and `storage/sidebarPreference.ts` `SidebarPreferenceRepository` over the SDK's `storage('shell')`; `api/iam.ts` implements `WorkspaceStatusSource` (P-1, P-27); `i18n/shellMessages.ts` (`registerNamespace` + `setLocale`) changes the page's locale, so only the bootstrap calls it |
 | `presentation/pages` | `components`, `domain/`, `application/` types, `shared/` (their words from `shared/i18n`). Never `infrastructure/`, `app/`, the SDK, `application/` values, storage, the network or navigation: the repository, use cases and state come in as props |
 | `presentation/components` | `shared/` (`ui`, `i18n`, `constants`) |
-| `presentation/widgets` | `shared/i18n`, `components` (`AppHeader` shows `BrandLogo`); state and actions are props |
+| `presentation/widgets` | `shared/i18n`, `components` (`AppSidebar` draws `Icons`); state and actions are props |
 | `presentation/features/session-screens` | `pages`, `components`, `domain/`, `application/` types, `shared/i18n`, SDK `/auth` types. The screens call the use cases they are given; every failure becomes catalogue words |
 | `shared/i18n` | SDK `/i18n` (`t`, `formatDate`) and `/react` (`useT`), no shell layer: `en.json`, `catalogues.ts`, `useShellText`, `shellText`, `shellDate`, `ShellKey`. Text lookup and date formatting only: presentation reaches the SDK's i18n runtime through it and nothing else |
 | `shared/constants` | `shared/i18n` (link labels are keys) |
 | `shared/ui`, `shared/types` | Nothing (assets, styles, ambient types) |
 | `app/layouts/` | `screen.tsx`: `react-dom/client`. `sessionScreens.tsx`: the session-screen components, the screen host, `shared/i18n` types (`ShellKey`), `application/` and SDK `/auth` types |
 | `app/providers/ShellRoot.tsx` | React, SDK `/react`, the session-context store (`application/`) |
-| `app/routes/App.tsx` | `react-router-dom`, `shared/i18n`, the widgets, `domain/rules/permissions` (`ADMIN_ENTRY`), SDK `/react` (`RemoteBoundary`, `MFEErrorBoundary`, `useRouteTemplate`, `useSessionContext`, `useAppUpdate`, `useReadOnly`, `useFeatureFlag`, and for the header `useCurrentUser`, `useWorkspace`, `useSignOut`, `useSwitchWorkspace`, `useHasPermission`). It hands the router's `navigate` to the bootstrap through `onRouter` instead of importing `/nav`. The `notices` prop is the bootstrap's store of banners, the read-only date and the workspace's name; `remotes` is the set of served remotes the header links to |
+| `app/routes/App.tsx` | `react-router-dom`, `shared/i18n`, the widgets, `domain/rules/permissions` (`ADMIN_ENTRY`) and the `SidebarPreferenceRepository` type (the `sidebar` prop, from the bootstrap), SDK `/react` (`RemoteBoundary`, `MFEErrorBoundary`, `useRouteTemplate`, `useSessionContext`, `useAppUpdate`, `useReadOnly`, `useFeatureFlag`, and for the sidebar `useCurrentUser`, `useWorkspace`, `useSignOut`, `useSwitchWorkspace`, `useHasPermission`). It hands the router's `navigate` to the bootstrap through `onRouter` instead of importing `/nav`. The `notices` prop is the bootstrap's store of banners, the read-only date and the workspace's name; `remotes` is the set of served remotes the sidebar links to |
 | `app/bootstrap/bootstrap.tsx` | Every layer except presentation and `shared/constants`, which it reaches through `layouts`, `providers` and `routes` (the composition root; the only module that imports `infrastructure/`: builds the use cases from infrastructure), every SDK subpath it initialises, `shared/ui/index.css` |
 | `app/bootstrap/index.ts` | `bootstrap.tsx`, dynamically; `shared/i18n/en.json` statically (the unavailable page cannot use the SDK) |
 | `rsbuild.config.ts` | The platform plugin, React, Tailwind, `/version.json`, `config/dev-platform.mjs`. `src/` does not import it |
@@ -403,7 +407,7 @@ The shell passes no props. `dashboard` reads the user with `useCurrentUser()` an
 
 `/t/<slug>/tenders/*` loads `tenders` (mfe-tender) the same way: container `__platform_mfe_tenders`, flag `remote.tenders.disabled`, no props. react-router-dom is not shared, so the remote runs its own router under the shell's basename (LLD §15 #18). `/t/<slug>/drafting/*` (`drafting`, mfe-drafting) and `/t/<slug>/workflows/*` (`workflows`, mfe-workflow-designer) load the same way: containers `__platform_mfe_drafting` and `__platform_mfe_workflows`, flags `remote.drafting.disabled` and `remote.workflows.disabled`, no props, their own routers (LLD §15 #22). `/t/<slug>/admin/*` (`admin`, mfe-admin) and `/t/<slug>/me/*` (`me`, mfe-me) too: containers `__platform_mfe_admin` and `__platform_mfe_me`, flags `remote.admin.disabled` and `remote.me.disabled` (LLD §15 #23).
 
-**The header** (`Frame` in `App.tsx`, `presentation/widgets/AppHeader.tsx`; LLD §6.6d) sits above the routes, `sticky top-0`, and publishes its height as `--shell-header-height`. It links to Dashboard, Tenders, Drafting and Workflows when the manifest lists the remote and it is not switched off (the bootstrap passes `remotes`: the manifest's keys less `isRemoteKilled`, worked out on every render, so a tenant flag from a late context hides a link), and to Admin for `useHasPermission('manage', 'members')` with `admin` served. Its user menu shows the user (`useCurrentUser`) and the workspace (P-1's name, else the slug), and offers My account (`me` served), Switch workspace (`useSwitchWorkspace`) and Sign out (`useSignOut`). A link is followed by the shell's router, without a page load; a link to the section the user is in remounts the routes, because the remote's own router does not see the shell's navigation. Flag `shell.frame: false` turns the header off.
+**The sidebar** (`Frame` in `App.tsx`, `presentation/widgets/AppSidebar.tsx`; LLD §6.6d) sits beside the routes on a wide screen (`sticky top-0`, the window's full height; the page is a `flex` row) and is a drawer opened from a bar at the top on a narrow one. It publishes `--shell-sidebar-width` (its width beside the page, `0px` as a drawer) and `--shell-header-height` (the bar's height, `0px` on a wide screen). At the top it shows the workspace (P-1's name, else the slug) with Switch workspace (`useSwitchWorkspace`); then links with icons to Dashboard, Tenders, Drafting and Workflows when the manifest lists the remote and it is not switched off (the bootstrap passes `remotes`: the manifest's keys less `isRemoteKilled`, worked out on every render, so a tenant flag from a late context hides a link), and Admin in its own group for `useHasPermission('manage', 'members')` with `admin` served; at the bottom My account (`me` served), the user (`useCurrentUser`) and Sign out (`useSignOut`). A link is followed by the shell's router, without a page load; a link to the section the user is in remounts the routes, because the remote's own router does not see the shell's navigation. Flag `shell.frame: false` turns the sidebar off.
 
 ---
 
@@ -579,6 +583,7 @@ Tokens are never written to storage. A reload restores the session from Keycloak
 |---|---|---|---|
 | `@bcbp-solutions-fzc-llc/frontend-sdk:workspaces` | `localStorage` | SDK, `rememberWorkspace` | Cached workspaces (realm, slug), so a return visit skips the sign-in screen |
 | `…:storage:<workspace>:shell:upgradeWelcomeSeen` | `localStorage` (SDK `storage('shell')`) | `infrastructure/storage/upgradeWelcome.ts` | The upgrade welcome (A5) was seen in this workspace on this device; the SDK clears it on sign-out and workspace switch |
+| `…:storage:<workspace>:shell:sidebarCollapsed` | `localStorage` (SDK `storage('shell')`) | `infrastructure/storage/sidebarPreference.ts` | The sidebar is collapsed to its icon rail in this workspace on this device; the SDK clears it on sign-out and workspace switch |
 | `@bcbp-solutions-fzc-llc/frontend-sdk:session-id`, `:auth:last-activity`, `:auth:last-user` | `localStorage` | SDK | Telemetry session id, idle timeout across tabs, user change detection |
 | `bcbp.rememberEmail`, `bcbp.loginEmail` | `localStorage` | `infrastructure/storage/rememberedEmail.ts` (behind the domain's `RememberedEmailRepository`) | "Remember Email" only: an email or a bare workspace name only, never a URL (a pasted link may carry a token or code; `isRememberableIdentifier`). With the box checked, a value that cannot be remembered (a URL, an over-long value) clears both keys, as unchecked does: a kept email would become the next person's `login_hint` on a shared device. Needed before a workspace is known, so it does not use the SDK's per-workspace `storage()`. Every access is wrapped in `try`; blocked storage just forgets |
 
@@ -650,9 +655,10 @@ classDiagram
 | `SeatUsage` (P-27) | `activeUsers`, `pendingInvitations`, `licensedSeats` | IAM Org & Membership; mapped by `toSeatUsage` |
 | Shell value | `user`, `workspace`, `context`, `locale`, `switchWorkspace`, `signOut` | This shell, in `PlatformProvider`; remotes read it through SDK hooks (no props) |
 | `--shell-notices-height` | The bottom notice stack's height in px on `<html>` (`NOTICES_HEIGHT_VAR`, `routes/App.tsx`), `0px` when empty | This shell (`NoticeStack`, `ResizeObserver`, set through the CSSOM); a remote's fixed elements may read it (optional) |
+| `--shell-sidebar-width`, `--shell-header-height` | The sidebar's width beside the page (`0px` while it is a drawer) and the narrow-screen bar's height (`0px` on a wide screen), in px on `<html>` (`SIDEBAR_WIDTH_VAR`, `HEADER_HEIGHT_VAR`, `routes/App.tsx`); absent while the frame is off | This shell (`usePublishedSize`: `ResizeObserver`, window resizes, the CSSOM); a remote's fixed elements may read them (optional) |
 | Runtime config | `/config/runtime.json`, validated strictly by the SDK (README § Configuration, LLD §9.1) | Each environment |
-| Remote manifest | `/remotes/manifest.json`: `dashboard`, `tenders`, `drafting`, `workflows`, `admin`, `me` → entry URL and `integrity`. Its keys also decide the header's links | Each environment |
-| Storage keys | § Browser storage | SDK, `infrastructure/storage/rememberedEmail.ts` and `infrastructure/storage/upgradeWelcome.ts` |
+| Remote manifest | `/remotes/manifest.json`: `dashboard`, `tenders`, `drafting`, `workflows`, `admin`, `me` → entry URL and `integrity`. Its keys also decide the sidebar's links | Each environment |
+| Storage keys | § Browser storage | SDK, `infrastructure/storage/rememberedEmail.ts`, `infrastructure/storage/upgradeWelcome.ts` and `infrastructure/storage/sidebarPreference.ts` |
 
 ---
 
@@ -675,6 +681,7 @@ flowchart TD
         b3["Session context (P-35): in memory only (createStore), per page load\nreplaced live when the background retry succeeds\nor a focus refresh (at most once a minute) brings a change"]
         b7["Workspace status (P-1, P-27): in memory only (the notices store), loaded once per page"]
         b8["Upgrade welcome seen (A5): localStorage via SDK storage('shell') upgradeWelcomeSeen\nper workspace; cleared on sign-out and workspace switch"]
+        b9["Sidebar collapsed: localStorage via SDK storage('shell') sidebarCollapsed\nper workspace; cleared on sign-out and workspace switch"]
         b4["Tokens: SDK memory only, never storage; reload restores from Keycloak SSO (prompt=none)"]
         b5["Text catalogue en.json: in the entry chunk, registered before the first screen"]
         b6["Remote manifest: loaded once per page (loadManifest), a changed manifest is read on the next page load\nA new shell build is found by /version.json polling"]
@@ -690,6 +697,7 @@ flowchart TD
 | Session context | Memory | The page | A reload, the background retry's success, or a changed answer to the focus refresh (at most once a minute) |
 | Workspace status (P-1, P-27) | Memory | The page | A reload |
 | Upgrade welcome seen (A5) | `localStorage` (SDK `storage('shell')`) | Per workspace, until sign-out | The SDK's `clearAllAppStorage` on sign-out and workspace switch |
+| Sidebar collapsed | `localStorage` (SDK `storage('shell')`) | Per workspace, until sign-out | The SDK's `clearAllAppStorage` on sign-out and workspace switch |
 | Tokens | Memory (SDK) | Until expiry or sign-out | Refresh, sign-out (all tabs) |
 
 ---
@@ -789,8 +797,8 @@ A browser shell has no locks, but it has races: an async start-up that a sign-ou
 | Session context, a workspace state | P-35 | stop on that screen | A6/A8 dialog with Sign out and Switch workspace; the app never renders (a membership refusal is asked once more after 5 s, on the first load, a trial's pre-render retries, the background retry and the focus refresh alike; a refusal that holds on a background retry or a focus refresh unmounts the app) |
 | Session context, a trial with a slug that never loads | P-35 | stop on that screen | "We couldn't load your workspace" with Sign out, Switch workspace (`prompt: 'login'`) and Try again (a reload, which may fail the same way) after 3 retries of any failure that is not a workspace state (also offline, 404 and 500: where P-35 is not deployed, every trial user with a slug stops here); the app never renders, since the session may be another trial tenant's: without P-35 the slug cannot be checked, so `INSUFFICIENT_ROLE` keeps it closed too. The text says so ("…so it stays closed. Try again later, sign out, or switch to another workspace."). Every environment where trial users sign in must serve P-35: smoke `live` checks it (401 without a token, never 404) |
 | Session context, any other failure (not a trial with a slug) | P-35 | degrade, then recover | Warning log. Deny-all permissions and platform flags until it answers; after a transient failure (a network failure while online, a timeout, 429, 502, 503 or 504 (the SDK ApiClient's own rule)) it is retried after 1 s, 2 s, 4 s, one request per attempt, and applied live (any other answer, offline included, is final for that retry; the focus refresh, LLD §6.6e, can still recover it) (the router moves under `/t/<slug>/` then). A notice with Reload says some actions are hidden |
-| Workspace banners | P-1, P-27 | ignore | Warning log `workspace status unavailable`; no banners, no read-only date, no A5; the user menu names the workspace by its slug. Not retried |
-| Remote manifest | `/remotes/manifest.json` | degrade | Error log. The app renders; `RemoteBoundary` shows its error; the header has no section links |
+| Workspace banners | P-1, P-27 | ignore | Warning log `workspace status unavailable`; no banners, no read-only date, no A5; the sidebar names the workspace by its slug. Not retried |
+| Remote manifest | `/remotes/manifest.json` | degrade | Error log. The app renders; `RemoteBoundary` shows its error; the sidebar has no section links |
 | A remote loads or renders (dashboard, tenders, drafting, workflows, admin, me) | That remote | degrade | Boundary message with "Try again". The rest of the shell keeps running |
 | The shell's own screens render | `App.tsx` and its widgets | stop that tree, recover on retry | The SDK's `MFEErrorBoundary` (`mfe="web-shell"`) logs the error (and records it for the SDK's web-error metric, which counts once Tier 1 is ratified), then shows `AppError`: "Something went wrong on this page.", the trace or request reference, and Try again. Never the error's own message. Instead of a blank page |
 | Telemetry export | `/otel` | ignore | Bounded queues in the SDK. v1 exports `essential` only (errors and essential warnings), by decision |
@@ -886,10 +894,10 @@ Vitest 5, happy-dom at `http://localhost:5001/`, Testing Library. `vitest.config
 
 | Layer | Path | What it locks |
 |---|---|---|
-| Unit | `test/unit/` | PUB-1, P-35, P-1 and P-27 mappings and the port calls, which banner shows to whom, the A5 window and seen flag, the P-35 refusal codes and their statuses (and the one re-ask of a membership refusal), the identifier rule (email, name, URL forms, 254 characters) and the role map's grants, the entry point's fatal path, remember-email with blocked storage, the screen host, `BrandLogo`, the session-context retry and store, the navigator adapter |
-| Integration | `test/integration/` | The login page and the carousel, every session screen, the focus refresh (once a minute, applied when changed, a refusal or another workspace replacing the app, an older answer never undoing a newer one), `App` routes and props (the banners and the read-only date included), the SDK navigator's navigate remounting the section the shell's routes show when the path or query changes (`sectionOf`, `sameSection`: decoded, without case), and a navigate() that does nothing once the app is gone, the header (links from the served remotes, Admin for `manage:members`, the user menu, Switch workspace, `shell.frame`), and the bootstrap: the exact initialisation order, each anonymous reason (`login-required` without a workspace: the sign-in screen with or without a slug, never `chooseWorkspace`; a trial sign-in nothing can check asks for credentials), wrong workspace, a trial with a slug (P-35 awaited; its slug checked; "We couldn't load your workspace"), a P-35 refusal that is a workspace state (A6/A8: no render; the re-ask; a late refusal unmounting the app) and one that is not (`INSUFFICIENT_ROLE`), missing context and its background retry, the banner load (P-27 only for owners and admins, failures, a late context, a sign-out mid-load, the hourly recompute) and A5 once (seen when shown), "Loading your workspace…" while P-35 is awaited, every way into an uncheckable trial asking for credentials, a remote's switch rejecting when PUB-1 cannot answer, sign-out during boot, i18n `detect`, navigator registration, start-up failure reporting, manifest failure, expiry and sign-out events; axe-core over every shell screen (`accessibility.test.tsx`) |
-| End to end | `test/e2e/` | The real bootstrap and SDK (inlined by Vitest, fresh per simulated page load) against a fake Keycloak and network: PKCE sign-in, `/t/<slug>/`, the remote's SDK hooks and permissions (a role given elsewhere reaching the remote on focus), the SDK's `navigate()` into the remote already showing mounting it again at the new path, and into another remote, with no page load, the header's links (no page load), Admin for an owner only, its Sign out and Switch workspace, deny-all, P-35 refusals showing A6/A8 with no remote load, the trial, seats and read-only-date banners from P-1/P-27 (no P-27 for a member), A5 once, an IAM outage that recovers in the background, a failing remote, global sign-out (form POST), the device clock, a trial deep link whose P-35 slug is another tenant's (wrong-workspace screen), a trial whose P-35 never loads ("We couldn't load your workspace"), a silent restore of a trial PUB-1 no longer knows (the email screen, one PUB-1 call), a WAF challenge page in place of PUB-1 (the saved workspace kept), a reload of a paid workspace Keycloak still serves (no PUB-1 call), a reload after a revert deleted the paid realm (restored into the trial realm, one PUB-1 call) |
-| Browser | `test/browser/`, CI `browser` | The production build in Chromium, Firefox and WebKit under the production CSP and Trusted Types (the header's contrast and `--shell-header-height` included), over HTTPS, with a fake Keycloak on a second origin: self-hosted fonts and hashed images, PKCE sign-in, the remote's entry with integrity and the share scope, `navigate()` without a reload and the mounted remote following it, the sign-out form POST under `form-action`, the start-up failure reaching `/otel`, colour contrast (axe on the login page; the read-only notice's and a workspace banner's ratio measured in the signed-in page), at a 300 px window the content ending above the sticky notice stack with `--shell-notices-height` equal to its height, a reload loading the saved paid realm's discovery document under `connect-src` (SDK alpha.9) |
+| Unit | `test/unit/` | PUB-1, P-35, P-1 and P-27 mappings and the port calls, which banner shows to whom, the A5 window and seen flag, the sidebar's saved choice (per workspace), the P-35 refusal codes and their statuses (and the one re-ask of a membership refusal), the identifier rule (email, name, URL forms, 254 characters) and the role map's grants, the entry point's fatal path, remember-email with blocked storage, the screen host, `BrandLogo`, the session-context retry and store, the navigator adapter |
+| Integration | `test/integration/` | The login page and the carousel, every session screen, the focus refresh (once a minute, applied when changed, a refusal or another workspace replacing the app, an older answer never undoing a newer one), `App` routes and props (the banners and the read-only date included), the SDK navigator's navigate remounting the section the shell's routes show when the path or query changes (`sectionOf`, `sameSection`: decoded, without case), and a navigate() that does nothing once the app is gone, the sidebar (links from the served remotes, Admin for `manage:members`, the workspace and the user, the narrow-screen drawer, Switch workspace, `shell.frame`), and the bootstrap: the exact initialisation order, each anonymous reason (`login-required` without a workspace: the sign-in screen with or without a slug, never `chooseWorkspace`; a trial sign-in nothing can check asks for credentials), wrong workspace, a trial with a slug (P-35 awaited; its slug checked; "We couldn't load your workspace"), a P-35 refusal that is a workspace state (A6/A8: no render; the re-ask; a late refusal unmounting the app) and one that is not (`INSUFFICIENT_ROLE`), missing context and its background retry, the banner load (P-27 only for owners and admins, failures, a late context, a sign-out mid-load, the hourly recompute) and A5 once (seen when shown), "Loading your workspace…" while P-35 is awaited, every way into an uncheckable trial asking for credentials, a remote's switch rejecting when PUB-1 cannot answer, sign-out during boot, i18n `detect`, navigator registration, start-up failure reporting, manifest failure, expiry and sign-out events; axe-core over every shell screen (`accessibility.test.tsx`) |
+| End to end | `test/e2e/` | The real bootstrap and SDK (inlined by Vitest, fresh per simulated page load) against a fake Keycloak and network: PKCE sign-in, `/t/<slug>/`, the remote's SDK hooks and permissions (a role given elsewhere reaching the remote on focus), the SDK's `navigate()` into the remote already showing mounting it again at the new path, and into another remote, with no page load, the sidebar's links (no page load), Admin for an owner only, its Sign out and Switch workspace, deny-all, P-35 refusals showing A6/A8 with no remote load, the trial, seats and read-only-date banners from P-1/P-27 (no P-27 for a member), A5 once, an IAM outage that recovers in the background, a failing remote, global sign-out (form POST), the device clock, a trial deep link whose P-35 slug is another tenant's (wrong-workspace screen), a trial whose P-35 never loads ("We couldn't load your workspace"), a silent restore of a trial PUB-1 no longer knows (the email screen, one PUB-1 call), a WAF challenge page in place of PUB-1 (the saved workspace kept), a reload of a paid workspace Keycloak still serves (no PUB-1 call), a reload after a revert deleted the paid realm (restored into the trial realm, one PUB-1 call) |
+| Browser | `test/browser/`, CI `browser` | The production build in Chromium, Firefox and WebKit under the production CSP and Trusted Types (the sidebar's contrast, its width beside the page at a desktop width and the drawer at a phone width included), over HTTPS, with a fake Keycloak on a second origin: self-hosted fonts and hashed images, PKCE sign-in, the remote's entry with integrity and the share scope, `navigate()` without a reload and the mounted remote following it, the sign-out form POST under `form-action`, the start-up failure reaching `/otel`, colour contrast (axe on the login page; the read-only notice's and a workspace banner's ratio measured in the signed-in page), at a 300 px window the content ending above the sticky notice stack with `--shell-notices-height` equal to its height, a reload loading the saved paid realm's discovery document under `connect-src` (SDK alpha.9) |
 | Dashboard contract | `test/browser/dashboard.spec.ts`, CI `dashboard-contract` | The real mfe-dashboard build in this shell under the production CSP (informational) |
 | Smoke | `test/smoke/`, `.github/scripts/smoke-tests.sh` | Image at most 200 MB and the startup gate, then the suite against the container: SPA rule, Cache-Control per location, script integrity, 404s, runtime config and manifest validated by the SDK. With `SMOKE_MODE=live`, a deployment's security headers too |
 
@@ -937,8 +945,8 @@ What the shell promises to others, and how each promise changes (VERSIONING.md h
 |---|---|---|
 | Platform SDK version | All three packages together, exact pins; shell first, unless the release changes the shell–remote contract (then deploy together); `/sdk-upgrade` | `check-sdk-pins.mjs` (hook), `SdkVersionPlugin` (build), `test-contract` |
 | `runtime.json` schema | The SDK's schema (strict; unknown keys refused). New keys arrive with an SDK release (alpha.6: `environment`) | The SDK at start-up; smoke `image` and `live` |
-| Remote contract | Remote name `dashboard`, container `__platform_mfe_dashboard`, no props, the `PlatformProvider` shell value. A rename is a MAJOR change and deploys with the dashboard. Remote `tenders` (mfe-tender): container `__platform_mfe_tenders`, no props, `ownerDomain` `tender_management`; same rules, deploys with mfe-tender. Remotes `drafting` (mfe-drafting) and `workflows` (mfe-workflow-designer): containers `__platform_mfe_drafting` and `__platform_mfe_workflows`, no props, `ownerDomain` `portal`; the same rules, each deploys with its remote. Remotes `admin` (mfe-admin) and `me` (mfe-me): containers `__platform_mfe_admin` and `__platform_mfe_me`, no props; not built. The CSS variables `--shell-notices-height` and `--shell-header-height` are additive: removing or renaming one is a MAJOR change; a remote need not read them | `npm run test-contract` against a real mfe-dashboard build; CI `Dashboard contract`. `tenders`: integration and e2e stubs only (LLD §15 #18); `drafting`, `workflows`, `admin`, `me`: the same (LLD §15 #22, #23) |
-| Routes and storage keys | `/t/<slug>/dashboard/*`, `/t/<slug>/tenders/*`, `/t/<slug>/drafting/*`, `/t/<slug>/workflows/*`, `/t/<slug>/admin/*`, `/t/<slug>/me/*`; `bcbp.*` keys and `…:storage:<workspace>:shell:upgradeWelcomeSeen`. A change updates README, ARCHITECTURE, the LLD and CHANGELOG together | e2e and browser suites (`/tenders/*`, `/drafting/*`, `/workflows/*`, `/admin/*`, `/me/*`: integration and e2e only) |
+| Remote contract | Remote name `dashboard`, container `__platform_mfe_dashboard`, no props, the `PlatformProvider` shell value. A rename is a MAJOR change and deploys with the dashboard. Remote `tenders` (mfe-tender): container `__platform_mfe_tenders`, no props, `ownerDomain` `tender_management`; same rules, deploys with mfe-tender. Remotes `drafting` (mfe-drafting) and `workflows` (mfe-workflow-designer): containers `__platform_mfe_drafting` and `__platform_mfe_workflows`, no props, `ownerDomain` `portal`; the same rules, each deploys with its remote. Remotes `admin` (mfe-admin) and `me` (mfe-me): containers `__platform_mfe_admin` and `__platform_mfe_me`, no props; not built. The CSS variables `--shell-notices-height`, `--shell-header-height` and `--shell-sidebar-width` are additive: removing or renaming one is a MAJOR change; a remote need not read them | `npm run test-contract` against a real mfe-dashboard build; CI `Dashboard contract`. `tenders`: integration and e2e stubs only (LLD §15 #18); `drafting`, `workflows`, `admin`, `me`: the same (LLD §15 #22, #23) |
+| Routes and storage keys | `/t/<slug>/dashboard/*`, `/t/<slug>/tenders/*`, `/t/<slug>/drafting/*`, `/t/<slug>/workflows/*`, `/t/<slug>/admin/*`, `/t/<slug>/me/*`; `bcbp.*` keys, `…:storage:<workspace>:shell:upgradeWelcomeSeen` and `…:shell:sidebarCollapsed`. A change updates README, ARCHITECTURE, the LLD and CHANGELOG together | e2e and browser suites (`/tenders/*`, `/drafting/*`, `/workflows/*`, `/admin/*`, `/me/*`: integration and e2e only) |
 | IAM ports (PUB-1, P-35, P-1, P-27) | IAM's swagger; the SDK's contract cases; P-35 refusal codes (LLD §7.1): IAM's replies of 2026-11-24 | `test/unit/iam.test.ts` against the SDK's contract cases; `test/unit/session-context.test.ts` for the refusal codes; `test/unit/workspace-status.test.ts` for P-1 and P-27 (no SDK contract cases exist for them) |
 | The shell's text | Keys of `src/shared/i18n/en.json`; a new locale adds a catalogue | `test/unit/shell-text.test.ts` |
 
