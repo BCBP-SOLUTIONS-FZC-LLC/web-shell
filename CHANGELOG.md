@@ -10,6 +10,10 @@ Pull requests that change the shell, its dependencies, or the image add an entry
 
 ## [Unreleased]
 
+### Fixed (2026-11-26 — one theme for every remote)
+
+**The theme a user picks now follows them into every remote and across reloads.** Every remote draws with `html[data-theme]`, but only mfe-dashboard set it (from its own storage), so mfe-admin and the others showed the default after a reload or when opened first. The shell now puts its saved theme on the page before a remote mounts and saves whatever theme a remote sets, in `storage('shell')` (new key `…:shell:theme`, cleared on sign-out and workspace switch; `src/infrastructure/storage/sharedTheme.ts`). Remotes change nothing. Not breaking for remotes or environments.
+
 ### Added (2026-11-26 — Admin's sections in the sidebar)
 
 **The sidebar draws Admin's sections (Users, Departments, Group mappings, Settings, Audit log) as a tree under the Admin row, so there is one menu for the whole app.** Shown while an admin page is open: a line down the panel's left edge with a curved elbow into each row, the current page highlighted, a section only for a user the permission allows (`useAdminSections` in `src/app/routes/App.tsx`, the rules mirror mfe-admin's; UI hints only, IAM decides). `FrameLink` takes optional `children`; new keys `app.frame.admin.*`. Not breaking for remotes or environments. mfe-admin draws no section menu of its own once its matching change lands (its own repo); until then both show.
