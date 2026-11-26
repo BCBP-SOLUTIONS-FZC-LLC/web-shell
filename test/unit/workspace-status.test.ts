@@ -8,6 +8,7 @@ import { readOnlyUntil, recentlyUpgraded, workspaceBanners } from '../../src/dom
 import { toSeatUsage, toTenantStatus, workspaceStatusSource } from '../../src/infrastructure/api/iam'
 import { loadWorkspaceStatus } from '../../src/application/use-cases/loadWorkspaceStatus'
 import { upgradeWelcomeStorage } from '../../src/infrastructure/storage/upgradeWelcome'
+import { sidebarPreferenceStorage } from '../../src/infrastructure/storage/sidebarPreference'
 
 const NOW = Date.parse('2026-11-24T12:00:00Z')
 const DAY = 86_400_000
@@ -182,5 +183,22 @@ describe('upgradeWelcomeStorage (A5 once per device and workspace)', () => {
     expect(upgradeWelcomeStorage.seen()).toBe(true)
     platform = createTestPlatform({ storageNamespace: 'tenant-globex' })
     expect(upgradeWelcomeStorage.seen()).toBe(false)
+  })
+})
+
+describe('sidebarPreferenceStorage (the sidebar collapsed to its rail, per workspace)', () => {
+  let platform: ReturnType<typeof createTestPlatform> | undefined
+  afterEach(() => platform?.reset())
+
+  it('remembers the choice per workspace, expanded until one is made', () => {
+    platform = createTestPlatform({ storageNamespace: 'tenant-acme' })
+    expect(sidebarPreferenceStorage.collapsed()).toBe(false)
+    sidebarPreferenceStorage.setCollapsed(true)
+    expect(sidebarPreferenceStorage.collapsed()).toBe(true)
+    sidebarPreferenceStorage.setCollapsed(false)
+    expect(sidebarPreferenceStorage.collapsed()).toBe(false)
+    sidebarPreferenceStorage.setCollapsed(true)
+    platform = createTestPlatform({ storageNamespace: 'tenant-globex' })
+    expect(sidebarPreferenceStorage.collapsed()).toBe(false)
   })
 })

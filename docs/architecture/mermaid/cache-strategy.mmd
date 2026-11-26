@@ -10,6 +10,7 @@ flowchart TD
         b3["Session context (P-35): in memory only (createStore), per page load\nreplaced live when the background retry succeeds\nor a focus refresh (at most once a minute) brings a change"]
         b7["Workspace status (P-1, P-27): in memory only (the notices store), loaded once per page"]
         b8["Upgrade welcome seen (A5): localStorage via SDK storage('shell') upgradeWelcomeSeen\nper workspace; cleared on sign-out and workspace switch"]
+        b9["Sidebar collapsed: localStorage via SDK storage('shell') sidebarCollapsed\nper workspace; cleared on sign-out and workspace switch"]
         b4["Tokens: SDK memory only, never storage; reload restores from Keycloak SSO (prompt=none)"]
         b5["Text catalogue en.json: in the entry chunk, registered before the first screen"]
         b6["Remote manifest: loaded once per page (loadManifest), a changed manifest is read on the next page load\nA new shell build is found by /version.json polling"]

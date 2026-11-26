@@ -8,13 +8,14 @@ graph LR
     screens(["presentation/features/session-screens"])
     login(["presentation/pages/login\nLoginPage, useEmailSignIn"])
     widgets(["presentation/widgets"])
-    comps(["presentation/components\nBrandLogo, PageLinks"])
+    comps(["presentation/components\nBrandLogo, Icons, PageLinks"])
     usecases(["application/use-cases\nresolveWorkspace, requestPasswordReset,\nloadSessionContext, loadWorkspaceStatus"])
-    domain(["domain/\nRememberedEmailRepository, WorkspaceStatusSource, UpgradeWelcomeRepository,\nWorkspaceNotFoundError, rules/permissions, rules/identifier,\nrules/workspaceAccess, rules/workspaceBanners"])
+    domain(["domain/\nRememberedEmailRepository, WorkspaceStatusSource, UpgradeWelcomeRepository,\nSidebarPreferenceRepository, WorkspaceNotFoundError, rules/permissions, rules/identifier,\nrules/workspaceAccess, rules/workspaceBanners"])
     iam(["infrastructure/api/iam.ts"])
     reset(["infrastructure/auth/passwordReset.ts"])
     remember(["infrastructure/storage/rememberedEmail.ts\n(localStorage)"])
     welcome(["infrastructure/storage/upgradeWelcome.ts\n(SDK storage)"])
+    sidebarPref(["infrastructure/storage/sidebarPreference.ts\n(SDK storage)"])
     nav(["infrastructure/federation/navigator.ts"])
     msgs(["infrastructure/i18n/shellMessages.ts"])
     text(["shared/i18n\nshell namespace, en.json"])
@@ -33,6 +34,7 @@ graph LR
     boot --> reset
     boot --> remember
     boot --> welcome
+    boot --> sidebarPref
     boot --> nav
     boot --> msgs
     boot --> sdk
@@ -64,6 +66,8 @@ graph LR
     remember --> domain
     welcome -. types .-> domain
     welcome --> sdk
+    sidebarPref -. types .-> domain
+    sidebarPref --> sdk
     iam -. types .-> domain
     iam --> sdk
     reset --> sdk
