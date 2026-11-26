@@ -2,7 +2,7 @@ graph TD
     subgraph app["app/ — composition root"]
         index["bootstrap/index.ts\nasync boundary, unavailable message"]
         boot["bootstrap/bootstrap.tsx\nSDK start-up, session handling, wiring, render"]
-        routes["routes/App.tsx\nsigned-in routes, the header (Frame),\na RemoteBoundary per remote"]
+        routes["routes/App.tsx\nsigned-in routes, the sidebar (Frame),\na RemoteBoundary per remote"]
         providers["providers/ShellRoot.tsx\nPlatformProvider"]
         layouts["layouts/\nscreen host, session-screen mounting"]
     end
@@ -10,8 +10,8 @@ graph TD
     subgraph presentation["presentation/"]
         pages["pages/login\nLoginPage, useEmailSignIn"]
         features["features/session-screens\nsign-in, signed out, session ended, …"]
-        widgets["widgets/\nheader, update notice, workspace banners,\nread-only notice, missing permissions, error page"]
-        components["components/\nBrandLogo, PageLinks"]
+        widgets["widgets/\nsidebar, update notice, workspace banners,\nread-only notice, missing permissions, error page"]
+        components["components/\nBrandLogo, Icons, PageLinks"]
     end
 
     subgraph application["application/"]
@@ -23,7 +23,7 @@ graph TD
     end
 
     subgraph infrastructure["infrastructure/ — implements domain contracts"]
-        infra["api/iam (PUB-1, P-35, P-1, P-27), auth/passwordReset,\nstorage/rememberedEmail, storage/upgradeWelcome,\nfederation/navigator, i18n/shellMessages"]
+        infra["api/iam (PUB-1, P-35, P-1, P-27), auth/passwordReset,\nstorage/rememberedEmail, storage/upgradeWelcome,\nstorage/sidebarPreference, federation/navigator, i18n/shellMessages"]
     end
 
     subgraph shared["shared/"]

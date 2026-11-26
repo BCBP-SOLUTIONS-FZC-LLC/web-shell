@@ -395,7 +395,7 @@ describe('the shell, end to end', () => {
     expect(assigned).toEqual([]) // no page load, no sign-in round trip
   })
 
-  it("the shell's header links to the served remotes without a page load, and its Sign out ends the SSO session", async () => {
+  it("the shell's sidebar links to the served remotes without a page load, and its Sign out ends the SSO session", async () => {
     await signInByEmail()
     const nav = within(screen.getByRole('navigation', { name: 'Sections' }))
     expect(nav.getAllByRole('link').map((l) => [l.textContent, l.getAttribute('href')])).toEqual([
@@ -411,24 +411,23 @@ describe('the shell, end to end', () => {
     expect(assigned).toEqual([]) // no page load, no sign-in round trip
     expect(injected).toEqual([ENTRY, TENDERS_ENTRY])
 
-    // The user menu names the user and the workspace (P-1), and links My account (mfe-me).
-    await userEvent.click(screen.getByRole('button', { name: 'Account menu: Ada Lovelace' }))
-    expect(screen.getByText('Workspace: Acme')).toBeInTheDocument()
-    await userEvent.click(screen.getByRole('link', { name: 'My account' }))
+    // The sidebar names the workspace (P-1's name, then its slug) and the user, and links My account (mfe-me).
+    const sidebar = within(screen.getByRole('complementary', { name: 'Workspace and sections' }))
+    await waitFor(() => expect(sidebar.getByRole('button', { name: /^Switch workspace:/ })).toHaveAccessibleName('Switch workspace: Acme acme'))
+    expect(sidebar.getByText('Ada Lovelace')).toBeInTheDocument()
+    await userEvent.click(sidebar.getByRole('link', { name: 'My account' }))
     await screen.findByRole('heading', { name: 'me for Ada Lovelace in acme' }, { timeout: 5_000 })
     expect(window.location.pathname).toBe('/t/acme/me')
 
-    await userEvent.click(screen.getByRole('button', { name: 'Account menu: Ada Lovelace' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Sign out' }))
+    await userEvent.click(sidebar.getByRole('button', { name: 'Sign out' }))
     await screen.findByRole('heading', { name: 'You are signed out' }, { timeout: 5_000 })
     expect(document.getElementById('app')!.childElementCount).toBe(0)
     expect(posted.map((p) => p.url)).toEqual([`POST ${IDP}/realms/tenant-acme/protocol/openid-connect/logout`])
   })
 
-  it("the header's Switch workspace resolves the name (PUB-1) and signs in to that workspace asking for credentials", async () => {
+  it("the sidebar's Switch workspace resolves the name (PUB-1) and signs in to that workspace asking for credentials", async () => {
     await signInByEmail()
-    await userEvent.click(screen.getByRole('button', { name: 'Account menu: Ada Lovelace' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Switch workspace' }))
+    await userEvent.click(screen.getByRole('button', { name: /^Switch workspace:/ }))
     await userEvent.type(screen.getByLabelText('Work email or workspace name'), 'acme')
     await userEvent.click(screen.getByRole('button', { name: 'Continue' }))
     await until(() => assigned.length > 0, 'the redirect to Keycloak')
@@ -436,7 +435,7 @@ describe('the shell, end to end', () => {
     expect(new URL(assigned[0]!).pathname).toBe('/realms/tenant-acme/protocol/openid-connect/auth')
   })
 
-  it('a member sees no Admin link in the header', async () => {
+  it('a member sees no Admin link in the sidebar', async () => {
     roles = ['member']
     await signInByEmail()
     const nav = within(screen.getByRole('navigation', { name: 'Sections' }))
@@ -753,7 +752,8 @@ describe('the shell, end to end', () => {
       otherTab.push((e as MessageEvent).data),
     )
 
-    await userEvent.click(screen.getByRole('button', { name: 'Sign out' }))
+    // The remote's own Sign out (in the page), not the sidebar's.
+    await userEvent.click(within(screen.getByRole('main')).getByRole('button', { name: 'Sign out' }))
     await screen.findByRole('heading', { name: 'You are signed out' }, { timeout: 5_000 })
     expect(screen.queryByRole('heading', { name: /Dashboard/ })).toBeNull()
     expect(document.getElementById('app')!.childElementCount).toBe(0)

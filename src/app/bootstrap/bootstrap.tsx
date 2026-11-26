@@ -41,6 +41,7 @@ import { resolveWorkspaceUseCase } from '../../application/use-cases/resolveWork
 import { isEmailIdentifier, toIdentifier } from '../../domain/rules/identifier'
 import { loadSessionContextOnce, sessionContextSource, workspaceResolver, workspaceStatusSource } from '../../infrastructure/api/iam'
 import { upgradeWelcomeStorage } from '../../infrastructure/storage/upgradeWelcome'
+import { sidebarPreferenceStorage } from '../../infrastructure/storage/sidebarPreference'
 import { loadWorkspaceStatus } from '../../application/use-cases/loadWorkspaceStatus'
 import { readOnlyUntil, recentlyUpgraded, workspaceBanners } from '../../domain/rules/workspaceBanners'
 import { isPageWorkspace } from '../../domain/rules/workspaceAccess'
@@ -386,7 +387,7 @@ async function start(cfg: RuntimeConfig, report: { otlpBaseUrl: string }): Promi
     return {}
   })
   if (stopped()) return
-  // The header links only to remotes this environment serves and has not switched off. Worked out on every
+  // The sidebar links only to remotes this environment serves and has not switched off. Worked out on every
   // render: a context that arrives late brings the tenant's flags (remote.<name>.disabled) with it.
   const servedRemotes = (): ReadonlySet<string> => new Set(Object.keys(manifest).filter((name) => !isRemoteKilled(name)))
   startVersionPolling()
@@ -473,7 +474,7 @@ async function start(cfg: RuntimeConfig, report: { otlpBaseUrl: string }): Promi
       <StrictMode>
         <ShellRoot context={context} shell={shell}>
           {/* Keyed by the basename: a router whose basename changes is a new router. */}
-          <App key={base ?? '/'} {...(base ? { basename: base } : {})} onRouter={onRouter} notices={notices} remotes={servedRemotes()} />
+          <App key={base ?? '/'} {...(base ? { basename: base } : {})} onRouter={onRouter} notices={notices} remotes={servedRemotes()} sidebar={sidebarPreferenceStorage} />
         </ShellRoot>
       </StrictMode>,
     )
@@ -488,7 +489,7 @@ async function start(cfg: RuntimeConfig, report: { otlpBaseUrl: string }): Promi
   const backgroundRetry = new AbortController()
   signedOutDuringBoot.signal.addEventListener('abort', () => backgroundRetry.abort(), { once: true })
   // A context that changed: the subject, flags and provider get it, then the banners (once) and the router
-  // (rememberWorkspace may have moved the URL under /t/<slug>/). Rendered again either way, so the header
+  // (rememberWorkspace may have moved the URL under /t/<slug>/). Rendered again either way, so the sidebar
   // drops a remote the tenant's flags switch off. Shared by the background retry and the focus refresh.
   // False when a later request's answer is already applied: this one is older.
   const takeContext = (next: SessionContext): boolean => {

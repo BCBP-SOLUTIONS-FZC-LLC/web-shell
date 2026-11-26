@@ -115,7 +115,7 @@ describe('permissions (IAM P-35 roles, §10.4 grants)', () => {
     }
   })
 
-  // mfe-admin's useAdminAccess is "manage:members or any admin permission": the header's one check
+  // mfe-admin's useAdminAccess is "manage:members or any admin permission": the sidebar's one check
   // (ADMIN_ENTRY) is the same rule only while every role with an admin grant holds manage:members.
   it('gives manage:members to every role that holds any admin grant, so the Admin entry check is exact', () => {
     expect(`${ADMIN_ENTRY.action}:${ADMIN_ENTRY.resource}`).toBe('manage:members')

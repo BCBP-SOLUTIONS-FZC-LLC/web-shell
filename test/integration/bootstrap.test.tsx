@@ -47,6 +47,7 @@ const loadTenant = vi.fn()
 const loadSeats = vi.fn()
 let appNotices: { get(): { banners: unknown[]; readOnlyUntil?: string } } | undefined
 let appRemotes: ReadonlySet<string> | undefined
+let appSidebar: unknown
 const killed = new Set<string>()
 const resolve = vi.fn<(id: string) => Promise<Workspace | undefined>>()
 const logger = { warn: vi.fn(), error: vi.fn() }
@@ -140,10 +141,11 @@ const routerNavigate = vi.fn()
 vi.mock('../../src/app/routes/App', async () => {
   const { useEffect } = await import('react')
   return {
-    default: function App({ basename, onRouter, notices, remotes }: { basename?: string; onRouter?: (n: typeof routerNavigate) => void; notices?: unknown; remotes?: ReadonlySet<string> }) {
+    default: function App({ basename, onRouter, notices, remotes, sidebar }: { basename?: string; onRouter?: (n: typeof routerNavigate) => void; notices?: unknown; remotes?: ReadonlySet<string>; sidebar?: unknown }) {
       useEffect(() => onRouter?.(routerNavigate), [onRouter])
       appNotices = notices as typeof appNotices
       appRemotes = remotes
+      appSidebar = sidebar
       return <main>app at {basename ?? '(root)'}</main>
     },
   }
@@ -385,11 +387,11 @@ describe('bootstrap, signed in', () => {
     await act(() => bootstrap())
     expect(logger.error).toHaveBeenCalledWith('manifest load failed', { error: expect.any(Error) })
     expect(screen.getByRole('main')).toBeInTheDocument()
-    // No remote can load: the header links to none.
+    // No remote can load: the sidebar links to none.
     expect(appRemotes).toEqual(new Set())
   })
 
-  it("drops a remote from the header when a late context's tenant flags switch it off", async () => {
+  it("drops a remote from the sidebar when a late context's tenant flags switch it off", async () => {
     vi.useFakeTimers({ toFake: ['setTimeout'] })
     const entry = { entry: '/remotes/x/remoteEntry.js', version: '1.0.0', ownerDomain: 'portal' }
     loadManifest.mockResolvedValue({ dashboard: entry, tenders: entry })
@@ -406,7 +408,13 @@ describe('bootstrap, signed in', () => {
     expect(appRemotes).toEqual(new Set(['dashboard']))
   })
 
-  it("gives the header the manifest's remotes, less those switched off (killSwitch or remote.<name>.disabled)", async () => {
+  it("gives App the SDK storage for the sidebar's collapsed state", async () => {
+    const { sidebarPreferenceStorage } = await import('../../src/infrastructure/storage/sidebarPreference')
+    await act(() => bootstrap())
+    expect(appSidebar).toBe(sidebarPreferenceStorage)
+  })
+
+  it("gives the sidebar the manifest's remotes, less those switched off (killSwitch or remote.<name>.disabled)", async () => {
     const entry = { entry: '/remotes/x/remoteEntry.js', version: '1.0.0', ownerDomain: 'portal' }
     loadManifest.mockResolvedValue({ dashboard: entry, tenders: entry, admin: entry })
     killed.add('tenders')
