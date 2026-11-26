@@ -40,6 +40,7 @@ import { requestPasswordResetUseCase } from '../../application/use-cases/request
 import { resolveWorkspaceUseCase } from '../../application/use-cases/resolveWorkspace'
 import { isEmailIdentifier, toIdentifier } from '../../domain/rules/identifier'
 import { loadSessionContextOnce, sessionContextSource, workspaceResolver, workspaceStatusSource } from '../../infrastructure/api/iam'
+import { keepSharedTheme } from '../../infrastructure/storage/sharedTheme'
 import { upgradeWelcomeStorage } from '../../infrastructure/storage/upgradeWelcome'
 import { sidebarPreferenceStorage } from '../../infrastructure/storage/sidebarPreference'
 import { loadWorkspaceStatus } from '../../application/use-cases/loadWorkspaceStatus'
@@ -220,6 +221,9 @@ async function start(cfg: RuntimeConfig, report: { otlpBaseUrl: string }): Promi
     showWrongWorkspace(idp, signInUseCases)
     return
   }
+
+  // One theme for every remote: applied before any mounts, and kept as a remote changes it.
+  keepSharedTheme()
 
   let app: Root | undefined
   // Aborted by a sign-out: stops the session-context retry, and the steps below stop instead of

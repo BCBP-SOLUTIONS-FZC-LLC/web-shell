@@ -282,6 +282,27 @@ function NoticeStack({ children }: { children: ReactNode }) {
 }
 
 /**
+ * The Admin sub-menu: the sections of mfe-admin this user may open (UI hints only: the remote and IAM
+ * decide). The permissions mirror mfe-admin's own section rules.
+ */
+function useAdminSections(): readonly { id: string; to: string; label: ShellKey }[] {
+  const readMembers = useHasPermission('read', 'members')
+  const manageMembers = useHasPermission('manage', 'members')
+  const manageSso = useHasPermission('manage', 'sso')
+  const manageTenantSettings = useHasPermission('manage', 'tenant-settings')
+  const manageDelegationPolicy = useHasPermission('manage', 'delegation-policy')
+  const readAudit = useHasPermission('read', 'audit')
+  const members = readMembers || manageMembers
+  return [
+    { id: 'users', to: 'users', label: 'app.frame.admin.users' as const, ok: members },
+    { id: 'departments', to: 'departments', label: 'app.frame.admin.departments' as const, ok: members },
+    { id: 'groupMappings', to: 'group-mappings', label: 'app.frame.admin.groupMappings' as const, ok: manageSso },
+    { id: 'settings', to: 'settings', label: 'app.frame.admin.settings' as const, ok: manageTenantSettings || manageDelegationPolicy },
+    { id: 'audit', to: 'audit', label: 'app.frame.admin.audit' as const, ok: readAudit },
+  ].filter((i) => i.ok)
+}
+
+/**
  * The shell's frame (option A of the app-chrome handoff), a sidebar: the workspace with Switch workspace,
  * links to the served remotes, the Admin entry point for those who may administer the workspace, My account
  * and Sign out. On a narrow screen it is a drawer under a bar at the top. Its width beside the page is
@@ -315,6 +336,7 @@ function Frame({
   const signOut = useSignOut()
   const switchWorkspace = useSwitchWorkspace()
   const mayAdminister = useHasPermission(ADMIN_ENTRY.action, ADMIN_ENTRY.resource)
+  const adminSections = useAdminSections()
   const topBar = useRef<HTMLDivElement>(null)
   const sidebar = useRef<HTMLElement>(null)
   usePublishedSize(topBar, HEADER_HEIGHT_VAR, heightOf)
@@ -327,6 +349,13 @@ function Frame({
     label: text(label),
     current: inSection(to),
   })
+  const adminLink = (): FrameLink => ({
+    ...link(ADMIN_REMOTE, '/admin', 'app.frame.admin'),
+    children: adminSections.map((a) => {
+      const item = link(`${ADMIN_REMOTE}.${a.id}`, `/admin/${a.to}`, a.label)
+      return { ...item, current: pathname === item.to || pathname.startsWith(`${item.to}/`) }
+    }),
+  })
   return (
     <AppSidebar
       topBarRef={topBar}
@@ -335,7 +364,7 @@ function Frame({
       onCollapsedChange={(collapsed) => preference?.setCollapsed(collapsed)}
       onDrawerChange={onDrawerChange}
       links={SECTIONS.filter((s) => remotes.has(s.remote)).map((s) => link(s.remote, s.to, s.label))}
-      admin={mayAdminister && remotes.has(ADMIN_REMOTE) ? link(ADMIN_REMOTE, '/admin', 'app.frame.admin') : undefined}
+      admin={mayAdminister && remotes.has(ADMIN_REMOTE) ? adminLink() : undefined}
       account={remotes.has(ACCOUNT_REMOTE) ? link(ACCOUNT_REMOTE, '/me', 'app.frame.account') : undefined}
       user={user}
       workspace={workspaceName ?? workspace?.slug}
