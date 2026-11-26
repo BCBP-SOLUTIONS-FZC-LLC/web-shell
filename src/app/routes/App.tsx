@@ -390,7 +390,7 @@ export default function App({
         {onRouter ? <RouterBridge onRouter={onRouter} onVisit={remount} /> : null}
         {/* The sidebar beside the page on a wide screen (a bar and a drawer on a narrow one), then the page: the
             remote's routes and, under them, the notices. */}
-        <div className="min-h-screen lg:flex">
+        <div className="min-h-screen lg:flex!">
           {frame ? <Frame basename={basename} remotes={remotes} workspaceName={workspaceName} onVisit={remount} preference={sidebar} onDrawerChange={setDrawerOpen} /> : null}
           <div className="flex min-h-screen min-w-0 flex-1 flex-col" inert={drawerOpen}>
             {/* The update notice heads the page, beside the sidebar and under the narrow-screen bar. */}

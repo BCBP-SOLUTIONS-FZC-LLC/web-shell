@@ -696,12 +696,12 @@ describe('App sidebar (app-chrome handoff, option A)', () => {
     expect(toggle()).toHaveAccessibleName('Expand sidebar')
     expect(toggle()).toHaveAttribute('aria-expanded', 'false')
     expect(screen.queryByLabelText('Work email or workspace name')).toBeNull()
-    expect(tenders().querySelector('[data-label]')).toHaveClass('lg:sr-only')
+    expect(tenders().querySelector('[data-label]')).toHaveClass('lg:sr-only!')
     expect(tenders()).toHaveAttribute('title', 'Tenders')
     expect(switcher()).toHaveAttribute('title', 'acme')
     expect(sidebar().getByRole('button', { name: 'Sign out' })).toHaveAttribute('title', 'Sign out')
     fireEvent.click(toggle())
-    expect(tenders().querySelector('[data-label]')).not.toHaveClass('lg:sr-only')
+    expect(tenders().querySelector('[data-label]')).not.toHaveClass('lg:sr-only!')
   })
 
   it('starts collapsed when the user chose so, and saves each choice', () => {
