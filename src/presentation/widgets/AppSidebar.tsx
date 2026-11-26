@@ -23,6 +23,8 @@ export interface FrameLink {
   to: string
   href: string
   current: boolean
+  /** Sub-menu items, drawn as a tree under the link while its section is the current one. */
+  children?: readonly FrameLink[] | undefined
 }
 
 export interface AppSidebarProps {
@@ -177,6 +179,7 @@ export function AppSidebar({
   }
   const item = (l: FrameLink) => {
     const Icon = ICONS[l.id] ?? DashboardIcon
+    const subs = l.children ?? []
     return (
       <li key={l.id}>
         <a
@@ -193,6 +196,28 @@ export function AppSidebar({
             {l.label}
           </span>
         </a>
+        {/* The section's sub-menu, a tree in the panel under the parent's label: one unbroken line down its left
+            edge, with a short curved elbow into each row. The labels are indented from the parent's. */}
+        {l.current && subs.length > 0 && !railOnly ? (
+          <ul className="mb-1 ms-[5rem] me-3">
+            {subs.map((sub, i) => (
+              <li key={sub.id} className="relative ps-5">
+                {i < subs.length - 1 ? <span aria-hidden="true" className="absolute inset-y-0 start-0 border-s border-[#52525b]" /> : null}
+                <span aria-hidden="true" className="absolute start-0 top-0 h-1/2 w-4 rounded-bl-xl border-b border-s border-[#52525b]" />
+                <a
+                  href={sub.href}
+                  onClick={(e) => follow(e, sub.to)}
+                  aria-current={sub.current ? 'page' : undefined}
+                  className={`my-0.5 block truncate rounded-lg px-2 py-2 text-sm font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#fafafa] ${
+                    sub.current ? CURRENT : `${MUTED} hover:bg-[#1f1f23] hover:text-[#fafafa]`
+                  }`}
+                >
+                  {sub.label}
+                </a>
+              </li>
+            ))}
+          </ul>
+        ) : null}
       </li>
     )
   }
