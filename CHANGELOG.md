@@ -10,6 +10,9 @@ Pull requests that change the shell, its dependencies, or the image add an entry
 
 ## [Unreleased]
 
+### Added (2026-11-26 — mfe-me (My account) for local development and contract tests)
+**The local dev manifest serves `admin` (:5006) and `me` (:5007), and `npm run test-contract` also runs the mfe-me contract case.** `config/remotes.local.json` gained both remotes; `config/runtime.local.json` allows their origins and sets the `me.ai.models` and `me.notifications.eventTypes` flags mfe-me reads; `test/browser/server.ts` serves any built remote through one `builtRemote(variable, expected)` helper (`REMOTE_DIST` for the dashboard, one more variable for mfe-me) and `test/browser/me.spec.ts` checks the shell against a real mfe-me build; `nginx/security.d/csp.conf.example` documents the `connect-src` and bucket CORS rule mfe-me's signature upload needs. Docs (README, CONTRIBUTING, LLD, test/browser/README) updated to match. *(Previously: local dev served no `admin` or `me`, and the contract suite covered only the dashboard.)*
+
 ### Fixed (2026-11-26 — a remote's Tailwind no longer undoes the sidebar's wide layout)
 
 **The sidebar's `lg:` classes are now `!important` (`lg:sticky!`, `lg:hidden!`, `lg:flex!`, …), so a remote's own stylesheet cannot override them.** Each remote ships its own global Tailwind. Its unconditional `.fixed` (mfe-admin's dialogs, mfe-dashboard's sidebar) comes later in the cascade than the shell's `.lg\:sticky` at the same specificity and wins, so on a wide screen the sidebar stayed a fixed drawer over the page instead of sitting beside it (seen with mfe-admin and mfe-dashboard mounted). `src/presentation/widgets/AppSidebar.tsx`, `src/app/routes/App.tsx`. A durable fix is the platform's CSS ownership decision (LLD §15 #23, mfe-admin LLD §15 #11); the shell's other unlayered utilities are open to the same collision. *(Previously: plain `lg:` variants.)*
