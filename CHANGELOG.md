@@ -10,7 +10,9 @@ Pull requests that change the shell, its dependencies, or the image add an entry
 
 ## [Unreleased]
 
-Nothing yet.
+### Fixed (2026-11-26 — "Sign in" after a sign-out opens the login page)
+
+**"Sign in" on the "You are signed out" screen now opens the shell's login page (work email, workspace name or link) instead of redirecting straight to Keycloak.** The screen reused the remembered workspace and went to the identity provider with no input from the user. It still waits for a click after a sign-out, and the sign-in then asks for credentials as before (`src/app/bootstrap/bootstrap.tsx`, LLD §6.5). Not breaking for remotes or environments.
 
 ## [0.5.0] - 2026-11-25
 
