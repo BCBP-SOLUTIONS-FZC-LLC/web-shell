@@ -157,6 +157,8 @@ vi.mock('../../src/infrastructure/api/iam', () => ({
   workspaceStatusSource: { tenant: (id: string) => loadTenant(id), seatUsage: (id: string) => loadSeats(id) },
 }))
 const welcomeSeen = { value: false }
+const keepSharedTheme = vi.hoisted(() => vi.fn())
+vi.mock('../../src/infrastructure/storage/sharedTheme', () => ({ keepSharedTheme }))
 vi.mock('../../src/infrastructure/storage/upgradeWelcome', () => ({
   upgradeWelcomeStorage: { seen: () => welcomeSeen.value, markSeen: () => void (welcomeSeen.value = true) },
 }))
@@ -513,6 +515,11 @@ describe('bootstrap, signed in', () => {
     await userEvent.setup().click(screen.getByRole('button', { name: 'Sign in' }))
     await typeEmail('acme')
     await waitFor(() => expect(idp.login).toHaveBeenCalledWith({ workspace: acme }))
+  })
+
+  it('keeps one theme for every remote once signed in', async () => {
+    await act(() => bootstrap())
+    expect(keepSharedTheme).toHaveBeenCalledOnce()
   })
 
   it('ignores other session changes', async () => {
