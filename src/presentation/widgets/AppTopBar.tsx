@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState, type MouseEvent } from 'react'
 import { useShellText } from '../../shared/i18n'
-import { AccountIcon, ChevronsIcon, SignOutIcon } from '../components/Icons'
+import { AccountIcon, ChevronsIcon, MenuIcon, SignOutIcon } from '../components/Icons'
 import type { FrameLink } from './AppSidebar'
 
 export interface AppTopBarProps {
@@ -9,10 +9,22 @@ export interface AppTopBarProps {
   account?: FrameLink | undefined
   onNavigate(to: string): void
   onSignOut(): void
+  /** Collapses or expands the sidebar. */
+  onToggleSidebar(): void
 }
 
 /** The page's theme, as every remote reads it: `html[data-theme]`, `light` unless set otherwise. */
 const currentTheme = () => (document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light')
+
+/** "Ada Lovelace" is shown as "Ada L.", and its avatar as "AL"; one word, or an email, as it is. */
+function shortName(who: string): { label: string; initials: string } {
+  const words = who.trim().split(/\s+/)
+  const [first = '?', ...rest] = words
+  const last = rest.at(-1)
+  return last && !who.includes('@')
+    ? { label: `${first} ${last[0]!.toUpperCase()}.`, initials: `${first[0]!}${last[0]!}`.toUpperCase() }
+    : { label: who, initials: first[0]!.toUpperCase() }
+}
 
 const ITEM =
   'flex w-full items-center gap-3 rounded-lg px-3 py-2 text-start text-sm text-[#18181b] hover:bg-[#f4f4f5] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#be185d]'
@@ -21,7 +33,7 @@ const ITEM =
  * The bar across the top of the page on a wide screen: the signed-in user's menu (My account, Theme mode, Sign
  * out). The theme is the page's `data-theme`, which the shell already keeps for every remote.
  */
-export function AppTopBar({ user, account, onNavigate, onSignOut }: AppTopBarProps) {
+export function AppTopBar({ user, account, onNavigate, onSignOut, onToggleSidebar }: AppTopBarProps) {
   const text = useShellText()
   const menuId = useId()
   const [open, setOpen] = useState(false)
@@ -57,9 +69,18 @@ export function AppTopBar({ user, account, onNavigate, onSignOut }: AppTopBarPro
     onNavigate(to)
   }
   if (!who) return null
+  const { label, initials } = shortName(who)
 
   return (
-    <header className="sticky top-0 z-20 hidden h-14 items-center justify-end border-b border-[#e4e4e7] bg-white px-6 font-sans lg:flex!">
+    <header className="sticky top-0 z-20 hidden h-16 items-center justify-between border-b border-[#e4e4e7] bg-white px-6 font-sans shadow-sm lg:flex!">
+      <button
+        type="button"
+        onClick={onToggleSidebar}
+        className="rounded-lg p-2 text-[#3f3f46] hover:bg-[#f4f4f5] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#be185d]"
+      >
+        <MenuIcon />
+        <span className="sr-only">{text('app.frame.toggleSidebar')}</span>
+      </button>
       <div ref={rootRef} className="relative">
         <button
           type="button"
@@ -68,10 +89,10 @@ export function AppTopBar({ user, account, onNavigate, onSignOut }: AppTopBarPro
           onClick={() => setOpen(!open)}
           className="flex items-center gap-3 rounded-full py-1 pe-3 ps-1 text-sm font-medium text-[#18181b] hover:bg-[#f4f4f5] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#be185d]"
         >
-          <span aria-hidden="true" className="flex size-8 items-center justify-center rounded-full bg-[#be185d] text-xs font-bold text-white">
-            {(who.trim()[0] ?? '?').toUpperCase()}
+          <span aria-hidden="true" className="flex size-9 items-center justify-center rounded-full bg-[#be185d] text-xs font-bold text-white">
+            {initials}
           </span>
-          <span className="max-w-48 truncate">{who}</span>
+          <span className="max-w-48 truncate">{label}</span>
           <ChevronsIcon className="size-4 text-[#52525b]" />
         </button>
         {open ? (
@@ -82,6 +103,10 @@ export function AppTopBar({ user, account, onNavigate, onSignOut }: AppTopBarPro
                 {account.label}
               </a>
             ) : null}
+            <div className={`${ITEM} cursor-default justify-between`}>
+              <span>{text('app.frame.language')}</span>
+              <span className="text-xs text-[#52525b]">{text('app.frame.languageName')}</span>
+            </div>
             <button type="button" role="switch" aria-checked={theme === 'dark'} onClick={toggleTheme} className={`${ITEM} justify-between`}>
               <span>{text('app.frame.themeMode')}</span>
               <span className="text-xs text-[#52525b]">{theme === 'dark' ? text('app.frame.themeDark') : text('app.frame.themeLight')}</span>

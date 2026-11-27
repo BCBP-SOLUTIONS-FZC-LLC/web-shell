@@ -507,20 +507,21 @@ describe('App sidebar (app-chrome handoff, option A)', () => {
     expect(screen.getByTestId('remote')).toHaveAttribute('data-remote', TENDERS_REMOTE)
   })
 
-  it('names the workspace (P-1 name, else the slug) and the user, and links My account when mfe-me is served', () => {
+  it('names the workspace (P-1 name, else the slug); the top bar names the user and links My account when mfe-me is served', () => {
     window.history.replaceState({}, '', '/t/acme/dashboard')
     const notices = createStore<AppNotices>({ banners: [] })
     render(<App basename="/t/acme" remotes={ALL} notices={notices} />)
     expect(switcher()).toHaveAccessibleName('Switch workspace: acme')
-    expect(sidebar().getByText('Ada Lovelace')).toBeInTheDocument()
-    expect(sidebar().getByText('ada@acme.com')).toBeInTheDocument()
+    expect(sidebar().queryByText('Ada Lovelace')).toBeNull()
+    expect(sidebar().queryByRole('button', { name: 'Sign out' })).toBeNull()
+    expect(sidebar().queryByRole('link', { name: 'My account' })).toBeNull()
     // P-1's name replaces the slug once loaded; the slug then shows under it.
     act(() => notices.set({ banners: [], workspaceName: 'Acme Ltd' }))
     expect(switcher()).toHaveAccessibleName('Switch workspace: Acme Ltd acme')
-    fireEvent.click(sidebar().getByRole('link', { name: 'My account' }))
+    fireEvent.click(screen.getByRole('button', { name: /Ada L\./ }))
+    fireEvent.click(screen.getByRole('link', { name: 'My account' }))
     expect(window.location.pathname).toBe('/t/acme/me')
     expect(screen.getByTestId('remote')).toHaveAttribute('data-remote', ACCOUNT_REMOTE)
-    expect(sidebar().getByRole('link', { name: 'My account' })).toHaveAttribute('aria-current', 'page')
   })
 
   it('shows the email when the user has no name, and no My account without mfe-me', () => {
@@ -528,7 +529,7 @@ describe('App sidebar (app-chrome handoff, option A)', () => {
     frame.workspace = { realm: 'trial', trial: true }
     window.history.replaceState({}, '', '/dashboard')
     render(<App remotes={new Set(['dashboard'])} />)
-    expect(sidebar().getByText('ada@acme.com')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /ada@acme.com/ }))
     expect(screen.queryByRole('link', { name: 'My account' })).toBeNull()
     // No workspace name or slug yet (a trial from an invitation email): the switcher says what it does.
     expect(switcher()).toHaveAccessibleName('Switch workspace: Switch workspace')
@@ -538,13 +539,12 @@ describe('App sidebar (app-chrome handoff, option A)', () => {
     frame.user = { sub: 'u-1', name: 'Ada Lovelace' }
     window.history.replaceState({}, '', '/t/acme/dashboard')
     const { unmount } = render(<App basename="/t/acme" />)
-    expect(sidebar().getByText('Ada Lovelace')).toBeInTheDocument()
-    expect(sidebar().queryByText('ada@acme.com')).toBeNull()
+    expect(screen.getByRole('button', { name: /Ada L\./ })).toBeInTheDocument()
+    expect(screen.queryByText('ada@acme.com')).toBeNull()
     unmount()
     frame.user = undefined
     render(<App basename="/t/acme" />)
-    expect(sidebar().queryByText('Ada Lovelace')).toBeNull()
-    expect(sidebar().getByRole('button', { name: 'Sign out' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Ada L\./ })).toBeNull()
   })
 
   it('on a narrow screen, the bar opens and closes the sidebar, and a link or Escape closes it', () => {
@@ -639,7 +639,7 @@ describe('App sidebar (app-chrome handoff, option A)', () => {
     const cancel = () => screen.getByRole('button', { name: 'Cancel' })
     fireEvent.blur(switcher(), { relatedTarget: cancel() })
     expect(switcher()).toHaveAttribute('aria-expanded', 'true')
-    fireEvent.blur(switcher(), { relatedTarget: sidebar().getByRole('button', { name: 'Sign out' }) })
+    fireEvent.blur(switcher(), { relatedTarget: sidebar().getByRole('button', { name: 'Collapse sidebar' }) })
     expect(switcher()).toHaveAttribute('aria-expanded', 'false')
     // A blur with no new focus (WebKit does not focus a clicked button) leaves it open; a press outside closes it.
     fireEvent.click(switcher())
@@ -660,7 +660,8 @@ describe('App sidebar (app-chrome handoff, option A)', () => {
   it("signs out through the SDK's useSignOut (global)", () => {
     window.history.replaceState({}, '', '/t/acme/dashboard')
     render(<App basename="/t/acme" />)
-    fireEvent.click(sidebar().getByRole('button', { name: 'Sign out' }))
+    fireEvent.click(screen.getByRole('button', { name: /Ada L\./ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Sign out' }))
     expect(frame.signOut).toHaveBeenCalledWith()
   })
 
@@ -715,7 +716,6 @@ describe('App sidebar (app-chrome handoff, option A)', () => {
     expect(tenders().querySelector('[data-label]')).toHaveClass('lg:sr-only!')
     expect(tenders()).toHaveAttribute('title', 'Tenders')
     expect(switcher()).toHaveAttribute('title', 'acme')
-    expect(sidebar().getByRole('button', { name: 'Sign out' })).toHaveAttribute('title', 'Sign out')
     fireEvent.click(toggle())
     expect(tenders().querySelector('[data-label]')).not.toHaveClass('lg:sr-only!')
   })

@@ -411,15 +411,16 @@ describe('the shell, end to end', () => {
     expect(assigned).toEqual([]) // no page load, no sign-in round trip
     expect(injected).toEqual([ENTRY, TENDERS_ENTRY])
 
-    // The sidebar names the workspace (P-1's name, then its slug) and the user, and links My account (mfe-me).
+    // The sidebar names the workspace (P-1's name, then its slug); the top bar's user menu names the user and links My account (mfe-me).
     const sidebar = within(screen.getByRole('complementary', { name: 'Workspace and sections' }))
     await waitFor(() => expect(sidebar.getByRole('button', { name: /^Switch workspace:/ })).toHaveAccessibleName('Switch workspace: Acme acme'))
-    expect(sidebar.getByText('Ada Lovelace')).toBeInTheDocument()
-    await userEvent.click(sidebar.getByRole('link', { name: 'My account' }))
+    await userEvent.click(screen.getByRole('button', { name: /Ada L\./ }))
+    await userEvent.click(screen.getByRole('link', { name: 'My account' }))
     await screen.findByRole('heading', { name: 'me for Ada Lovelace in acme' }, { timeout: 5_000 })
     expect(window.location.pathname).toBe('/t/acme/me')
 
-    await userEvent.click(sidebar.getByRole('button', { name: 'Sign out' }))
+    await userEvent.click(screen.getByRole('button', { name: /Ada L\./ }))
+    await userEvent.click(screen.getByRole('button', { name: 'Sign out' }))
     await screen.findByRole('heading', { name: 'You are signed out' }, { timeout: 5_000 })
     expect(document.getElementById('app')!.childElementCount).toBe(0)
     expect(posted.map((p) => p.url)).toEqual([`POST ${IDP}/realms/tenant-acme/protocol/openid-connect/logout`])

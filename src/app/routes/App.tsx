@@ -319,22 +319,22 @@ function Frame({
   remotes,
   workspaceName,
   onVisit,
-  preference,
+  collapsed,
+  onCollapsedChange,
   onDrawerChange,
 }: {
   basename: string | undefined
   remotes: ReadonlySet<string>
   workspaceName: string | undefined
   onVisit: () => void
-  preference: SidebarPreferenceRepository | undefined
+  collapsed: boolean
+  onCollapsedChange: (collapsed: boolean) => void
   onDrawerChange: (open: boolean) => void
 }) {
   const text = useShellText()
   const navigate = useNavigate()
   const { pathname } = useLocation()
-  const user = useCurrentUser()
   const workspace = useWorkspace()
-  const signOut = useSignOut()
   const switchWorkspace = useSwitchWorkspace()
   const mayAdminister = useHasPermission(ADMIN_ENTRY.action, ADMIN_ENTRY.resource)
   const adminSections = useAdminSections()
@@ -361,13 +361,11 @@ function Frame({
     <AppSidebar
       topBarRef={topBar}
       sidebarRef={sidebar}
-      initiallyCollapsed={preference?.collapsed() ?? false}
-      onCollapsedChange={(collapsed) => preference?.setCollapsed(collapsed)}
+      collapsed={collapsed}
+      onCollapsedChange={onCollapsedChange}
       onDrawerChange={onDrawerChange}
       links={SECTIONS.filter((s) => remotes.has(s.remote)).map((s) => link(s.remote, s.to, s.label))}
       admin={mayAdminister && remotes.has(ADMIN_REMOTE) ? adminLink() : undefined}
-      account={remotes.has(ACCOUNT_REMOTE) ? link(ACCOUNT_REMOTE, '/me', 'app.frame.account') : undefined}
-      user={user}
       workspace={workspaceName ?? workspace?.slug}
       workspaceSlug={workspace?.slug}
       onNavigate={(to) => {
@@ -376,13 +374,22 @@ function Frame({
         navigate(to)
       }}
       onSwitchWorkspace={switchWorkspace}
-      onSignOut={() => void signOut()}
     />
   )
 }
 
 /** The bar across the top of the page on a wide screen: the user's menu. */
-function FrameTopBar({ basename, remotes, onVisit }: { basename: string | undefined; remotes: ReadonlySet<string>; onVisit: () => void }) {
+function FrameTopBar({
+  basename,
+  remotes,
+  onVisit,
+  onToggleSidebar,
+}: {
+  basename: string | undefined
+  remotes: ReadonlySet<string>
+  onVisit: () => void
+  onToggleSidebar: () => void
+}) {
   const text = useShellText()
   const navigate = useNavigate()
   const { pathname } = useLocation()
@@ -391,6 +398,7 @@ function FrameTopBar({ basename, remotes, onVisit }: { basename: string | undefi
   const to = '/me'
   return (
     <AppTopBar
+      onToggleSidebar={onToggleSidebar}
       user={user}
       account={
         remotes.has(ACCOUNT_REMOTE)
@@ -436,6 +444,15 @@ export default function App({
   const remount = useCallback(() => setVisit((v) => v + 1), [])
   // While the narrow-screen drawer is open the page behind it is inert: Tab stays in the drawer.
   const [drawerOpen, setDrawerOpen] = useState(false)
+  // The sidebar's collapsed state: the sidebar's own button and the top bar's menu button both change it; the choice is saved.
+  const [collapsed, setCollapsedState] = useState(() => sidebar?.collapsed() ?? false)
+  const setCollapsed = useCallback(
+    (c: boolean) => {
+      setCollapsedState(c)
+      sidebar?.setCollapsed(c)
+    },
+    [sidebar],
+  )
   // The shell's own screens in an error boundary (the SDK's): a render error is logged and counted
   // under `web-shell` and replaced by AppError instead of a blank page. The remote has its own
   // (RemoteBoundary), so a remote's error never reaches this one.
@@ -446,9 +463,9 @@ export default function App({
         {/* The sidebar beside the page on a wide screen (a bar and a drawer on a narrow one), then the page: the
             remote's routes and, under them, the notices. */}
         <div className="min-h-screen lg:flex!">
-          {frame ? <Frame basename={basename} remotes={remotes} workspaceName={workspaceName} onVisit={remount} preference={sidebar} onDrawerChange={setDrawerOpen} /> : null}
+          {frame ? <Frame basename={basename} remotes={remotes} workspaceName={workspaceName} onVisit={remount} collapsed={collapsed} onCollapsedChange={setCollapsed} onDrawerChange={setDrawerOpen} /> : null}
           <div className="flex min-h-screen min-w-0 flex-1 flex-col" inert={drawerOpen}>
-            {frame ? <FrameTopBar basename={basename} remotes={remotes} onVisit={remount} /> : null}
+            {frame ? <FrameTopBar basename={basename} remotes={remotes} onVisit={remount} onToggleSidebar={() => setCollapsed(!collapsed)} /> : null}
             {/* The update notice heads the page, beside the sidebar and under the narrow-screen bar. */}
             <Update />
             <div className="flex-1" key={visit}>

@@ -2,7 +2,6 @@ import { useEffect, useId, useRef, useState, type FormEvent, type KeyboardEvent,
 import { useShellText } from '../../shared/i18n'
 import { BrandLogo } from '../components/BrandLogo'
 import {
-  AccountIcon,
   AdminIcon,
   ChevronsIcon,
   CloseIcon,
@@ -11,7 +10,6 @@ import {
   DraftingIcon,
   ExpandIcon,
   MenuIcon,
-  SignOutIcon,
   TendersIcon,
   WorkflowsIcon,
 } from '../components/Icons'
@@ -33,9 +31,6 @@ export interface AppSidebarProps {
   links: readonly FrameLink[]
   /** The Admin entry point, when the user may administer the workspace and the remote is served. */
   admin?: FrameLink | undefined
-  /** "My account", when the remote is served. */
-  account?: FrameLink | undefined
-  user?: { name?: string | undefined; email?: string | undefined } | undefined
   /** The workspace's name (IAM P-1), else its slug. */
   workspace?: string | undefined
   /** The workspace's slug, shown under its name when the two differ. */
@@ -44,12 +39,13 @@ export interface AppSidebarProps {
   onNavigate(to: string): void
   /** Resolves and switches; rejects when the workspace service cannot answer. */
   onSwitchWorkspace(identifier: string): Promise<void>
-  onSignOut(): void
   /** The narrow-screen bar and the sidebar, measured by the caller (`--shell-header-height`, `--shell-sidebar-width`). */
   topBarRef?: RefObject<HTMLDivElement | null> | undefined
   sidebarRef?: RefObject<HTMLElement | null> | undefined
   /** Whether the sidebar starts collapsed to its icon rail (the user's saved choice). */
   initiallyCollapsed?: boolean | undefined
+  /** Set by the caller (the top bar's menu button) to collapse or expand the panel; follows each change. */
+  collapsed?: boolean | undefined
   /** Called with the new state when the user collapses or expands it, to save the choice. */
   onCollapsedChange?: ((collapsed: boolean) => void) | undefined
   /** Called when the narrow-screen drawer opens or closes: the caller makes the page behind it inert. */
@@ -67,7 +63,6 @@ const ICONS: Record<string, (p: { className?: string }) => ReactNode> = {
   drafting: DraftingIcon,
   workflows: WorkflowsIcon,
   admin: AdminIcon,
-  me: AccountIcon,
 }
 
 // The sidebar's colours, light (the product design): a white panel, the current item pink (#be185d on #fce7f3,
@@ -77,36 +72,37 @@ const PANEL = 'bg-white text-[#18181b] border-e border-[#e4e4e7]'
 const RAIL = 'bg-white'
 const CURRENT = 'bg-[#fce7f3] text-[#be185d]'
 const IDLE = 'text-[#3f3f46] group-hover:bg-[#f4f4f5] group-hover:text-[#18181b]'
+const IDLE_PILL = 'text-[#3f3f46] hover:bg-[#f4f4f5] hover:text-[#18181b]'
 const MUTED = 'text-[#52525b]'
 /** A row: the icon centred in the rail's column, the label in the panel's. */
 const ROW =
   'group grid w-full grid-cols-[4rem_minmax(0,1fr)] items-center py-0.5 text-start rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#be185d]'
 const CELL = 'mx-auto flex size-10 items-center justify-center rounded-lg'
+/** A menu item: one pill holding the icon and the label (the icon alone on the collapsed rail). */
+const PILL =
+  'group mx-3 flex items-center gap-3 rounded-lg px-3 py-2.5 text-[0.95rem] font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#be185d] lg:data-[rail=true]:justify-center lg:data-[rail=true]:px-0'
 const FOCUS_DARK = 'focus-visible:outline focus-visible:outline-2 focus-visible:outline-slate-800'
 
-/** The first letter of a name, for the workspace mark and the user's avatar. */
+/** The first letter of a name, for the workspace mark. */
 const initial = (s: string | undefined) => (s?.trim()[0] ?? '?').toUpperCase()
 
 /**
  * The shell's frame around every remote, as a sidebar: an icon rail beside a panel with the labels. Top: the
- * workspace (with Switch workspace); then the section links, and Admin apart from them; bottom: My account, the
- * signed-in user, Sign out, and the control that collapses the panel to the rail (wide screens; the caller saves the choice). On a narrow
+ * workspace (with Switch workspace); then the section links, and Admin apart from them; bottom: the control that collapses the panel to the rail (wide screens; the caller saves the choice). On a narrow
  * screen it is a drawer, always expanded, opened from a bar at the top. Its state comes as props; the
  * composition root wires the SDK.
  */
 export function AppSidebar({
   links,
   admin,
-  account,
-  user,
   workspace,
   workspaceSlug,
   onNavigate,
   onSwitchWorkspace,
-  onSignOut,
   topBarRef,
   sidebarRef,
   initiallyCollapsed = false,
+  collapsed: collapsedProp,
   onCollapsedChange,
   onDrawerChange = () => {},
 }: AppSidebarProps) {
@@ -115,7 +111,9 @@ export function AppSidebar({
   const switchId = useId()
   const inputId = useId()
   const [drawer, setDrawer] = useState(false)
-  const [collapsed, setCollapsed] = useState(initiallyCollapsed)
+  const [ownCollapsed, setCollapsed] = useState(initiallyCollapsed)
+  // Controlled when the caller passes `collapsed`, else the sidebar keeps its own.
+  const collapsed = collapsedProp ?? ownCollapsed
   const [switching, setSwitching] = useState(false)
   const [identifier, setIdentifier] = useState('')
   const [state, setState] = useState<'idle' | 'busy' | 'failed'>('idle')
@@ -188,19 +186,18 @@ export function AppSidebar({
           onClick={(e) => follow(e, l.to)}
           aria-current={l.current ? 'page' : undefined}
           title={tip(l.label)}
-          className={ROW}
+          data-rail={collapsed}
+          className={`${PILL} ${l.current ? CURRENT : IDLE_PILL}`}
         >
-          <span className={`${CELL} ${l.current ? CURRENT : IDLE}`}>
-            <Icon />
-          </span>
-          <span data-label className={`me-3 truncate rounded-lg px-3 py-2 text-[0.95rem] font-medium ${l.current ? CURRENT : IDLE} ${label}`}>
+          <Icon />
+          <span data-label className={`truncate ${label}`}>
             {l.label}
           </span>
         </a>
         {/* The section's sub-menu, a tree in the panel under the parent's label: one unbroken line down its left
             edge, with a short curved elbow into each row. The labels are indented from the parent's. */}
         {l.current && subs.length > 0 && !railOnly ? (
-          <ul className="mb-1 ms-[5rem] me-3">
+          <ul className="mb-1 ms-[2.5rem] me-3">
             {subs.map((sub, i) => (
               <li key={sub.id} className="relative ps-5">
                 {i < subs.length - 1 ? <span aria-hidden="true" className="absolute inset-y-0 start-0 border-s border-[#d4d4d8]" /> : null}
@@ -251,7 +248,6 @@ export function AppSidebar({
     e.stopPropagation()
     closeSwitch()
   }
-  const who = user?.name ?? user?.email
   const showSlug = workspaceSlug !== undefined && workspaceSlug !== workspace
 
   return (
@@ -281,14 +277,17 @@ export function AppSidebar({
         }}
         aria-label={text('app.frame.sidebar')}
         onKeyDown={onKeyDown}
-        className={`fixed bottom-0 start-0 top-[var(--shell-header-height,0px)] z-50 flex w-80 flex-col font-sans transition-[transform,width] lg:sticky! lg:top-0! lg:h-dvh! ${switching ? 'lg:z-50!' : 'lg:z-30!'} lg:translate-x-0! lg:visible! rtl:lg:translate-x-0! ${PANEL} ${
-          collapsed ? 'lg:w-16!' : 'lg:w-80!'
+        className={`fixed bottom-0 start-0 top-[var(--shell-header-height,0px)] z-50 flex w-72 flex-col font-sans transition-[transform,width] lg:sticky! lg:top-0! lg:h-dvh! ${switching ? 'lg:z-50!' : 'lg:z-30!'} lg:translate-x-0! lg:visible! rtl:lg:translate-x-0! ${PANEL} ${
+          collapsed ? 'lg:w-[4.5rem]!' : 'lg:w-72!'
         } ${drawer ? 'translate-x-0 shadow-2xl' : 'invisible -translate-x-full rtl:translate-x-full'}`}
       >
         {/* The brand mark, as on the login page. */}
-        <div className="relative flex items-center gap-2 px-4 pt-4">
-          <BrandLogo size={36} blend={false} />
-          <span className={`text-xl font-extrabold tracking-wide ${label}`}>BCBP</span>
+        <div className="relative flex items-center justify-center gap-2 px-4 pb-1 pt-5">
+          <BrandLogo size={40} blend={false} />
+          <span className={`leading-none ${label}`}>
+            <span className="block text-2xl font-extrabold tracking-wide">{text('app.frame.brand')}</span>
+            <span className="block text-[0.6rem] font-semibold uppercase tracking-[0.35em] text-[#be185d]">{text('app.frame.brandSub')}</span>
+          </span>
         </div>
 
         {/* The workspace, and Switch workspace. */}
@@ -369,24 +368,8 @@ export function AppSidebar({
           ) : null}
         </nav>
 
-        {/* My account, the user, Sign out, and collapsing the panel. */}
+        {/* Collapsing the panel (My account and Sign out are in the top bar's user menu). */}
         <div className="relative space-y-1 pb-4 pt-2">
-          {account ? <ul>{item(account)}</ul> : null}
-          <div className="grid grid-cols-[4rem_minmax(0,1fr)] items-center py-1">
-            <span aria-hidden="true" className="mx-auto flex size-9 items-center justify-center rounded-full bg-[#fce7f3] text-sm font-semibold text-[#be185d]">
-              {initial(who)}
-            </span>
-            <span className={`min-w-0 pe-3 ps-3 text-sm ${label}`}>
-              {who ? <span className="block truncate font-semibold text-[#18181b]">{who}</span> : null}
-              {user?.name && user.email ? <span className={`block truncate ${MUTED}`}>{user.email}</span> : null}
-            </span>
-          </div>
-          <button type="button" onClick={onSignOut} title={tip(text('common.signOut'))} className={ROW}>
-            <span className={`${CELL} ${IDLE}`}>
-              <SignOutIcon />
-            </span>
-            <span className={`me-3 rounded-lg px-3 py-2 text-[0.95rem] font-medium ${IDLE} ${label}`}>{text('common.signOut')}</span>
-          </button>
           <button
             type="button"
             aria-expanded={!collapsed}
