@@ -237,7 +237,7 @@ export function AppSidebar({
           if (sidebarRef) sidebarRef.current = el
         }}
         aria-label={text('app.frame.sidebar')}
-        className={`fixed bottom-0 start-0 top-[var(--shell-header-height,0px)] z-50 flex w-72 flex-col font-sans transition-[transform,width] lg:sticky! lg:top-0! lg:h-dvh! lg:z-30! lg:translate-x-0! lg:visible! rtl:lg:translate-x-0! lg:w-72! ${PANEL} ${
+        className={`fixed bottom-0 start-0 top-[var(--shell-header-height,0px)] z-50 flex w-[248px] flex-col font-sans transition-[transform,width] lg:sticky! lg:top-0! lg:h-dvh! lg:z-30! lg:translate-x-0! lg:visible! rtl:lg:translate-x-0! lg:w-[248px]! ${PANEL} ${
           collapsed ? 'lg:hidden!' : ''
         } ${drawer ? 'translate-x-0 shadow-2xl' : 'invisible -translate-x-full rtl:translate-x-full'}`}
       >
