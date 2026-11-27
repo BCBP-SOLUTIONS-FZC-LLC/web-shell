@@ -300,7 +300,7 @@ test('the new-version notice heads the page beside the sidebar, and under the ba
 test("the user menu's Sign out works with a mouse click", async ({ page }) => {
   await signIn(page)
   const bar = page.getByRole('banner')
-  await bar.getByRole('button', { name: /Ada L\./ }).click()
+  await bar.getByRole('button', { name: 'Ada Lovelace' }).click()
   await bar.getByRole('button', { name: 'Sign out' }).click()
   await expect(page.getByRole('heading', { name: 'You are signed out' })).toBeVisible()
   await expect.poll(async () => (await state(page)).logouts.length).toBe(1)

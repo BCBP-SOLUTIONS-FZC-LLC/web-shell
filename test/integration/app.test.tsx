@@ -537,7 +537,7 @@ describe('App sidebar (app-chrome handoff, option A)', () => {
     expect(sidebar().queryByText('acme')).toBeNull()
     expect(sidebar().queryByRole('button', { name: 'Sign out' })).toBeNull()
     expect(sidebar().queryByRole('link', { name: 'My account' })).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: /Ada L\./ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Ada Lovelace' }))
     fireEvent.click(screen.getByRole('link', { name: 'My account' }))
     expect(window.location.pathname).toBe('/t/acme/me')
     expect(screen.getByTestId('remote')).toHaveAttribute('data-remote', ACCOUNT_REMOTE)
@@ -556,12 +556,12 @@ describe('App sidebar (app-chrome handoff, option A)', () => {
     frame.user = { sub: 'u-1', name: 'Ada Lovelace' }
     window.history.replaceState({}, '', '/t/acme/dashboard')
     const { unmount } = render(<App basename="/t/acme" />)
-    expect(screen.getByRole('button', { name: /Ada L\./ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Ada Lovelace' })).toBeInTheDocument()
     expect(screen.queryByText('ada@acme.com')).toBeNull()
     unmount()
     frame.user = undefined
     render(<App basename="/t/acme" />)
-    expect(screen.queryByRole('button', { name: /Ada L\./ })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Ada Lovelace' })).toBeNull()
   })
 
   it('on a narrow screen, the bar opens and closes the sidebar, and a link or Escape closes it', () => {
@@ -645,7 +645,7 @@ describe('App sidebar (app-chrome handoff, option A)', () => {
   it("signs out through the SDK's useSignOut (global)", () => {
     window.history.replaceState({}, '', '/t/acme/dashboard')
     render(<App basename="/t/acme" />)
-    fireEvent.click(screen.getByRole('button', { name: /Ada L\./ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Ada Lovelace' }))
     fireEvent.click(screen.getByRole('button', { name: 'Sign out' }))
     expect(frame.signOut).toHaveBeenCalledWith()
   })
@@ -655,7 +655,7 @@ describe('App sidebar (app-chrome handoff, option A)', () => {
   it("opens My account again from the top bar's menu while already in it (the section remounts)", () => {
     window.history.replaceState({}, '', '/t/acme/me/profile')
     render(<App basename="/t/acme" remotes={ALL} />)
-    fireEvent.click(screen.getByRole('button', { name: /Ada L\./ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Ada Lovelace' }))
     fireEvent.click(screen.getByRole('link', { name: 'My account' }))
     expect(window.location.pathname).toBe('/t/acme/me')
   })

@@ -413,12 +413,12 @@ describe('the shell, end to end', () => {
     expect(injected).toEqual([ENTRY, TENDERS_ENTRY])
 
     // The top bar's user menu names the user and links My account (mfe-me).
-    await userEvent.click(screen.getByRole('button', { name: /Ada L\./ }))
+    await userEvent.click(screen.getByRole('button', { name: 'Ada Lovelace' }))
     await userEvent.click(screen.getByRole('link', { name: 'My account' }))
     await screen.findByRole('heading', { name: 'me for Ada Lovelace in acme' }, { timeout: 5_000 })
     expect(window.location.pathname).toBe('/t/acme/me')
 
-    await userEvent.click(screen.getByRole('button', { name: /Ada L\./ }))
+    await userEvent.click(screen.getByRole('button', { name: 'Ada Lovelace' }))
     await userEvent.click(screen.getByRole('button', { name: 'Sign out' }))
     await screen.findByRole('heading', { name: 'You are signed out' }, { timeout: 5_000 })
     expect(document.getElementById('app')!.childElementCount).toBe(0)

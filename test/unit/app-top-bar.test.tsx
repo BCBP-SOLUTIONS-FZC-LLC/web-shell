@@ -18,7 +18,7 @@ describe('AppTopBar', () => {
   it('opens the user menu, follows My account inside the shell, and signs out', () => {
     const p = props()
     render(<AppTopBar {...p} />)
-    const button = screen.getByRole('button', { name: /Ada L\./ })
+    const button = screen.getByRole('button', { name: 'Ada Lovelace' })
     expect(button).toHaveAttribute('aria-expanded', 'false')
     fireEvent.click(button)
     fireEvent.click(screen.getByRole('link', { name: 'My account' }))
@@ -32,7 +32,7 @@ describe('AppTopBar', () => {
   it('leaves a new-tab click to the browser', () => {
     const p = props()
     render(<AppTopBar {...p} />)
-    fireEvent.click(screen.getByRole('button', { name: /Ada L\./ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Ada Lovelace' }))
     fireEvent.click(screen.getByRole('link', { name: 'My account' }), { ctrlKey: true })
     expect(p.onNavigate).not.toHaveBeenCalled()
   })
@@ -45,7 +45,7 @@ describe('AppTopBar', () => {
 
   it('switches the page theme, which every remote reads from html[data-theme]', () => {
     render(<AppTopBar {...props()} />)
-    fireEvent.click(screen.getByRole('button', { name: /Ada L\./ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Ada Lovelace' }))
     const mode = screen.getByRole('switch', { name: /Theme mode/ })
     expect(mode).toHaveAttribute('aria-checked', 'false')
     fireEvent.click(mode)
@@ -57,7 +57,7 @@ describe('AppTopBar', () => {
 
   it('closes on Escape and on a press outside', () => {
     render(<AppTopBar {...props()} />)
-    const button = screen.getByRole('button', { name: /Ada L\./ })
+    const button = screen.getByRole('button', { name: 'Ada Lovelace' })
     fireEvent.click(button)
     fireEvent.keyDown(document, { key: 'Escape' })
     expect(button).toHaveAttribute('aria-expanded', 'false')
@@ -68,18 +68,44 @@ describe('AppTopBar', () => {
     expect(button).toHaveAttribute('aria-expanded', 'false')
   })
 
-  it('shortens a name to first name and last initial, and shows the language', () => {
-    render(<AppTopBar {...props()} user={{ name: 'Balaji Selvarangam' }} />)
-    const button = screen.getByRole('button', { name: /Balaji S\./ })
+  it("shows only the avatar in the bar, and the user's name and email, with Settings, in its menu", () => {
+    const settings = { id: 'admin.settings', to: '/admin/settings', href: '/t/acme/admin/settings', label: 'Settings', current: false }
+    const p = props()
+    render(<AppTopBar {...p} settings={settings} user={{ name: 'Balaji Selvarangam', email: 'balaji@acme.com' }} />)
+    const button = screen.getByRole('button', { name: 'Balaji Selvarangam' })
     expect(button).toHaveTextContent('BS')
+    expect(screen.queryByText('Balaji Selvarangam')).toBeNull() // no name beside the avatar
     fireEvent.click(button)
-    expect(screen.getByText('English')).toBeInTheDocument()
+    expect(screen.getByText('Balaji Selvarangam')).toBeInTheDocument()
+    expect(screen.getByText('balaji@acme.com')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('link', { name: 'Settings' }))
+    expect(p.onNavigate).toHaveBeenCalledWith('/admin/settings')
+  })
+
+  it('has no Settings link without one, and no email line for a user known only by email', () => {
+    render(<AppTopBar {...props()} user={{ email: 'ada@acme.com' }} />)
+    fireEvent.click(screen.getByRole('button', { name: 'ada@acme.com' }))
+    expect(screen.queryByRole('link', { name: 'Settings' })).toBeNull()
+    expect(screen.getAllByText('ada@acme.com')).toHaveLength(1)
+  })
+
+  it('opens the notifications bell with its empty state, one popover at a time', () => {
+    render(<AppTopBar {...props()} />)
+    const bell = screen.getByRole('button', { name: 'Notifications' })
+    fireEvent.click(bell)
+    expect(screen.getByText('You are all caught up.')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Ada Lovelace' }))
+    expect(screen.queryByText('You are all caught up.')).toBeNull()
+    expect(bell).toHaveAttribute('aria-expanded', 'false')
+    fireEvent.click(bell)
+    fireEvent.click(bell)
+    expect(bell).toHaveAttribute('aria-expanded', 'false')
   })
 
   it('keeps a one-word name as it is, and a menu button toggles the sidebar', () => {
     const p = props()
     render(<AppTopBar {...p} user={{ name: 'Ada' }} />)
-    expect(screen.getByRole('button', { name: /Ada/ })).toHaveTextContent('A')
+    expect(screen.getByRole('button', { name: 'Ada' })).toHaveTextContent('A')
     fireEvent.click(screen.getByRole('button', { name: 'Toggle sidebar' }))
     expect(p.onToggleSidebar).toHaveBeenCalledOnce()
   })

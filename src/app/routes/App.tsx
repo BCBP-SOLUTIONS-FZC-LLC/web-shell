@@ -388,6 +388,7 @@ function FrameTopBar({
   const { pathname } = useLocation()
   const user = useCurrentUser()
   const signOut = useSignOut()
+  const adminSections = useAdminSections()
   const to = '/me'
   return (
     <AppTopBar
@@ -396,6 +397,11 @@ function FrameTopBar({
       account={
         remotes.has(ACCOUNT_REMOTE)
           ? { id: ACCOUNT_REMOTE, to, href: `${basename ?? ''}${to}`, label: text('app.frame.account'), current: sameSection(to, pathname) }
+          : undefined
+      }
+      settings={
+        remotes.has(ADMIN_REMOTE) && adminSections.some((a) => a.id === 'settings')
+          ? { id: `${ADMIN_REMOTE}.settings`, to: '/admin/settings', href: `${basename ?? ''}/admin/settings`, label: text('app.frame.settings'), current: sameSection('/admin/settings', pathname) }
           : undefined
       }
       onNavigate={(path) => {

@@ -119,6 +119,13 @@ export const AuditIcon = (p: IconProps) => (
   </Icon>
 )
 
+/** Notifications: a bell. */
+export const BellIcon = (p: IconProps) => (
+  <Icon className={p.className}>
+    <path d="M6 9a6 6 0 1 1 12 0c0 5 2 6.5 2 6.5H4S6 14 6 9zM10 19a2 2 0 0 0 4 0" />
+  </Icon>
+)
+
 /** A sub-menu that opens downwards. */
 export const ChevronDownIcon = (p: IconProps) => (
   <Icon className={p.className}>
