@@ -194,8 +194,8 @@ test("the shell's sidebar shows beside the page under the production CSP with AA
   await signIn(page)
   const sidebar = page.getByRole('complementary', { name: 'Workspace and sections' })
   await expect(sidebar.getByRole('link', { name: 'Dashboard' })).toHaveAttribute('aria-current', 'page')
-  // The current item's label: #be185d on the panel's white (the selected item has no background of its own).
-  expect(await contrastRatio(page, 'aside nav a[aria-current="page"] [data-label]', 'aside')).toBeGreaterThanOrEqual(4.5)
+  // The current item's label: white on its filled #be185d tile (the `a`, which carries the background).
+  expect(await contrastRatio(page, 'aside nav a[aria-current="page"] [data-label]', 'a')).toBeGreaterThanOrEqual(4.5)
   // The MENU label: #52525b on the panel's white.
   expect(await contrastRatio(page, 'aside nav p', 'aside')).toBeGreaterThanOrEqual(4.5)
   expect(await violations(page)).toEqual([])
@@ -222,6 +222,10 @@ test("the shell's sidebar shows beside the page under the production CSP with AA
   await expect(page.getByRole('button', { name: 'Open menu' })).toBeHidden()
   // Hidden from the top bar's menu button: gone completely, and the published width follows.
   const toggle = page.getByRole('banner').getByRole('button', { name: 'Toggle sidebar' })
+  await sidebar.getByRole('button', { name: 'Hide sidebar' }).click() // the round button on its edge
+  await expect(sidebar).toBeHidden()
+  await toggle.click()
+  await expect(sidebar).toBeVisible()
   await toggle.click()
   await expect(sidebar).toBeHidden()
   await expect

@@ -319,6 +319,7 @@ function Frame({
   workspaceName,
   onVisit,
   collapsed,
+  onHide,
   onDrawerChange,
 }: {
   basename: string | undefined
@@ -326,6 +327,7 @@ function Frame({
   workspaceName: string | undefined
   onVisit: () => void
   collapsed: boolean
+  onHide: () => void
   onDrawerChange: (open: boolean) => void
 }) {
   const text = useShellText()
@@ -358,6 +360,7 @@ function Frame({
       topBarRef={topBar}
       sidebarRef={sidebar}
       collapsed={collapsed}
+      onHide={onHide}
       onDrawerChange={onDrawerChange}
       links={SECTIONS.filter((s) => remotes.has(s.remote)).map((s) => link(s.remote, s.to, s.label))}
       admin={mayAdminister && remotes.has(ADMIN_REMOTE) ? adminLink() : undefined}
@@ -456,7 +459,7 @@ export default function App({
         {/* The sidebar beside the page on a wide screen (a bar and a drawer on a narrow one), then the page: the
             remote's routes and, under them, the notices. */}
         <div className="min-h-screen lg:flex!">
-          {frame ? <Frame basename={basename} remotes={remotes} workspaceName={workspaceName} onVisit={remount} collapsed={collapsed} onDrawerChange={setDrawerOpen} /> : null}
+          {frame ? <Frame basename={basename} remotes={remotes} workspaceName={workspaceName} onVisit={remount} collapsed={collapsed} onHide={() => setCollapsed(true)} onDrawerChange={setDrawerOpen} /> : null}
           <div className="flex min-h-screen min-w-0 flex-1 flex-col" inert={drawerOpen}>
             {frame ? <FrameTopBar basename={basename} remotes={remotes} onVisit={remount} onToggleSidebar={() => setCollapsed(!collapsed)} /> : null}
             {/* The update notice heads the page, beside the sidebar and under the narrow-screen bar. */}
