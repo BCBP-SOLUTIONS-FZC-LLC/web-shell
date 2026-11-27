@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState, type FormEvent, type KeyboardEvent, type MouseEvent, type ReactNode, type RefObject } from 'react'
 import { useShellText } from '../../shared/i18n'
+import { BrandLogo } from '../components/BrandLogo'
 import {
   AccountIcon,
   AdminIcon,
@@ -69,17 +70,17 @@ const ICONS: Record<string, (p: { className?: string }) => ReactNode> = {
   me: AccountIcon,
 }
 
-// The sidebar's colours, dark: an icon rail (#0c0c0e) beside a panel (#161618) with the labels; the current
-// item #27272a. Text #fafafa (14.3:1 on the current item), secondary #d4d4d8 (10:1) and #a1a1aa (5.8:1): WCAG
-// AA everywhere (measured in test/browser/shell.spec.ts).
-const PANEL = 'bg-[#161618] text-[#fafafa]'
-const RAIL = 'bg-[#0c0c0e]'
-const CURRENT = 'bg-[#27272a] text-[#fafafa]'
-const IDLE = 'text-[#d4d4d8] group-hover:bg-[#1f1f23] group-hover:text-[#fafafa]'
-const MUTED = 'text-[#a1a1aa]'
+// The sidebar's colours, light (the product design): a white panel, the current item pink (#be185d on #fce7f3,
+// 5.3:1), text #18181b (17:1 on white) and secondary #52525b (7.7:1): WCAG AA everywhere (measured in
+// test/browser/shell.spec.ts).
+const PANEL = 'bg-white text-[#18181b] border-e border-[#e4e4e7]'
+const RAIL = 'bg-white'
+const CURRENT = 'bg-[#fce7f3] text-[#be185d]'
+const IDLE = 'text-[#3f3f46] group-hover:bg-[#f4f4f5] group-hover:text-[#18181b]'
+const MUTED = 'text-[#52525b]'
 /** A row: the icon centred in the rail's column, the label in the panel's. */
 const ROW =
-  'group grid w-full grid-cols-[4rem_minmax(0,1fr)] items-center py-0.5 text-start rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#fafafa]'
+  'group grid w-full grid-cols-[4rem_minmax(0,1fr)] items-center py-0.5 text-start rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#be185d]'
 const CELL = 'mx-auto flex size-10 items-center justify-center rounded-lg'
 const FOCUS_DARK = 'focus-visible:outline focus-visible:outline-2 focus-visible:outline-slate-800'
 
@@ -202,14 +203,14 @@ export function AppSidebar({
           <ul className="mb-1 ms-[5rem] me-3">
             {subs.map((sub, i) => (
               <li key={sub.id} className="relative ps-5">
-                {i < subs.length - 1 ? <span aria-hidden="true" className="absolute inset-y-0 start-0 border-s border-[#52525b]" /> : null}
-                <span aria-hidden="true" className="absolute start-0 top-0 h-1/2 w-4 rounded-bl-xl border-b border-s border-[#52525b]" />
+                {i < subs.length - 1 ? <span aria-hidden="true" className="absolute inset-y-0 start-0 border-s border-[#d4d4d8]" /> : null}
+                <span aria-hidden="true" className="absolute start-0 top-0 h-1/2 w-4 rounded-bl-xl border-b border-s border-[#d4d4d8]" />
                 <a
                   href={sub.href}
                   onClick={(e) => follow(e, sub.to)}
                   aria-current={sub.current ? 'page' : undefined}
-                  className={`my-0.5 block truncate rounded-lg px-2 py-2 text-sm font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#fafafa] ${
-                    sub.current ? CURRENT : `${MUTED} hover:bg-[#1f1f23] hover:text-[#fafafa]`
+                  className={`my-0.5 block truncate rounded-lg px-2 py-2 text-sm font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#be185d] ${
+                    sub.current ? CURRENT : `${MUTED} hover:bg-[#f4f4f5] hover:text-[#18181b]`
                   }`}
                 >
                   {sub.label}
@@ -256,14 +257,14 @@ export function AppSidebar({
   return (
     <>
       {/* Narrow screens: a bar at the top opens the sidebar as a drawer below it, so its Close menu stays in view. */}
-      <div ref={topBarRef} className={`sticky top-0 z-[60] flex items-center gap-3 px-4 py-2 font-sans shadow lg:hidden! ${RAIL} text-[#fafafa]`}>
+      <div ref={topBarRef} className={`sticky top-0 z-[60] flex items-center gap-3 px-4 py-2 font-sans shadow lg:hidden! ${RAIL} text-[#18181b]`}>
         <button
           ref={toggleRef}
           type="button"
           aria-expanded={drawer}
           aria-controls={sidebarId}
           onClick={() => (drawer ? closeDrawer() : openDrawer())}
-          className="rounded-lg p-2 hover:bg-[#1f1f23] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#fafafa]"
+          className="rounded-lg p-2 hover:bg-[#f4f4f5] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#be185d]"
         >
           {drawer ? <CloseIcon /> : <MenuIcon />}
           <span className="sr-only">{drawer ? text('app.frame.closeMenu') : text('app.frame.openMenu')}</span>
@@ -284,8 +285,11 @@ export function AppSidebar({
           collapsed ? 'lg:w-16!' : 'lg:w-80!'
         } ${drawer ? 'translate-x-0 shadow-2xl' : 'invisible -translate-x-full rtl:translate-x-full'}`}
       >
-        {/* The rail: a darker column under the icons. */}
-        <div aria-hidden="true" className={`absolute inset-y-0 start-0 w-16 border-e border-[#27272a] ${RAIL}`} />
+        {/* The brand mark, as on the login page. */}
+        <div className="relative flex items-center gap-2 px-4 pt-4">
+          <BrandLogo size={36} blend={false} />
+          <span className={`text-xl font-extrabold tracking-wide ${label}`}>BCBP</span>
+        </div>
 
         {/* The workspace, and Switch workspace. */}
         <div
@@ -303,9 +307,9 @@ export function AppSidebar({
             aria-controls={switchId}
             title={tip(workspace)}
             onClick={() => (switching ? closeSwitch() : setSwitching(true))}
-            className={`${ROW} grid-cols-[4rem_minmax(0,1fr)_auto] text-[#fafafa]`}
+            className={`${ROW} grid-cols-[4rem_minmax(0,1fr)_auto] text-[#18181b]`}
           >
-            <span aria-hidden="true" className="mx-auto flex size-10 items-center justify-center rounded-full bg-[#fafafa] text-lg font-bold text-[#0c0c0e]">
+            <span aria-hidden="true" className="mx-auto flex size-10 items-center justify-center rounded-full bg-[#be185d] text-lg font-bold text-white">
               {initial(workspace)}
             </span>
             <span className={`min-w-0 ps-3 ${label}`}>
@@ -355,10 +359,11 @@ export function AppSidebar({
 
         {/* The sections, then Admin apart from them. */}
         <nav aria-label={text('app.frame.nav')} className="relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden py-2">
+          <p className={`px-5 pb-2 text-xs font-semibold uppercase tracking-wider ${MUTED} ${label}`}>{text('app.frame.menu')}</p>
           <ul className="space-y-1">{links.map(item)}</ul>
           {admin ? (
             <>
-              <hr className="mx-4 my-3 w-8 border-[#27272a]" />
+              <hr className="mx-4 my-3 w-8 border-[#e4e4e7]" />
               <ul className="space-y-1">{item(admin)}</ul>
             </>
           ) : null}
@@ -368,11 +373,11 @@ export function AppSidebar({
         <div className="relative space-y-1 pb-4 pt-2">
           {account ? <ul>{item(account)}</ul> : null}
           <div className="grid grid-cols-[4rem_minmax(0,1fr)] items-center py-1">
-            <span aria-hidden="true" className="mx-auto flex size-9 items-center justify-center rounded-full bg-[#27272a] text-sm font-semibold text-[#fafafa]">
+            <span aria-hidden="true" className="mx-auto flex size-9 items-center justify-center rounded-full bg-[#fce7f3] text-sm font-semibold text-[#be185d]">
               {initial(who)}
             </span>
             <span className={`min-w-0 pe-3 ps-3 text-sm ${label}`}>
-              {who ? <span className="block truncate font-semibold text-[#fafafa]">{who}</span> : null}
+              {who ? <span className="block truncate font-semibold text-[#18181b]">{who}</span> : null}
               {user?.name && user.email ? <span className={`block truncate ${MUTED}`}>{user.email}</span> : null}
             </span>
           </div>

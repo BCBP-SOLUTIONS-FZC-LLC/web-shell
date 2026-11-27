@@ -20,6 +20,7 @@ import { ADMIN_ENTRY } from '../../domain/rules/permissions'
 import type { SidebarPreferenceRepository } from '../../domain/repositories/sidebarPreference'
 import { useShellText, type ShellKey } from '../../shared/i18n'
 import { AppSidebar, type FrameLink } from '../../presentation/widgets/AppSidebar'
+import { AppTopBar } from '../../presentation/widgets/AppTopBar'
 import { AppError } from '../../presentation/widgets/AppError'
 import { ContextUnavailable } from '../../presentation/widgets/ContextUnavailable'
 import { ReadOnlyNotice } from '../../presentation/widgets/ReadOnlyNotice'
@@ -380,6 +381,31 @@ function Frame({
   )
 }
 
+/** The bar across the top of the page on a wide screen: the user's menu. */
+function FrameTopBar({ basename, remotes, onVisit }: { basename: string | undefined; remotes: ReadonlySet<string>; onVisit: () => void }) {
+  const text = useShellText()
+  const navigate = useNavigate()
+  const { pathname } = useLocation()
+  const user = useCurrentUser()
+  const signOut = useSignOut()
+  const to = '/me'
+  return (
+    <AppTopBar
+      user={user}
+      account={
+        remotes.has(ACCOUNT_REMOTE)
+          ? { id: ACCOUNT_REMOTE, to, href: `${basename ?? ''}${to}`, label: text('app.frame.account'), current: sameSection(to, pathname) }
+          : undefined
+      }
+      onNavigate={(path) => {
+        if (sameSection(path, pathname)) onVisit()
+        navigate(path)
+      }}
+      onSignOut={() => void signOut()}
+    />
+  )
+}
+
 const NO_REMOTES: ReadonlySet<string> = new Set()
 
 /**
@@ -422,6 +448,7 @@ export default function App({
         <div className="min-h-screen lg:flex!">
           {frame ? <Frame basename={basename} remotes={remotes} workspaceName={workspaceName} onVisit={remount} preference={sidebar} onDrawerChange={setDrawerOpen} /> : null}
           <div className="flex min-h-screen min-w-0 flex-1 flex-col" inert={drawerOpen}>
+            {frame ? <FrameTopBar basename={basename} remotes={remotes} onVisit={remount} /> : null}
             {/* The update notice heads the page, beside the sidebar and under the narrow-screen bar. */}
             <Update />
             <div className="flex-1" key={visit}>
