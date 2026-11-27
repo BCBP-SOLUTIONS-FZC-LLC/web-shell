@@ -194,8 +194,8 @@ test("the shell's sidebar shows beside the page under the production CSP with AA
   await signIn(page)
   const sidebar = page.getByRole('complementary', { name: 'Workspace and sections' })
   await expect(sidebar.getByRole('link', { name: 'Dashboard' })).toHaveAttribute('aria-current', 'page')
-  // The current item's label: #be185d on its pink pill (the `a`, which carries the background).
-  expect(await contrastRatio(page, 'aside nav a[aria-current="page"] [data-label]', 'a')).toBeGreaterThanOrEqual(4.5)
+  // The current item's label: #be185d on the panel's white (the selected item has no background of its own).
+  expect(await contrastRatio(page, 'aside nav a[aria-current="page"] [data-label]', 'aside')).toBeGreaterThanOrEqual(4.5)
   // The MENU label: #52525b on the panel's white.
   expect(await contrastRatio(page, 'aside nav p', 'aside')).toBeGreaterThanOrEqual(4.5)
   expect(await violations(page)).toEqual([])

@@ -65,12 +65,12 @@ const ICONS: Record<string, (p: { className?: string }) => ReactNode> = {
   'admin.audit': AuditIcon,
 }
 
-// The sidebar's colours, light (the product design): a white panel, the current item pink (#be185d on #fce7f3,
-// 5.3:1), text #18181b (17:1 on white) and secondary #52525b (7.7:1): WCAG AA everywhere (measured in
-// test/browser/shell.spec.ts).
+// The sidebar's colours, light (the product design): a white panel; the selected item has no background, only its
+// text turns pink (#be185d on white, 6:1). Text #18181b (17:1 on white) and secondary #52525b (7.7:1): WCAG AA
+// everywhere (measured in test/browser/shell.spec.ts).
 const PANEL = 'bg-white text-[#18181b] border-e border-[#e4e4e7]'
 const RAIL = 'bg-white'
-const CURRENT = 'bg-[#fce7f3] text-[#be185d]'
+const CURRENT = 'text-[#be185d]'
 const IDLE_PILL = 'text-[#3f3f46] hover:bg-[#f4f4f5] hover:text-[#18181b]'
 const MUTED = 'text-[#52525b]'
 /** A menu item: one pill holding the icon and the label . */
