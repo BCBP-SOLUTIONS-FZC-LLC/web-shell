@@ -3,6 +3,7 @@ import { useShellText } from '../../shared/i18n'
 import { BrandLogo } from '../components/BrandLogo'
 import {
   AdminIcon,
+  ChevronDownIcon,
   ChevronsIcon,
   CloseIcon,
   CollapseIcon,
@@ -115,6 +116,8 @@ export function AppSidebar({
   // Controlled when the caller passes `collapsed`, else the sidebar keeps its own.
   const collapsed = collapsedProp ?? ownCollapsed
   const [switching, setSwitching] = useState(false)
+  // Which sub-menus the user opened or closed by hand (the others follow the current section).
+  const [opened, setOpened] = useState<Record<string, boolean>>({})
   const [identifier, setIdentifier] = useState('')
   const [state, setState] = useState<'idle' | 'busy' | 'failed'>('idle')
   const switchRef = useRef<HTMLDivElement>(null)
@@ -179,24 +182,55 @@ export function AppSidebar({
   const item = (l: FrameLink) => {
     const Icon = ICONS[l.id] ?? DashboardIcon
     const subs = l.children ?? []
+    const parent = subs.length > 0
+    // A link with a sub-menu only opens and closes it (the page opens from a sub-menu item); it starts open
+    // while the user is in that section.
+    const open = parent && !railOnly && (opened[l.id] ?? l.current)
+    const pill = `${PILL} ${l.current ? CURRENT : IDLE_PILL}`
+    const content = (
+      <>
+        <Icon />
+        <span data-label className={`truncate ${label}`}>
+          {l.label}
+        </span>
+        {parent ? <ChevronDownIcon className={`ms-auto size-4 transition-transform ${open ? 'rotate-180' : ''} ${label}`} /> : null}
+      </>
+    )
     return (
       <li key={l.id}>
-        <a
-          href={l.href}
-          onClick={(e) => follow(e, l.to)}
-          aria-current={l.current ? 'page' : undefined}
-          title={tip(l.label)}
-          data-rail={collapsed}
-          className={`${PILL} ${l.current ? CURRENT : IDLE_PILL}`}
-        >
-          <Icon />
-          <span data-label className={`truncate ${label}`}>
-            {l.label}
-          </span>
-        </a>
+        {parent ? (
+          <button
+            type="button"
+            aria-expanded={open}
+            title={tip(l.label)}
+            data-rail={collapsed}
+            onClick={() => {
+              // On the icon rail there is no room for the sub-menu: widen the panel and open it.
+              if (railOnly) {
+                setCollapsed(false)
+                onCollapsedChange?.(false)
+              }
+              setOpened({ ...opened, [l.id]: railOnly ? true : !open })
+            }}
+            className={`${pill} w-[calc(100%-1.5rem)] text-start`}
+          >
+            {content}
+          </button>
+        ) : (
+          <a
+            href={l.href}
+            onClick={(e) => follow(e, l.to)}
+            aria-current={l.current ? 'page' : undefined}
+            title={tip(l.label)}
+            data-rail={collapsed}
+            className={pill}
+          >
+            {content}
+          </a>
+        )}
         {/* The section's sub-menu, a tree in the panel under the parent's label: one unbroken line down its left
             edge, with a short curved elbow into each row. The labels are indented from the parent's. */}
-        {l.current && subs.length > 0 && !railOnly ? (
+        {open ? (
           <ul className="mb-1 ms-[2.5rem] me-3">
             {subs.map((sub, i) => (
               <li key={sub.id} className="relative ps-5">
@@ -359,13 +393,7 @@ export function AppSidebar({
         {/* The sections, then Admin apart from them. */}
         <nav aria-label={text('app.frame.nav')} className="relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden py-2">
           <p className={`px-5 pb-2 text-xs font-semibold uppercase tracking-wider ${MUTED} ${label}`}>{text('app.frame.menu')}</p>
-          <ul className="space-y-1">{links.map(item)}</ul>
-          {admin ? (
-            <>
-              <hr className="mx-4 my-3 w-8 border-[#e4e4e7]" />
-              <ul className="space-y-1">{item(admin)}</ul>
-            </>
-          ) : null}
+          <ul className="space-y-1">{(admin ? [...links, admin] : links).map(item)}</ul>
         </nav>
 
         {/* Collapsing the panel (My account and Sign out are in the top bar's user menu). */}

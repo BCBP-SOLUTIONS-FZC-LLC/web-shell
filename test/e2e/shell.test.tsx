@@ -403,8 +403,9 @@ describe('the shell, end to end', () => {
       ['Tenders', '/t/acme/tenders'],
       ['Drafting', '/t/acme/drafting'],
       ['Workflows', '/t/acme/workflows'],
-      ['Admin', '/t/acme/admin'], // an owner (manage:members)
     ])
+    // An owner (manage:members) gets Admin: a button that opens its sub-menu, not a link.
+    expect(nav.getByRole('button', { name: 'Admin' })).toHaveAttribute('aria-expanded', 'false')
     await userEvent.click(nav.getByRole('link', { name: 'Tenders' }))
     await screen.findByRole('heading', { name: 'Tenders for Ada Lovelace in acme' }, { timeout: 5_000 })
     expect(window.location.pathname).toBe('/t/acme/tenders')

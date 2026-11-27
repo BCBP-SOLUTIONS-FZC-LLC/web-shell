@@ -332,9 +332,9 @@ describe('App sidebar (app-chrome handoff, option A)', () => {
     expect(permissionAsked).toHaveBeenCalledWith('manage:members')
     frame.admin = true
     rerender(<App basename="/t/acme" remotes={ALL} />)
-    expect(nav().getByRole('link', { name: 'Admin' })).toHaveAttribute('href', '/t/acme/admin')
+    expect(nav().getByRole('button', { name: 'Admin' })).toHaveAttribute('aria-expanded', 'false')
     rerender(<App basename="/t/acme" remotes={new Set(['dashboard'])} />)
-    expect(nav().queryByRole('link', { name: 'Admin' })).toBeNull()
+    expect(nav().queryByRole('button', { name: 'Admin' })).toBeNull()
   })
 
   it('draws Admin\'s sections as a tree under it while an admin page is open, and nowhere else', () => {
@@ -346,11 +346,38 @@ describe('App sidebar (app-chrome handoff, option A)', () => {
     window.history.replaceState({}, '', '/t/acme/admin/departments')
     render(<App basename="/t/acme" remotes={ALL} />)
     expect(nav().getAllByRole('link').map((l) => l.textContent)).toEqual([
-      'Dashboard', 'Tenders', 'Drafting', 'Workflows', 'Admin', 'Users', 'Departments', 'Group mappings', 'Settings', 'Audit log',
+      'Dashboard', 'Tenders', 'Drafting', 'Workflows', 'Users', 'Departments', 'Group mappings', 'Settings', 'Audit log',
     ])
     expect(nav().getByRole('link', { name: 'Audit log' })).toHaveAttribute('href', '/t/acme/admin/audit')
     expect(nav().getByRole('link', { name: 'Departments' })).toHaveAttribute('aria-current', 'page')
     expect(nav().getByRole('link', { name: 'Users' })).not.toHaveAttribute('aria-current')
+    expect(nav().getByRole('button', { name: 'Admin' })).toHaveAttribute('aria-expanded', 'true')
+  })
+
+  it('opens and closes Admin\'s sub-menu with a click, and opens a page only from a sub-menu item', () => {
+    frame.admin = true
+    window.history.replaceState({}, '', '/t/acme/dashboard')
+    render(<App basename="/t/acme" remotes={ALL} />)
+    const admin = () => nav().getByRole('button', { name: 'Admin' })
+    fireEvent.click(admin())
+    expect(admin()).toHaveAttribute('aria-expanded', 'true')
+    expect(window.location.pathname).toBe('/t/acme/dashboard') // no page opened by the click
+    expect(nav().getByRole('link', { name: 'Users' })).toBeInTheDocument()
+    fireEvent.click(admin())
+    expect(admin()).toHaveAttribute('aria-expanded', 'false')
+    expect(nav().queryByRole('link', { name: 'Users' })).toBeNull()
+    fireEvent.click(admin())
+    fireEvent.click(nav().getByRole('link', { name: 'Users' }))
+    expect(window.location.pathname).toBe('/t/acme/admin/users')
+  })
+
+  it('on the icon rail, Admin widens the sidebar and opens its sub-menu', () => {
+    frame.admin = true
+    window.history.replaceState({}, '', '/t/acme/dashboard')
+    render(<App basename="/t/acme" remotes={ALL} sidebar={{ collapsed: () => true, setCollapsed: vi.fn() }} />)
+    fireEvent.click(nav().getByRole('button', { name: 'Admin' }))
+    expect(nav().getByRole('button', { name: 'Admin' })).toHaveAttribute('aria-expanded', 'true')
+    expect(nav().getByRole('link', { name: 'Users' })).toBeInTheDocument()
   })
 
   it.each([
@@ -744,10 +771,10 @@ describe('App sidebar (app-chrome handoff, option A)', () => {
     const svgs = nav()
       .getAllByRole('link')
       .map((l) => l.querySelector('svg')?.getAttribute('aria-hidden'))
-    expect(svgs).toEqual(['true', 'true', 'true', 'true', 'true'])
-    const lists = nav().getAllByRole('list')
-    expect(lists).toHaveLength(2)
-    expect(within(lists[1]!).getByRole('link')).toHaveAccessibleName('Admin')
+    expect(svgs).toEqual(['true', 'true', 'true', 'true'])
+    // Admin is in the same list, as a button that opens its sub-menu.
+    expect(nav().getAllByRole('list')).toHaveLength(1)
+    expect(nav().getByRole('button', { name: 'Admin' }).querySelector('svg')).toHaveAttribute('aria-hidden', 'true')
   })
 
   it('is off where the runtime config sets shell.frame to false', () => {

@@ -84,6 +84,13 @@ export const ChevronsIcon = (p: IconProps) => (
   </Icon>
 )
 
+/** A sub-menu that opens downwards. */
+export const ChevronDownIcon = (p: IconProps) => (
+  <Icon className={p.className}>
+    <path d="M6 9l6 6 6-6" />
+  </Icon>
+)
+
 /** Open the menu (narrow screens). */
 export const MenuIcon = (p: IconProps) => (
   <Icon className={p.className}>
