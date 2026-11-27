@@ -2,7 +2,10 @@
 
 :root,
 html[data-theme='light'] {
-  --aura-canvas: #f7f8fa;
+  --aura-canvas: #f5f6f8;
+  /* The page behind the cards: the shell sets --aura-canvas to this inside the main section, so a remote that
+     carries its own copy of these tokens draws the same colour. */
+  --shell-canvas: #f5f6f8;
   --aura-surface: #ffffff;
   --aura-surface-elevated: #faf9fc;
   --aura-border: #e6e1ef;
@@ -25,6 +28,7 @@ html[data-theme='light'] {
 
 html[data-theme='dark'] {
   --aura-canvas: #241858;
+  --shell-canvas: #241858;
   --aura-surface: #2c1f6a;
   --aura-surface-elevated: #322474;
   --aura-border: #5a4a8a;
