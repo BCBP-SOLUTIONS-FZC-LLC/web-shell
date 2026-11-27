@@ -672,15 +672,6 @@ describe('App sidebar (app-chrome handoff, option A)', () => {
     expect(aside()).not.toHaveClass('lg:hidden!')
   })
 
-  it("hides the sidebar from the round button on its edge too", () => {
-    window.history.replaceState({}, '', '/t/acme/dashboard')
-    render(<App basename="/t/acme" remotes={ALL} />)
-    fireEvent.click(sidebar().getByRole('button', { name: 'Hide sidebar' }))
-    expect(aside()).toHaveClass('lg:hidden!')
-    fireEvent.click(screen.getByRole('button', { name: 'Toggle sidebar' }))
-    expect(aside()).not.toHaveClass('lg:hidden!')
-  })
-
   it('starts hidden when the user chose so, and saves each choice', () => {
     let saved = true
     const sidebarPreference = { collapsed: () => saved, setCollapsed: vi.fn((c: boolean) => void (saved = c)) }

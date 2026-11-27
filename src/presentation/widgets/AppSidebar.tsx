@@ -5,7 +5,6 @@ import {
   AdminIcon,
   AuditIcon,
   ChevronDownIcon,
-  ChevronLeftIcon,
   CloseIcon,
   DashboardIcon,
   DepartmentsIcon,
@@ -46,8 +45,6 @@ export interface AppSidebarProps {
   collapsed?: boolean | undefined
   /** Called when the narrow-screen drawer opens or closes: the caller makes the page behind it inert. */
   onDrawerChange?: ((open: boolean) => void) | undefined
-  /** Hides the sidebar (the round button on its edge, wide screens); the top bar's menu button brings it back. */
-  onHide?: (() => void) | undefined
 }
 
 /** A plain click: the shell follows it; a new-tab or download click is left to the browser. */
@@ -73,9 +70,8 @@ const ICONS: Record<string, (p: { className?: string }) => ReactNode> = {
 // everywhere (measured in test/browser/shell.spec.ts).
 const PANEL = 'bg-white text-[#18181b] border-e border-[#e4e4e7]'
 const RAIL = 'bg-white'
-// The selected main item is a filled brand-pink tile (white on #be185d, 6:1) with a bar at the sidebar's edge; a
-// selected sub-menu item only turns pink.
-const CURRENT_TILE = 'bg-[#be185d] text-white shadow-md shadow-[#be185d]/30'
+// The selected main item is a filled brand-pink tile (white on #be185d, 6:1); a selected sub-menu item only turns pink.
+const CURRENT_TILE = 'bg-[#be185d] text-white'
 const CURRENT = 'text-[#be185d]'
 const IDLE_PILL = 'text-[#3f3f46] hover:bg-[#f4f4f5] hover:text-[#18181b]'
 const MUTED = 'text-[#52525b]'
@@ -99,7 +95,6 @@ export function AppSidebar({
   sidebarRef,
   collapsed = false,
   onDrawerChange = () => {},
-  onHide,
 }: AppSidebarProps) {
   const text = useShellText()
   const sidebarId = useId()
@@ -170,8 +165,7 @@ export function AppSidebar({
       </>
     )
     return (
-      <li key={l.id} className="relative">
-        {l.current ? <span aria-hidden="true" className="absolute start-0 top-3 h-6 w-1 rounded-e-full bg-[#be185d]" /> : null}
+      <li key={l.id}>
         {parent ? (
           <button
             type="button"
@@ -262,16 +256,6 @@ export function AppSidebar({
           <ul className="space-y-1">{(admin ? [...links, admin] : links).map(item)}</ul>
         </nav>
 
-        {onHide ? (
-          <button
-            type="button"
-            onClick={onHide}
-            className="absolute -end-3 top-5 hidden size-6 items-center justify-center rounded-full border border-[#e4e4e7] bg-white text-[#3f3f46] shadow hover:text-[#be185d] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#be185d] lg:flex!"
-          >
-            <ChevronLeftIcon className="size-4 rtl:rotate-180" />
-            <span className="sr-only">{text('app.frame.hideSidebar')}</span>
-          </button>
-        ) : null}
       </aside>
     </>
   )

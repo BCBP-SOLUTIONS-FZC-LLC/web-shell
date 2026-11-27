@@ -119,13 +119,6 @@ export const AuditIcon = (p: IconProps) => (
   </Icon>
 )
 
-/** Points left: hides a sidebar. */
-export const ChevronLeftIcon = (p: IconProps) => (
-  <Icon className={p.className}>
-    <path d="M15 6l-6 6 6 6" />
-  </Icon>
-)
-
 /** A sub-menu that opens downwards. */
 export const ChevronDownIcon = (p: IconProps) => (
   <Icon className={p.className}>

@@ -222,10 +222,6 @@ test("the shell's sidebar shows beside the page under the production CSP with AA
   await expect(page.getByRole('button', { name: 'Open menu' })).toBeHidden()
   // Hidden from the top bar's menu button: gone completely, and the published width follows.
   const toggle = page.getByRole('banner').getByRole('button', { name: 'Toggle sidebar' })
-  await sidebar.getByRole('button', { name: 'Hide sidebar' }).click() // the round button on its edge
-  await expect(sidebar).toBeHidden()
-  await toggle.click()
-  await expect(sidebar).toBeVisible()
   await toggle.click()
   await expect(sidebar).toBeHidden()
   await expect
