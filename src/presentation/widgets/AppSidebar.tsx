@@ -3,12 +3,17 @@ import { useShellText } from '../../shared/i18n'
 import { BrandLogo } from '../components/BrandLogo'
 import {
   AdminIcon,
+  AuditIcon,
   ChevronDownIcon,
   CloseIcon,
   DashboardIcon,
+  DepartmentsIcon,
   DraftingIcon,
+  GroupMappingsIcon,
   MenuIcon,
+  SettingsIcon,
   TendersIcon,
+  UsersIcon,
   WorkflowsIcon,
 } from '../components/Icons'
 
@@ -53,6 +58,11 @@ const ICONS: Record<string, (p: { className?: string }) => ReactNode> = {
   drafting: DraftingIcon,
   workflows: WorkflowsIcon,
   admin: AdminIcon,
+  'admin.users': UsersIcon,
+  'admin.departments': DepartmentsIcon,
+  'admin.groupMappings': GroupMappingsIcon,
+  'admin.settings': SettingsIcon,
+  'admin.audit': AuditIcon,
 }
 
 // The sidebar's colours, light (the product design): a white panel, the current item pink (#be185d on #fce7f3,
@@ -173,26 +183,27 @@ export function AppSidebar({
             {content}
           </a>
         )}
-        {/* The section's sub-menu, a tree in the panel under the parent's label: one unbroken line down its left
-            edge, with a short curved elbow into each row. The labels are indented from the parent's. */}
+        {/* The section's sub-menu, under the parent: a pill with an icon for each item, indented from the parent's. */}
         {open ? (
-          <ul className="mb-1 ms-[2.5rem] me-3">
-            {subs.map((sub, i) => (
-              <li key={sub.id} className="relative ps-5">
-                {i < subs.length - 1 ? <span aria-hidden="true" className="absolute inset-y-0 start-0 border-s border-[#d4d4d8]" /> : null}
-                <span aria-hidden="true" className="absolute start-0 top-0 h-1/2 w-4 rounded-bl-xl border-b border-s border-[#d4d4d8]" />
-                <a
-                  href={sub.href}
-                  onClick={(e) => follow(e, sub.to)}
-                  aria-current={sub.current ? 'page' : undefined}
-                  className={`my-0.5 block truncate rounded-lg px-2 py-2 text-sm font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#be185d] ${
-                    sub.current ? CURRENT : `${MUTED} hover:bg-[#f4f4f5] hover:text-[#18181b]`
-                  }`}
-                >
-                  {sub.label}
-                </a>
-              </li>
-            ))}
+          <ul className="mb-1 ms-6 me-3 space-y-0.5">
+            {subs.map((sub) => {
+              const SubIcon = ICONS[sub.id] ?? DashboardIcon
+              return (
+                <li key={sub.id}>
+                  <a
+                    href={sub.href}
+                    onClick={(e) => follow(e, sub.to)}
+                    aria-current={sub.current ? 'page' : undefined}
+                    className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#be185d] ${
+                      sub.current ? CURRENT : `${MUTED} hover:bg-[#f4f4f5] hover:text-[#18181b]`
+                    }`}
+                  >
+                    <SubIcon className="size-4" />
+                    <span className="truncate">{sub.label}</span>
+                  </a>
+                </li>
+              )
+            })}
           </ul>
         ) : null}
       </li>

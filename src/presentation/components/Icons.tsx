@@ -84,6 +84,41 @@ export const ChevronsIcon = (p: IconProps) => (
   </Icon>
 )
 
+/** Users: two people. */
+export const UsersIcon = (p: IconProps) => (
+  <Icon className={p.className}>
+    <path d="M16 20v-1.5a3.5 3.5 0 0 0-3.5-3.5h-5A3.5 3.5 0 0 0 4 18.5V20M10 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM20 20v-1.5a3.5 3.5 0 0 0-2.5-3.35M15.5 4.15a3.5 3.5 0 0 1 0 6.7" />
+  </Icon>
+)
+
+/** Departments: a building. */
+export const DepartmentsIcon = (p: IconProps) => (
+  <Icon className={p.className}>
+    <path d="M4 20V5a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1v15M14 9h5a1 1 0 0 1 1 1v10M3 20h18M8 8h2M8 12h2M8 16h2M17 13h0M17 17h0" />
+  </Icon>
+)
+
+/** Group mappings: two nodes joined. */
+export const GroupMappingsIcon = (p: IconProps) => (
+  <Icon className={p.className}>
+    <path d="M10 14a4 4 0 0 0 5.66 0l3-3a4 4 0 0 0-5.66-5.66l-1 1M14 10a4 4 0 0 0-5.66 0l-3 3a4 4 0 0 0 5.66 5.66l1-1" />
+  </Icon>
+)
+
+/** Settings: sliders. */
+export const SettingsIcon = (p: IconProps) => (
+  <Icon className={p.className}>
+    <path d="M4 7h9M17 7h3M4 17h3M11 17h9M15 4v6M9 14v6" />
+  </Icon>
+)
+
+/** Audit log: a clipboard with lines. */
+export const AuditIcon = (p: IconProps) => (
+  <Icon className={p.className}>
+    <path d="M9 4h6v2a1 1 0 0 1-1 1h-4a1 1 0 0 1-1-1zM9 5H7a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1h-2M9 12h6M9 16h6" />
+  </Icon>
+)
+
 /** A sub-menu that opens downwards. */
 export const ChevronDownIcon = (p: IconProps) => (
   <Icon className={p.className}>

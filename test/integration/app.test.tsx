@@ -351,6 +351,11 @@ describe('App sidebar (app-chrome handoff, option A)', () => {
     expect(nav().getByRole('link', { name: 'Departments' })).toHaveAttribute('aria-current', 'page')
     expect(nav().getByRole('link', { name: 'Users' })).not.toHaveAttribute('aria-current')
     expect(nav().getByRole('button', { name: 'Admin' })).toHaveAttribute('aria-expanded', 'true')
+    // Each sub-menu item has its own icon, and no line is drawn down the menu.
+    for (const name of ['Users', 'Departments', 'Group mappings', 'Settings', 'Audit log']) {
+      expect(nav().getByRole('link', { name }).querySelector('svg')).toHaveAttribute('aria-hidden', 'true')
+    }
+    expect(nav().getByRole('link', { name: 'Users' }).closest('ul')!.querySelector('[class*="border-s"]')).toBeNull()
   })
 
   it('opens and closes Admin\'s sub-menu with a click, and opens a page only from a sub-menu item', () => {
