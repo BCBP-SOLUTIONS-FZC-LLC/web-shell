@@ -72,7 +72,7 @@ export function AppTopBar({ user, account, onNavigate, onSignOut, onToggleSideba
   const { label, initials } = shortName(who)
 
   return (
-    <header className="sticky top-0 z-20 hidden h-16 items-center justify-between border-b border-[#e4e4e7] bg-white px-6 font-sans shadow-sm lg:flex!">
+    <header className="sticky top-0 z-20 hidden h-16 items-center justify-between bg-white px-6 font-sans shadow-[0_1px_6px_rgba(15,23,42,0.08)] lg:flex!">
       <button
         type="button"
         onClick={onToggleSidebar}
@@ -96,7 +96,7 @@ export function AppTopBar({ user, account, onNavigate, onSignOut, onToggleSideba
           <ChevronsIcon className="size-4 text-[#52525b]" />
         </button>
         {open ? (
-          <div id={menuId} className="absolute end-0 top-full mt-2 w-64 rounded-xl border border-[#e4e4e7] bg-white p-2 shadow-xl">
+          <div id={menuId} className="absolute end-0 top-full mt-2 w-64 rounded-xl bg-white p-2 shadow-[0_6px_24px_rgba(15,23,42,0.12)]">
             {account ? (
               <a href={account.href} onClick={(e) => openAccount(e, account.to)} className={ITEM}>
                 <AccountIcon className="size-4" />
