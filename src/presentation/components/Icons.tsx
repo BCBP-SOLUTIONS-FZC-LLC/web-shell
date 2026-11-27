@@ -105,18 +105,3 @@ export const CloseIcon = (p: IconProps) => (
   </Icon>
 )
 
-/** Collapse the sidebar to its icon rail: a panel closing to the left. */
-export const CollapseIcon = (p: IconProps) => (
-  <Icon className={p.className}>
-    <rect x="3" y="4" width="18" height="16" rx="2" />
-    <path d="M9 4v16M16 10l-2 2 2 2" />
-  </Icon>
-)
-
-/** Expand the sidebar from its icon rail: a panel opening to the right. */
-export const ExpandIcon = (p: IconProps) => (
-  <Icon className={p.className}>
-    <rect x="3" y="4" width="18" height="16" rx="2" />
-    <path d="M9 4v16M14 10l2 2-2 2" />
-  </Icon>
-)

@@ -13,7 +13,6 @@ import {
   useRouteTemplate,
   useSessionContext,
   useSignOut,
-  useSwitchWorkspace,
   useWorkspace,
 } from '@bcbp-solutions-fzc-llc/frontend-sdk/react'
 import { ADMIN_ENTRY } from '../../domain/rules/permissions'
@@ -320,7 +319,6 @@ function Frame({
   workspaceName,
   onVisit,
   collapsed,
-  onCollapsedChange,
   onDrawerChange,
 }: {
   basename: string | undefined
@@ -328,14 +326,12 @@ function Frame({
   workspaceName: string | undefined
   onVisit: () => void
   collapsed: boolean
-  onCollapsedChange: (collapsed: boolean) => void
   onDrawerChange: (open: boolean) => void
 }) {
   const text = useShellText()
   const navigate = useNavigate()
   const { pathname } = useLocation()
   const workspace = useWorkspace()
-  const switchWorkspace = useSwitchWorkspace()
   const mayAdminister = useHasPermission(ADMIN_ENTRY.action, ADMIN_ENTRY.resource)
   const adminSections = useAdminSections()
   const topBar = useRef<HTMLDivElement>(null)
@@ -362,18 +358,15 @@ function Frame({
       topBarRef={topBar}
       sidebarRef={sidebar}
       collapsed={collapsed}
-      onCollapsedChange={onCollapsedChange}
       onDrawerChange={onDrawerChange}
       links={SECTIONS.filter((s) => remotes.has(s.remote)).map((s) => link(s.remote, s.to, s.label))}
       admin={mayAdminister && remotes.has(ADMIN_REMOTE) ? adminLink() : undefined}
       workspace={workspaceName ?? workspace?.slug}
-      workspaceSlug={workspace?.slug}
       onNavigate={(to) => {
         // Another section mounts its remote anyway; the same section's remote is mounted again.
         if (inSection(to)) onVisit()
         navigate(to)
       }}
-      onSwitchWorkspace={switchWorkspace}
     />
   )
 }
@@ -463,7 +456,7 @@ export default function App({
         {/* The sidebar beside the page on a wide screen (a bar and a drawer on a narrow one), then the page: the
             remote's routes and, under them, the notices. */}
         <div className="min-h-screen lg:flex!">
-          {frame ? <Frame basename={basename} remotes={remotes} workspaceName={workspaceName} onVisit={remount} collapsed={collapsed} onCollapsedChange={setCollapsed} onDrawerChange={setDrawerOpen} /> : null}
+          {frame ? <Frame basename={basename} remotes={remotes} workspaceName={workspaceName} onVisit={remount} collapsed={collapsed} onDrawerChange={setDrawerOpen} /> : null}
           <div className="flex min-h-screen min-w-0 flex-1 flex-col" inert={drawerOpen}>
             {frame ? <FrameTopBar basename={basename} remotes={remotes} onVisit={remount} onToggleSidebar={() => setCollapsed(!collapsed)} /> : null}
             {/* The update notice heads the page, beside the sidebar and under the narrow-screen bar. */}

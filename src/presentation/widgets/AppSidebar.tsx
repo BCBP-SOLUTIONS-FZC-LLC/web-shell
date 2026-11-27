@@ -1,15 +1,12 @@
-import { useEffect, useId, useRef, useState, type FormEvent, type KeyboardEvent, type MouseEvent, type ReactNode, type RefObject } from 'react'
+import { useEffect, useId, useRef, useState, type MouseEvent, type ReactNode, type RefObject } from 'react'
 import { useShellText } from '../../shared/i18n'
 import { BrandLogo } from '../components/BrandLogo'
 import {
   AdminIcon,
   ChevronDownIcon,
-  ChevronsIcon,
   CloseIcon,
-  CollapseIcon,
   DashboardIcon,
   DraftingIcon,
-  ExpandIcon,
   MenuIcon,
   TendersIcon,
   WorkflowsIcon,
@@ -34,21 +31,13 @@ export interface AppSidebarProps {
   admin?: FrameLink | undefined
   /** The workspace's name (IAM P-1), else its slug. */
   workspace?: string | undefined
-  /** The workspace's slug, shown under its name when the two differ. */
-  workspaceSlug?: string | undefined
   /** Follows a link inside the shell (no page load). */
   onNavigate(to: string): void
-  /** Resolves and switches; rejects when the workspace service cannot answer. */
-  onSwitchWorkspace(identifier: string): Promise<void>
   /** The narrow-screen bar and the sidebar, measured by the caller (`--shell-header-height`, `--shell-sidebar-width`). */
   topBarRef?: RefObject<HTMLDivElement | null> | undefined
   sidebarRef?: RefObject<HTMLElement | null> | undefined
-  /** Whether the sidebar starts collapsed to its icon rail (the user's saved choice). */
-  initiallyCollapsed?: boolean | undefined
-  /** Set by the caller (the top bar's menu button) to collapse or expand the panel; follows each change. */
+  /** Hides the sidebar on a wide screen (the top bar's menu button; the caller keeps and saves the choice). */
   collapsed?: boolean | undefined
-  /** Called with the new state when the user collapses or expands it, to save the choice. */
-  onCollapsedChange?: ((collapsed: boolean) => void) | undefined
   /** Called when the narrow-screen drawer opens or closes: the caller makes the page behind it inert. */
   onDrawerChange?: ((open: boolean) => void) | undefined
 }
@@ -72,20 +61,12 @@ const ICONS: Record<string, (p: { className?: string }) => ReactNode> = {
 const PANEL = 'bg-white text-[#18181b] border-e border-[#e4e4e7]'
 const RAIL = 'bg-white'
 const CURRENT = 'bg-[#fce7f3] text-[#be185d]'
-const IDLE = 'text-[#3f3f46] group-hover:bg-[#f4f4f5] group-hover:text-[#18181b]'
 const IDLE_PILL = 'text-[#3f3f46] hover:bg-[#f4f4f5] hover:text-[#18181b]'
 const MUTED = 'text-[#52525b]'
-/** A row: the icon centred in the rail's column, the label in the panel's. */
-const ROW =
-  'group grid w-full grid-cols-[4rem_minmax(0,1fr)] items-center py-0.5 text-start rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#be185d]'
-const CELL = 'mx-auto flex size-10 items-center justify-center rounded-lg'
-/** A menu item: one pill holding the icon and the label (the icon alone on the collapsed rail). */
+/** A menu item: one pill holding the icon and the label . */
 const PILL =
-  'group mx-3 flex items-center gap-3 rounded-lg px-3 py-2.5 text-[0.95rem] font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#be185d] lg:data-[rail=true]:justify-center lg:data-[rail=true]:px-0'
-const FOCUS_DARK = 'focus-visible:outline focus-visible:outline-2 focus-visible:outline-slate-800'
+  'group mx-3 flex items-center gap-3 rounded-lg px-3 py-2.5 text-[0.95rem] font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#be185d]'
 
-/** The first letter of a name, for the workspace mark. */
-const initial = (s: string | undefined) => (s?.trim()[0] ?? '?').toUpperCase()
 
 /**
  * The shell's frame around every remote, as a sidebar: an icon rail beside a panel with the labels. Top: the
@@ -97,32 +78,17 @@ export function AppSidebar({
   links,
   admin,
   workspace,
-  workspaceSlug,
   onNavigate,
-  onSwitchWorkspace,
   topBarRef,
   sidebarRef,
-  initiallyCollapsed = false,
-  collapsed: collapsedProp,
-  onCollapsedChange,
+  collapsed = false,
   onDrawerChange = () => {},
 }: AppSidebarProps) {
   const text = useShellText()
   const sidebarId = useId()
-  const switchId = useId()
-  const inputId = useId()
   const [drawer, setDrawer] = useState(false)
-  const [ownCollapsed, setCollapsed] = useState(initiallyCollapsed)
-  // Controlled when the caller passes `collapsed`, else the sidebar keeps its own.
-  const collapsed = collapsedProp ?? ownCollapsed
-  const [switching, setSwitching] = useState(false)
-  // Which sub-menus the user opened or closed by hand (the others follow the current section).
   const [opened, setOpened] = useState<Record<string, boolean>>({})
-  const [identifier, setIdentifier] = useState('')
-  const [state, setState] = useState<'idle' | 'busy' | 'failed'>('idle')
-  const switchRef = useRef<HTMLDivElement>(null)
   const toggleRef = useRef<HTMLButtonElement>(null)
-  const workspaceRef = useRef<HTMLButtonElement>(null)
   const asideRef = useRef<HTMLElement | null>(null)
 
   // The drawer (narrow screens) is modal: focus moves into it when it opens and back to the menu button when it
@@ -140,7 +106,7 @@ export function AppSidebar({
   }
   useEffect(() => {
     if (!drawer) return
-    workspaceRef.current!.focus()
+    asideRef.current!.querySelector<HTMLElement>('a, button')?.focus()
     const close = () => {
       setDrawer(false)
       onDrawerChange(false)
@@ -163,19 +129,9 @@ export function AppSidebar({
     }
   }, [drawer, onDrawerChange])
 
-  // The panel's labels: hidden on a wide screen while collapsed (kept for assistive technology, and as the
-  // rail icon's tooltip); the drawer of a narrow screen always shows them, so it shows no tooltips either.
-  const label = collapsed ? 'lg:sr-only!' : ''
-  const railOnly = collapsed && !drawer
-  const tip = (t: string | undefined) => (railOnly ? t : undefined)
-  const closeSwitch = () => {
-    setSwitching(false)
-    setState('idle')
-  }
   const follow = (e: MouseEvent<HTMLAnchorElement>, to: string) => {
     if (!plainClick(e)) return
     e.preventDefault()
-    closeSwitch()
     closeDrawer()
     onNavigate(to)
   }
@@ -185,15 +141,15 @@ export function AppSidebar({
     const parent = subs.length > 0
     // A link with a sub-menu only opens and closes it (the page opens from a sub-menu item); it starts open
     // while the user is in that section.
-    const open = parent && !railOnly && (opened[l.id] ?? l.current)
+    const open = parent && (opened[l.id] ?? l.current)
     const pill = `${PILL} ${l.current ? CURRENT : IDLE_PILL}`
     const content = (
       <>
         <Icon />
-        <span data-label className={`truncate ${label}`}>
+        <span data-label className="truncate">
           {l.label}
         </span>
-        {parent ? <ChevronDownIcon className={`ms-auto size-4 transition-transform ${open ? 'rotate-180' : ''} ${label}`} /> : null}
+        {parent ? <ChevronDownIcon className={`ms-auto size-4 transition-transform ${open ? 'rotate-180' : ''}`} /> : null}
       </>
     )
     return (
@@ -202,16 +158,7 @@ export function AppSidebar({
           <button
             type="button"
             aria-expanded={open}
-            title={tip(l.label)}
-            data-rail={collapsed}
-            onClick={() => {
-              // On the icon rail there is no room for the sub-menu: widen the panel and open it.
-              if (railOnly) {
-                setCollapsed(false)
-                onCollapsedChange?.(false)
-              }
-              setOpened({ ...opened, [l.id]: railOnly ? true : !open })
-            }}
+            onClick={() => setOpened({ ...opened, [l.id]: !open })}
             className={`${pill} w-[calc(100%-1.5rem)] text-start`}
           >
             {content}
@@ -221,8 +168,6 @@ export function AppSidebar({
             href={l.href}
             onClick={(e) => follow(e, l.to)}
             aria-current={l.current ? 'page' : undefined}
-            title={tip(l.label)}
-            data-rail={collapsed}
             className={pill}
           >
             {content}
@@ -253,37 +198,6 @@ export function AppSidebar({
       </li>
     )
   }
-  const submit = async (e: FormEvent) => {
-    e.preventDefault()
-    const value = identifier.trim()
-    if (!value || state === 'busy') return
-    setState('busy')
-    try {
-      // On success the browser leaves for the other workspace's sign-in, or "Workspace not found" shows.
-      await onSwitchWorkspace(value)
-      setState('idle')
-    } catch {
-      setState('failed')
-    }
-  }
-  // A press outside closes Switch workspace. Not a blur with no new focus: WebKit does not focus a clicked
-  // button, so a click on Continue would close it before it landed.
-  useEffect(() => {
-    if (!switching) return
-    const onPointerDown = (e: PointerEvent) => {
-      if (!switchRef.current?.contains(e.target as Node)) closeSwitch()
-    }
-    document.addEventListener('pointerdown', onPointerDown)
-    return () => document.removeEventListener('pointerdown', onPointerDown)
-  }, [switching])
-  // Escape closes Switch workspace first; only then (a document listener above) the drawer.
-  const onKeyDown = (e: KeyboardEvent) => {
-    if (e.key !== 'Escape' || !switching) return
-    e.stopPropagation()
-    closeSwitch()
-  }
-  const showSlug = workspaceSlug !== undefined && workspaceSlug !== workspace
-
   return (
     <>
       {/* Narrow screens: a bar at the top opens the sidebar as a drawer below it, so its Close menu stays in view. */}
@@ -310,111 +224,25 @@ export function AppSidebar({
           if (sidebarRef) sidebarRef.current = el
         }}
         aria-label={text('app.frame.sidebar')}
-        onKeyDown={onKeyDown}
-        className={`fixed bottom-0 start-0 top-[var(--shell-header-height,0px)] z-50 flex w-72 flex-col font-sans transition-[transform,width] lg:sticky! lg:top-0! lg:h-dvh! ${switching ? 'lg:z-50!' : 'lg:z-30!'} lg:translate-x-0! lg:visible! rtl:lg:translate-x-0! ${PANEL} ${
-          collapsed ? 'lg:w-[4.5rem]!' : 'lg:w-72!'
+        className={`fixed bottom-0 start-0 top-[var(--shell-header-height,0px)] z-50 flex w-72 flex-col font-sans transition-[transform,width] lg:sticky! lg:top-0! lg:h-dvh! lg:z-30! lg:translate-x-0! lg:visible! rtl:lg:translate-x-0! lg:w-72! ${PANEL} ${
+          collapsed ? 'lg:hidden!' : ''
         } ${drawer ? 'translate-x-0 shadow-2xl' : 'invisible -translate-x-full rtl:translate-x-full'}`}
       >
         {/* The brand mark, as on the login page. */}
         <div className="relative flex items-center justify-center gap-2 px-4 pb-1 pt-5">
           <BrandLogo size={40} blend={false} />
-          <span className={`leading-none ${label}`}>
+          <span className="leading-none">
             <span className="block text-2xl font-extrabold tracking-wide">{text('app.frame.brand')}</span>
             <span className="block text-[0.6rem] font-semibold uppercase tracking-[0.35em] text-[#be185d]">{text('app.frame.brandSub')}</span>
           </span>
         </div>
 
-        {/* The workspace, and Switch workspace. */}
-        <div
-          ref={switchRef}
-          className="relative pb-3 pt-4"
-          onBlur={(e) => {
-            // Focus moved elsewhere by the keyboard (Tab); a blur with no new focus is left to pointerdown.
-            if (switching && e.relatedTarget && !e.currentTarget.contains(e.relatedTarget as Node)) closeSwitch()
-          }}
-        >
-          <button
-            ref={workspaceRef}
-            type="button"
-            aria-expanded={switching}
-            aria-controls={switchId}
-            title={tip(workspace)}
-            onClick={() => (switching ? closeSwitch() : setSwitching(true))}
-            className={`${ROW} grid-cols-[4rem_minmax(0,1fr)_auto] text-[#18181b]`}
-          >
-            <span aria-hidden="true" className="mx-auto flex size-10 items-center justify-center rounded-full bg-[#be185d] text-lg font-bold text-white">
-              {initial(workspace)}
-            </span>
-            <span className={`min-w-0 ps-3 ${label}`}>
-              <span className="sr-only">{text('app.frame.switchWorkspace')}: </span>
-              <span className="block truncate text-lg font-semibold">{workspace ?? text('app.frame.switchWorkspace')}</span>
-              {showSlug ? <span className={`block truncate text-sm ${MUTED}`}>{workspaceSlug}</span> : null}
-            </span>
-            <ChevronsIcon className={`me-4 size-4 ${MUTED} ${collapsed ? 'lg:hidden!' : ''}`} />
-          </button>
-          {switching ? (
-            <form
-              id={switchId}
-              onSubmit={(e) => void submit(e)}
-              className="absolute start-3 top-full z-20 w-72 space-y-2 rounded-xl bg-white p-3 text-slate-800 shadow-xl"
-            >
-              <label htmlFor={inputId} className="block text-sm font-medium">
-                {text('login.identifier')}
-              </label>
-              <input
-                id={inputId}
-                autoFocus
-                value={identifier}
-                onChange={(e) => setIdentifier(e.target.value)}
-                autoComplete="off"
-                className="w-full rounded border border-slate-300 px-2 py-1 text-sm"
-              />
-              {state === 'failed' ? (
-                <p role="alert" className="text-sm text-red-700">
-                  {text('app.frame.switchFailed')}
-                </p>
-              ) : null}
-              <div className="flex justify-end gap-2">
-                <button type="button" onClick={closeSwitch} className={`rounded px-3 py-1 text-sm hover:bg-slate-100 ${FOCUS_DARK}`}>
-                  {text('app.frame.cancel')}
-                </button>
-                <button
-                  type="submit"
-                  disabled={state === 'busy'}
-                  className={`rounded bg-[#18181b] px-3 py-1 text-sm text-white disabled:opacity-60 ${FOCUS_DARK}`}
-                >
-                  {text('common.continue')}
-                </button>
-              </div>
-            </form>
-          ) : null}
-        </div>
-
-        {/* The sections, then Admin apart from them. */}
+        {/* The sections, with Admin in the same list. */}
         <nav aria-label={text('app.frame.nav')} className="relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden py-2">
-          <p className={`px-5 pb-2 text-xs font-semibold uppercase tracking-wider ${MUTED} ${label}`}>{text('app.frame.menu')}</p>
+          <p className={`px-5 pb-2 text-xs font-semibold uppercase tracking-wider ${MUTED}`}>{text('app.frame.menu')}</p>
           <ul className="space-y-1">{(admin ? [...links, admin] : links).map(item)}</ul>
         </nav>
 
-        {/* Collapsing the panel (My account and Sign out are in the top bar's user menu). */}
-        <div className="relative space-y-1 pb-4 pt-2">
-          <button
-            type="button"
-            aria-expanded={!collapsed}
-            aria-controls={sidebarId}
-            onClick={() => {
-              closeSwitch()
-              setCollapsed(!collapsed)
-              onCollapsedChange?.(!collapsed)
-            }}
-            className={`${ROW} hidden lg:grid!`}
-          >
-            <span className={`${CELL} ${IDLE}`}>{collapsed ? <ExpandIcon /> : <CollapseIcon />}</span>
-            <span className={`me-3 rounded-lg px-3 py-2 text-sm ${MUTED} ${label}`}>
-              {collapsed ? text('app.frame.expand') : text('app.frame.collapse')}
-            </span>
-          </button>
-        </div>
       </aside>
     </>
   )
