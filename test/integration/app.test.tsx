@@ -792,13 +792,13 @@ describe('AppSidebar', () => {
   it('draws a generic icon for a section it has none for (a future remote)', async () => {
     const { AppSidebar } = await import('../../src/presentation/widgets/AppSidebar')
     const link = { id: 'reports', label: 'Reports', to: '/reports', href: '/t/acme/reports', current: false }
-    render(<AppSidebar links={[link]} onNavigate={() => {}} onSwitchWorkspace={async () => {}} onSignOut={() => {}} />)
+    render(<AppSidebar links={[link]} onNavigate={() => {}} onSwitchWorkspace={async () => {}} />)
     expect(screen.getByRole('link', { name: 'Reports' }).querySelector('svg')).not.toBeNull()
   })
 
   it('opens and closes its drawer without an onDrawerChange, ignoring keys other than Escape', async () => {
     const { AppSidebar } = await import('../../src/presentation/widgets/AppSidebar')
-    render(<AppSidebar links={[]} onNavigate={() => {}} onSwitchWorkspace={async () => {}} onSignOut={() => {}} />)
+    render(<AppSidebar links={[]} onNavigate={() => {}} onSwitchWorkspace={async () => {}} />)
     const toggle = screen.getByRole('button', { name: 'Open menu' })
     fireEvent.click(toggle)
     fireEvent.keyDown(document.body, { key: 'Enter' })

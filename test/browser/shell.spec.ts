@@ -195,8 +195,9 @@ test("the shell's sidebar shows beside the page under the production CSP with AA
   await signIn(page)
   const sidebar = page.getByRole('complementary', { name: 'Workspace and sections' })
   await expect(sidebar.getByRole('link', { name: 'Dashboard' })).toHaveAttribute('aria-current', 'page')
-  expect(await contrastRatio(page, 'aside nav a[aria-current="page"] [data-label]')).toBeGreaterThanOrEqual(4.5)
-  // The first button, the workspace switcher: #fafafa on the panel's colour.
+  // The current item's label: #be185d on its pink pill (the `a`, which carries the background).
+  expect(await contrastRatio(page, 'aside nav a[aria-current="page"] [data-label]', 'a')).toBeGreaterThanOrEqual(4.5)
+  // The first button, the workspace switcher: #18181b on the panel's colour.
   expect(await contrastRatio(page, 'aside button', 'aside')).toBeGreaterThanOrEqual(4.5)
   expect(await violations(page)).toEqual([])
   // Beside the page on a wide screen: full height, the page's content starts after it, and its width reaches
@@ -224,13 +225,13 @@ test("the shell's sidebar shows beside the page under the production CSP with AA
   await sidebar.getByRole('button', { name: 'Collapse sidebar' }).click()
   await expect
     .poll(() => page.evaluate(() => [document.querySelector('aside')!.offsetWidth, getComputedStyle(document.documentElement).getPropertyValue('--shell-sidebar-width')]))
-    .toEqual([64, '64px'])
+    .toEqual([72, '72px'])
   await expect(sidebar.getByRole('link', { name: 'Dashboard' })).toHaveAttribute('title', 'Dashboard')
   // The choice is saved (SDK storage, this workspace): a reload starts collapsed.
   await page.reload()
   await expect(page.getByRole('heading', { name: 'Dashboard for Ada Lovelace in acme' })).toBeVisible()
   await expect(sidebar.getByRole('button', { name: 'Expand sidebar' })).toBeVisible()
-  expect(await page.evaluate(() => document.querySelector('aside')!.offsetWidth)).toBe(64)
+  expect(await page.evaluate(() => document.querySelector('aside')!.offsetWidth)).toBe(72)
   expect(await violations(page)).toEqual([])
 })
 
@@ -309,9 +310,11 @@ test("the sidebar's Switch workspace works with a mouse click", async ({ page })
   await authorize
 })
 
-test("the sidebar's Sign out works with a mouse click", async ({ page }) => {
+test("the user menu's Sign out works with a mouse click", async ({ page }) => {
   await signIn(page)
-  await page.getByRole('complementary', { name: 'Workspace and sections' }).getByRole('button', { name: 'Sign out' }).click()
+  const bar = page.getByRole('banner')
+  await bar.getByRole('button', { name: /Ada L\./ }).click()
+  await bar.getByRole('button', { name: 'Sign out' }).click()
   await expect(page.getByRole('heading', { name: 'You are signed out' })).toBeVisible()
   await expect.poll(async () => (await state(page)).logouts.length).toBe(1)
 })
