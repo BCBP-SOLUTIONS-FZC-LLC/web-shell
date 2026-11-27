@@ -132,21 +132,30 @@ async function body(req: IncomingMessage): Promise<string> {
   return Buffer.concat(chunks).toString('utf8')
 }
 
-/** REMOTE_DIST: a built mfe-dashboard dist/ with its remote-manifest-entry.json. */
-function remoteBuild(): { dir: string; base: string; version: string; integrity: string } | undefined {
-  const dist = process.env.REMOTE_DIST
+type RemoteBuild = { dir: string; base: string; version: string; integrity: string }
+
+/** A built remote's dist/ with its remote-manifest-entry.json, named by the env variable `variable`, whose one entry must be `expected`. */
+function builtRemote(variable: string, expected: string): RemoteBuild | undefined {
+  const dist = process.env[variable]
   if (!dist) return undefined
   const dir = normalize(dist.startsWith('/') ? dist : join(ROOT, dist))
   const entryFile = join(dir, 'remote-manifest-entry.json')
-  if (!existsSync(entryFile)) throw new Error(`test/browser: REMOTE_DIST=${dist} has no remote-manifest-entry.json; build mfe-dashboard first.`)
+  if (!existsSync(entryFile)) throw new Error(`test/browser: ${variable}=${dist} has no remote-manifest-entry.json; build the remote first.`)
   const entries = Object.entries(JSON.parse(readFileSync(entryFile, 'utf8')) as Record<string, { version: string; integrity: string }>)
   const [name, entry] = entries[0] ?? []
-  // The shell loads REMOTE (src/app/routes/App.tsx DASHBOARD_REMOTE); a build named otherwise cannot load.
-  if (entries.length !== 1 || name !== REMOTE || !entry) {
-    throw new Error(`test/browser: REMOTE_DIST's build names its remote ${JSON.stringify(entries.map(([n]) => n))}; this shell loads "${REMOTE}". Rebuild the matching mfe-dashboard, or rename on both sides together.`)
+  // The shell loads a remote by its manifest key; a build named otherwise cannot load.
+  if (entries.length !== 1 || name !== expected || !entry) {
+    throw new Error(`test/browser: ${variable}'s build names its remote ${JSON.stringify(entries.map(([n]) => n))}; this shell loads "${expected}". Rebuild the matching remote, or rename on both sides together.`)
   }
-  return { dir, base: `/remotes/${REMOTE}/${entry.version}/`, version: entry.version, integrity: entry.integrity }
+  return { dir, base: `/remotes/${expected}/${entry.version}/`, version: entry.version, integrity: entry.integrity }
 }
+
+/** REMOTE_DIST: a built mfe-dashboard dist/ with its remote-manifest-entry.json. */
+const remoteBuild = () => builtRemote('REMOTE_DIST', REMOTE)
+
+/** The account remote (src/app/routes/App.tsx ACCOUNT_REMOTE). ME_DIST: a built mfe-me dist/; without it the manifest has no `me`. */
+export const ACCOUNT = 'me'
+const accountBuild = () => builtRemote('ME_DIST', ACCOUNT)
 
 const listen = (s: Server) =>
   new Promise<string>((resolve) => s.listen(0, '127.0.0.1', () => resolve(`https://127.0.0.1:${(s.address() as AddressInfo).port}`)))
@@ -175,9 +184,14 @@ export async function startServers(): Promise<{ app: string; idp: string; close:
   const integrity = `sha384-${createHash('sha384').update(REMOTE_ENTRY).digest('base64')}`
   /** The real dashboard build (REMOTE_DIST), or undefined for the stub. */
   const real = remoteBuild()
-  const manifest = real
-    ? { [REMOTE]: { entry: `${real.base}remoteEntry.js`, version: real.version, ownerDomain: 'portal', integrity: real.integrity } }
-    : { [REMOTE]: { entry: entryPath, version: '1.0.0', ownerDomain: 'portal', integrity } }
+  /** The real mfe-me build (ME_DIST), or undefined: then the manifest lists no `me`. */
+  const account = accountBuild()
+  const manifest = {
+    ...(real
+      ? { [REMOTE]: { entry: `${real.base}remoteEntry.js`, version: real.version, ownerDomain: 'portal', integrity: real.integrity } }
+      : { [REMOTE]: { entry: entryPath, version: '1.0.0', ownerDomain: 'portal', integrity } }),
+    ...(account ? { [ACCOUNT]: { entry: `${account.base}remoteEntry.js`, version: account.version, ownerDomain: 'iam', integrity: account.integrity } } : {}),
+  }
   const headers = {
     'Content-Security-Policy': buildCsp(idp),
     'Reporting-Endpoints': 'csp="/csp-report"',
@@ -214,7 +228,9 @@ export async function startServers(): Promise<{ app: string; idp: string; close:
     if (p === '/config/runtime.json') return json(res, 200, runtimeConfig)
     if (p === '/remotes/manifest.json') return json(res, 200, manifest)
     if (!real && p === entryPath) return send(res, 200, REMOTE_ENTRY, TYPES['.js']!)
-    if (real && p.startsWith(real.base)) {
+    const served = [real, account].find((b) => b && p.startsWith(b.base))
+    if (served) {
+      const real = served
       const file = normalize(join(real.dir, p.slice(real.base.length)))
       if (!file.startsWith(real.dir) || !existsSync(file) || file.endsWith('.map')) return send(res, 404, 'Not Found', 'text/plain')
       return send(res, 200, readFileSync(file), TYPES[extname(file)] ?? 'application/octet-stream')

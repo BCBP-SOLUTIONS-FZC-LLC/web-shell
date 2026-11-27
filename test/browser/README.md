@@ -55,3 +55,21 @@ npm run build && REMOTE_DIST=/tmp/mfe-dashboard/dist npm run test-contract
 | Logout | The dashboard's Logout signs out through the shell: the form POST reaches Keycloak, "You are signed out" |
 
 CI's `Dashboard contract` job builds `BCBP-SOLUTIONS-FZC-LLC/mfe-dashboard` at `vars.DASHBOARD_REF` (default `main`) and runs this. The repository is private: the checkout uses `CI_REPO_READ_TOKEN`, which needs read access to it. It is informational: it does not gate `push`.
+
+## Account contract (`me.spec.ts`)
+
+The same idea for `mfe-me`: `ME_DIST` is a built `mfe-me` `dist/` (with its `remote-manifest-entry.json`); the manifest then also lists `me` (`ownerDomain: iam`) and the sidebar shows **My account**. `npm run test-contract` runs it with the dashboard contract; without `ME_DIST` it skips.
+
+```bash
+(cd ../mfe-me && npm ci && npm run build)
+ME_DIST=../mfe-me/dist npm run test-contract -- --project=chromium
+```
+
+| Case | Locks |
+|---|---|
+| Load | The real `mfe-me` loads (integrity, share scope including `/security`, its CSS applied) with no CSP violation and no failed `/remotes/` request |
+| Tabs | The six section tabs move between sections under the shell's router, including from a nested page, and the URL stays `/t/acme/me/<section>` |
+| Security | G6's console link points at this workspace's realm, opens in a new tab with `noopener noreferrer` |
+
+The fake IAM here serves no profile, so the page shows its load failure; the screens' data flows are tested in `mfe-me`.
+
