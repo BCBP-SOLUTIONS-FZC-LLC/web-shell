@@ -13,6 +13,11 @@
     box-sizing: border-box;
   }
 
+  /* One base size for the whole page (14px, the product design's), which every remote's rem sizes follow. */
+  html {
+    font-size: 14px;
+  }
+
   html,
   body {
     margin: 0;
@@ -25,6 +30,13 @@
     min-height: 100vh;
     min-height: 100dvh;
   }
+}
+
+/* Inter only, in the page too: a remote's own stack may still name another face first (a stopgap like the sidebar's
+   !important utilities, until the platform decides who owns the type, LLD §15 #23). */
+.shell-page,
+.shell-page * {
+  font-family: 'Inter Variable', system-ui, -apple-system, sans-serif !important;
 }
 
 @keyframes hero-image-in {

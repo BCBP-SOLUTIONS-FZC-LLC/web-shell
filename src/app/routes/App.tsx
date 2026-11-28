@@ -463,7 +463,7 @@ export default function App({
             remote's routes and, under them, the notices. */}
         <div className="min-h-screen lg:flex!">
           {frame ? <Frame basename={basename} remotes={remotes} workspaceName={workspaceName} onVisit={remount} collapsed={collapsed} onDrawerChange={setDrawerOpen} /> : null}
-          <div className="flex min-h-screen min-w-0 flex-1 flex-col bg-[var(--shell-canvas,#f5f6f8)] [--aura-canvas:var(--shell-canvas,#f5f6f8)]" inert={drawerOpen}>
+          <div className="shell-page flex min-h-screen min-w-0 flex-1 flex-col bg-[var(--shell-canvas,#f5f6f8)] [--aura-canvas:var(--shell-canvas,#f5f6f8)]" inert={drawerOpen}>
             {frame ? <FrameTopBar basename={basename} remotes={remotes} onVisit={remount} onToggleSidebar={() => setCollapsed(!collapsed)} /> : null}
             {/* The update notice heads the page, beside the sidebar and under the narrow-screen bar. */}
             <Update />

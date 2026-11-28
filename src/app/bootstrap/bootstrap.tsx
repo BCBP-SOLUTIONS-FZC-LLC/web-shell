@@ -75,7 +75,6 @@ import { ShellRoot } from '../providers/ShellRoot'
 import { registerShellMessages } from '../../infrastructure/i18n/shellMessages'
 // Self-hosted fonts (Fontsource, SIL OFL 1.1): served from /assets/, as the platform CSP requires
 // (font-src 'self', style-src 'self').
-import '@fontsource-variable/geist'
 import '@fontsource-variable/inter'
 import '../../shared/ui/index.css'
 

@@ -51,7 +51,7 @@ test('the login page renders under the production CSP with its self-hosted fonts
   await page.goto(`${APP}/`)
   await expect(page.getByRole('textbox', { name: /work email or workspace name/i })).toBeVisible()
   await page.evaluate(() => document.fonts.ready)
-  expect(await page.evaluate(() => document.fonts.check('16px "Geist Variable"'))).toBe(true)
+  expect(await page.evaluate(() => document.fonts.check('16px "Inter Variable"'))).toBe(true)
   const slide = page.locator('img.object-cover').first()
   await expect(slide).toHaveAttribute('src', /^\/assets\/image1\.[0-9a-f]+\.jpg$/)
   expect(await slide.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0)).toBe(true)
