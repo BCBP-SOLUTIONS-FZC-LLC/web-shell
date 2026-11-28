@@ -52,6 +52,22 @@
   opacity: 1;
 }
 
+/* Buttons in the page area: #8b5cf6 (white text on it, 4.2:1), with a violet glow in place of the pink one. The
+   remotes' primary buttons (`bg-aura-primary`, daisyUI's `.btn-primary`) take it; their links, tabs and bars keep
+   the brand pink. A stopgap like the type above (LLD §15 #23). */
+.shell-page button.bg-aura-primary,
+.shell-page a.bg-aura-primary,
+.shell-page .btn-primary {
+  background-color: #8b5cf6 !important;
+  border-color: #8b5cf6 !important;
+  color: #fff !important;
+}
+
+.shell-page button.bg-aura-primary:not(:disabled),
+.shell-page a.bg-aura-primary {
+  box-shadow: 0 4px 16px rgba(139, 92, 246, 0.38) !important;
+}
+
 /* A drop-down's chevron sits inset from the field's end edge (a native one is flush against it), in every remote:
    the browser's arrow is replaced by one drawn here, with room for it on the text's side. A stopgap like the type
    above, until each remote draws its own selects (LLD §15 #23). daisyUI's own `.select` and lists (`multiple`,

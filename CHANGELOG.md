@@ -10,6 +10,9 @@ Pull requests that change the shell, its dependencies, or the image add an entry
 
 ## [Unreleased]
 
+### Changed (2026-11-28 — buttons in the page are #8b5cf6)
+**The primary buttons of every remote (`bg-aura-primary` buttons and links, daisyUI's `.btn-primary`) are `#8b5cf6` with white text and a violet glow.** `.shell-page` rules in `src/shared/ui/index.css` (with `!important`, a stopgap like the type, drop-down and placeholder rules: LLD §15 #23). Their links, tabs, progress bars and the sidebar's selected item keep the brand pink; outline buttons are unchanged. White on `#8b5cf6` is 4.2:1, just under the 4.5:1 AA asks for small text (the buttons are bold 14px). *(Previously: the brand pink `#d92672`.)*
+
 ### Changed (2026-11-28 — placeholder colour #BCC1C9)
 **Placeholder text in every field of every remote is `#BCC1C9`, at full opacity.** `.shell-page` in `src/shared/ui/index.css` sets `--aura-placeholder` to it (a remote that colours its placeholders through the variable, as mfe-admin does, follows) and `.shell-page input::placeholder, .shell-page textarea::placeholder` set the colour for the rest. A stopgap like the type and drop-down rules (LLD §15 #23). Placeholder text is a hint, not the field's label, which every field keeps. *(Previously: each remote's own grey, `#858D9C` in mfe-admin.)*
 
