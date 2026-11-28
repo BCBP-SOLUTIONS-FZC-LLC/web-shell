@@ -13,13 +13,13 @@ import {
   useRouteTemplate,
   useSessionContext,
   useSignOut,
-  useSwitchWorkspace,
   useWorkspace,
 } from '@bcbp-solutions-fzc-llc/frontend-sdk/react'
 import { ADMIN_ENTRY } from '../../domain/rules/permissions'
 import type { SidebarPreferenceRepository } from '../../domain/repositories/sidebarPreference'
 import { useShellText, type ShellKey } from '../../shared/i18n'
 import { AppSidebar, type FrameLink } from '../../presentation/widgets/AppSidebar'
+import { AppTopBar } from '../../presentation/widgets/AppTopBar'
 import { AppError } from '../../presentation/widgets/AppError'
 import { ContextUnavailable } from '../../presentation/widgets/ContextUnavailable'
 import { ReadOnlyNotice } from '../../presentation/widgets/ReadOnlyNotice'
@@ -318,23 +318,20 @@ function Frame({
   remotes,
   workspaceName,
   onVisit,
-  preference,
+  collapsed,
   onDrawerChange,
 }: {
   basename: string | undefined
   remotes: ReadonlySet<string>
   workspaceName: string | undefined
   onVisit: () => void
-  preference: SidebarPreferenceRepository | undefined
+  collapsed: boolean
   onDrawerChange: (open: boolean) => void
 }) {
   const text = useShellText()
   const navigate = useNavigate()
   const { pathname } = useLocation()
-  const user = useCurrentUser()
   const workspace = useWorkspace()
-  const signOut = useSignOut()
-  const switchWorkspace = useSwitchWorkspace()
   const mayAdminister = useHasPermission(ADMIN_ENTRY.action, ADMIN_ENTRY.resource)
   const adminSections = useAdminSections()
   const topBar = useRef<HTMLDivElement>(null)
@@ -360,21 +357,57 @@ function Frame({
     <AppSidebar
       topBarRef={topBar}
       sidebarRef={sidebar}
-      initiallyCollapsed={preference?.collapsed() ?? false}
-      onCollapsedChange={(collapsed) => preference?.setCollapsed(collapsed)}
+      collapsed={collapsed}
       onDrawerChange={onDrawerChange}
       links={SECTIONS.filter((s) => remotes.has(s.remote)).map((s) => link(s.remote, s.to, s.label))}
       admin={mayAdminister && remotes.has(ADMIN_REMOTE) ? adminLink() : undefined}
-      account={remotes.has(ACCOUNT_REMOTE) ? link(ACCOUNT_REMOTE, '/me', 'app.frame.account') : undefined}
-      user={user}
       workspace={workspaceName ?? workspace?.slug}
-      workspaceSlug={workspace?.slug}
       onNavigate={(to) => {
         // Another section mounts its remote anyway; the same section's remote is mounted again.
         if (inSection(to)) onVisit()
         navigate(to)
       }}
-      onSwitchWorkspace={switchWorkspace}
+    />
+  )
+}
+
+/** The bar across the top of the page on a wide screen: the user's menu. */
+function FrameTopBar({
+  basename,
+  remotes,
+  onVisit,
+  onToggleSidebar,
+}: {
+  basename: string | undefined
+  remotes: ReadonlySet<string>
+  onVisit: () => void
+  onToggleSidebar: () => void
+}) {
+  const text = useShellText()
+  const navigate = useNavigate()
+  const { pathname } = useLocation()
+  const user = useCurrentUser()
+  const signOut = useSignOut()
+  const adminSections = useAdminSections()
+  const to = '/me'
+  return (
+    <AppTopBar
+      onToggleSidebar={onToggleSidebar}
+      user={user}
+      account={
+        remotes.has(ACCOUNT_REMOTE)
+          ? { id: ACCOUNT_REMOTE, to, href: `${basename ?? ''}${to}`, label: text('app.frame.account'), current: sameSection(to, pathname) }
+          : undefined
+      }
+      settings={
+        remotes.has(ADMIN_REMOTE) && adminSections.some((a) => a.id === 'settings')
+          ? { id: `${ADMIN_REMOTE}.settings`, to: '/admin/settings', href: `${basename ?? ''}/admin/settings`, label: text('app.frame.settings'), current: sameSection('/admin/settings', pathname) }
+          : undefined
+      }
+      onNavigate={(path) => {
+        if (sameSection(path, pathname)) onVisit()
+        navigate(path)
+      }}
       onSignOut={() => void signOut()}
     />
   )
@@ -410,6 +443,15 @@ export default function App({
   const remount = useCallback(() => setVisit((v) => v + 1), [])
   // While the narrow-screen drawer is open the page behind it is inert: Tab stays in the drawer.
   const [drawerOpen, setDrawerOpen] = useState(false)
+  // The sidebar's collapsed state: the sidebar's own button and the top bar's menu button both change it; the choice is saved.
+  const [collapsed, setCollapsedState] = useState(() => sidebar?.collapsed() ?? false)
+  const setCollapsed = useCallback(
+    (c: boolean) => {
+      setCollapsedState(c)
+      sidebar?.setCollapsed(c)
+    },
+    [sidebar],
+  )
   // The shell's own screens in an error boundary (the SDK's): a render error is logged and counted
   // under `web-shell` and replaced by AppError instead of a blank page. The remote has its own
   // (RemoteBoundary), so a remote's error never reaches this one.
@@ -420,8 +462,9 @@ export default function App({
         {/* The sidebar beside the page on a wide screen (a bar and a drawer on a narrow one), then the page: the
             remote's routes and, under them, the notices. */}
         <div className="min-h-screen lg:flex!">
-          {frame ? <Frame basename={basename} remotes={remotes} workspaceName={workspaceName} onVisit={remount} preference={sidebar} onDrawerChange={setDrawerOpen} /> : null}
-          <div className="flex min-h-screen min-w-0 flex-1 flex-col" inert={drawerOpen}>
+          {frame ? <Frame basename={basename} remotes={remotes} workspaceName={workspaceName} onVisit={remount} collapsed={collapsed} onDrawerChange={setDrawerOpen} /> : null}
+          <div className="shell-page flex min-h-screen min-w-0 flex-1 flex-col bg-[var(--shell-canvas,#f5f6f8)] [--aura-canvas:var(--shell-canvas,#f5f6f8)]" inert={drawerOpen}>
+            {frame ? <FrameTopBar basename={basename} remotes={remotes} onVisit={remount} onToggleSidebar={() => setCollapsed(!collapsed)} /> : null}
             {/* The update notice heads the page, beside the sidebar and under the narrow-screen bar. */}
             <Update />
             <div className="flex-1" key={visit}>

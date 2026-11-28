@@ -22,7 +22,7 @@ npx playwright install chromium firefox webkit   # once, if the browsers are mis
 
 | Case | Locks |
 |---|---|
-| Login page | No CSP violation; Geist loaded from `/assets/`; carousel images hashed under `/assets/`; no third-party request |
+| Login page | No CSP violation; Inter loaded from `/assets/`; carousel images hashed under `/assets/`; no third-party request |
 | Sign-in | PKCE through the fake Keycloak, `/t/acme/dashboard`, the remote's entry loaded with its integrity through Trusted Types, role map (`Invite` for an owner), no token in storage |
 | Reload | A reload of the saved paid workspace loads its realm's discovery document (the SDK's realm probe, alpha.9) under `connect-src`, then restores silently to the dashboard; no CSP violation |
 | `navigate()` | A remote's `navigate()` under the basename changes the URL without a reload (`registerNavigator`), and the mounted remote is mounted again at the new path; no CSP violation |

@@ -13,6 +13,11 @@
     box-sizing: border-box;
   }
 
+  /* One base size for the whole page (14px, the product design's), which every remote's rem sizes follow. */
+  html {
+    font-size: 14px;
+  }
+
   html,
   body {
     margin: 0;
@@ -25,6 +30,83 @@
     min-height: 100vh;
     min-height: 100dvh;
   }
+}
+
+/* Inter only, in the page too: a remote's own stack may still name another face first (a stopgap like the sidebar's
+   !important utilities, until the platform decides who owns the type, LLD §15 #23). */
+.shell-page,
+.shell-page * {
+  font-family: 'Inter Variable', system-ui, -apple-system, sans-serif !important;
+}
+
+/* Placeholder text in every field of every remote: #BCC1C9, full opacity. A remote that sets its own placeholder
+   colour through `--aura-placeholder` follows the variable; the rule below covers the rest. A stopgap like the type
+   above (LLD §15 #23). */
+.shell-page {
+  --aura-placeholder: #bcc1c9;
+}
+
+.shell-page input::placeholder,
+.shell-page textarea::placeholder {
+  color: #bcc1c9;
+  opacity: 1;
+}
+
+/* Buttons in the page area: #8b5cf6 (white text on it, 4.2:1), with a violet glow in place of the pink one. The
+   remotes' primary buttons (`bg-aura-primary`, daisyUI's `.btn-primary`) take it; their links, tabs and bars keep
+   the brand pink. A stopgap like the type above (LLD §15 #23). */
+.shell-page button.bg-aura-primary,
+.shell-page a.bg-aura-primary,
+.shell-page .btn-primary {
+  background-color: #8b5cf6 !important;
+  border-color: #8b5cf6 !important;
+  color: #fff !important;
+}
+
+.shell-page button.bg-aura-primary:not(:disabled),
+.shell-page a.bg-aura-primary {
+  box-shadow: 0 4px 16px rgba(139, 92, 246, 0.38) !important;
+}
+
+/* The highlight colour of the page, #ff4fa3, as in the sidebar's selection: the selected tab (an underline in mfe-me,
+   a pill's text in mfe-admin) and the coloured edge on the start side of a notice card. A stopgap like the type
+   above (LLD §15 #23). */
+.shell-page .border-aura-primary,
+.shell-page .notice,
+.shell-page .notice-error,
+.shell-page .notice-warning,
+.shell-page .notice-info {
+  border-color: #ff4fa3 !important;
+}
+
+.shell-page .notice,
+.shell-page .notice-error,
+.shell-page .notice-warning,
+.shell-page .notice-info {
+  /* Only the start edge is coloured: the other three keep the card's white edge. */
+  border-block-color: rgb(255 255 255 / 0.7) !important;
+  border-inline-end-color: rgb(255 255 255 / 0.7) !important;
+}
+
+.shell-page [role='tab'][aria-selected='true'] {
+  color: #ff4fa3 !important;
+}
+
+/* A drop-down's chevron sits inset from the field's end edge (a native one is flush against it), in every remote:
+   the browser's arrow is replaced by one drawn here, with room for it on the text's side. A stopgap like the type
+   above, until each remote draws its own selects (LLD §15 #23). daisyUI's own `.select` and lists (`multiple`,
+   `size`) keep theirs. */
+.shell-page select:not(.select):not([multiple]):not([size]) {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236c7688' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.875rem center;
+  background-size: 1rem;
+  padding-inline-end: 2.5rem;
+}
+
+.shell-page:dir(rtl) select:not(.select):not([multiple]):not([size]) {
+  background-position: left 0.875rem center;
 }
 
 @keyframes hero-image-in {

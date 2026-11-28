@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import en from '../../src/shared/i18n/en.json'
 
@@ -291,8 +291,7 @@ describe('App sidebar (app-chrome handoff, option A)', () => {
   const nav = () => within(screen.getByRole('navigation', { name: 'Sections' }))
   const aside = () => screen.getByRole('complementary', { name: 'Workspace and sections' })
   const sidebar = () => within(aside())
-  const switcher = () => sidebar().getByRole('button', { name: /^Switch workspace:/ })
-
+  
   afterEach(() => {
     frame.admin = false
     frame.on = true
@@ -332,9 +331,9 @@ describe('App sidebar (app-chrome handoff, option A)', () => {
     expect(permissionAsked).toHaveBeenCalledWith('manage:members')
     frame.admin = true
     rerender(<App basename="/t/acme" remotes={ALL} />)
-    expect(nav().getByRole('link', { name: 'Admin' })).toHaveAttribute('href', '/t/acme/admin')
+    expect(nav().getByRole('button', { name: 'Admin' })).toHaveAttribute('aria-expanded', 'false')
     rerender(<App basename="/t/acme" remotes={new Set(['dashboard'])} />)
-    expect(nav().queryByRole('link', { name: 'Admin' })).toBeNull()
+    expect(nav().queryByRole('button', { name: 'Admin' })).toBeNull()
   })
 
   it('draws Admin\'s sections as a tree under it while an admin page is open, and nowhere else', () => {
@@ -346,12 +345,36 @@ describe('App sidebar (app-chrome handoff, option A)', () => {
     window.history.replaceState({}, '', '/t/acme/admin/departments')
     render(<App basename="/t/acme" remotes={ALL} />)
     expect(nav().getAllByRole('link').map((l) => l.textContent)).toEqual([
-      'Dashboard', 'Tenders', 'Drafting', 'Workflows', 'Admin', 'Users', 'Departments', 'Group mappings', 'Settings', 'Audit log',
+      'Dashboard', 'Tenders', 'Drafting', 'Workflows', 'Users', 'Departments', 'Group mappings', 'Settings', 'Audit log',
     ])
     expect(nav().getByRole('link', { name: 'Audit log' })).toHaveAttribute('href', '/t/acme/admin/audit')
     expect(nav().getByRole('link', { name: 'Departments' })).toHaveAttribute('aria-current', 'page')
     expect(nav().getByRole('link', { name: 'Users' })).not.toHaveAttribute('aria-current')
+    expect(nav().getByRole('button', { name: 'Admin' })).toHaveAttribute('aria-expanded', 'true')
+    // Each sub-menu item has its own icon, and no line is drawn down the menu.
+    for (const name of ['Users', 'Departments', 'Group mappings', 'Settings', 'Audit log']) {
+      expect(nav().getByRole('link', { name }).querySelector('svg')).toHaveAttribute('aria-hidden', 'true')
+    }
+    expect(nav().getByRole('link', { name: 'Users' }).closest('ul')!.querySelector('[class*="border-s"]')).toBeNull()
   })
+
+  it('opens and closes Admin\'s sub-menu with a click, and opens a page only from a sub-menu item', () => {
+    frame.admin = true
+    window.history.replaceState({}, '', '/t/acme/dashboard')
+    render(<App basename="/t/acme" remotes={ALL} />)
+    const admin = () => nav().getByRole('button', { name: 'Admin' })
+    fireEvent.click(admin())
+    expect(admin()).toHaveAttribute('aria-expanded', 'true')
+    expect(window.location.pathname).toBe('/t/acme/dashboard') // no page opened by the click
+    expect(nav().getByRole('link', { name: 'Users' })).toBeInTheDocument()
+    fireEvent.click(admin())
+    expect(admin()).toHaveAttribute('aria-expanded', 'false')
+    expect(nav().queryByRole('link', { name: 'Users' })).toBeNull()
+    fireEvent.click(admin())
+    fireEvent.click(nav().getByRole('link', { name: 'Users' }))
+    expect(window.location.pathname).toBe('/t/acme/admin/users')
+  })
+
 
   it.each([
     ['admin', '/t/acme/admin/users', 'Loading admin…'],
@@ -507,20 +530,17 @@ describe('App sidebar (app-chrome handoff, option A)', () => {
     expect(screen.getByTestId('remote')).toHaveAttribute('data-remote', TENDERS_REMOTE)
   })
 
-  it('names the workspace (P-1 name, else the slug) and the user, and links My account when mfe-me is served', () => {
+  it('names the user in the top bar and links My account when mfe-me is served; the sidebar has none of them', () => {
     window.history.replaceState({}, '', '/t/acme/dashboard')
-    const notices = createStore<AppNotices>({ banners: [] })
-    render(<App basename="/t/acme" remotes={ALL} notices={notices} />)
-    expect(switcher()).toHaveAccessibleName('Switch workspace: acme')
-    expect(sidebar().getByText('Ada Lovelace')).toBeInTheDocument()
-    expect(sidebar().getByText('ada@acme.com')).toBeInTheDocument()
-    // P-1's name replaces the slug once loaded; the slug then shows under it.
-    act(() => notices.set({ banners: [], workspaceName: 'Acme Ltd' }))
-    expect(switcher()).toHaveAccessibleName('Switch workspace: Acme Ltd acme')
-    fireEvent.click(sidebar().getByRole('link', { name: 'My account' }))
+    render(<App basename="/t/acme" remotes={ALL} />)
+    expect(sidebar().queryByText('Ada Lovelace')).toBeNull()
+    expect(sidebar().queryByText('acme')).toBeNull()
+    expect(sidebar().queryByRole('button', { name: 'Sign out' })).toBeNull()
+    expect(sidebar().queryByRole('link', { name: 'My account' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Ada Lovelace' }))
+    fireEvent.click(screen.getByRole('link', { name: 'My account' }))
     expect(window.location.pathname).toBe('/t/acme/me')
     expect(screen.getByTestId('remote')).toHaveAttribute('data-remote', ACCOUNT_REMOTE)
-    expect(sidebar().getByRole('link', { name: 'My account' })).toHaveAttribute('aria-current', 'page')
   })
 
   it('shows the email when the user has no name, and no My account without mfe-me', () => {
@@ -528,23 +548,20 @@ describe('App sidebar (app-chrome handoff, option A)', () => {
     frame.workspace = { realm: 'trial', trial: true }
     window.history.replaceState({}, '', '/dashboard')
     render(<App remotes={new Set(['dashboard'])} />)
-    expect(sidebar().getByText('ada@acme.com')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /ada@acme.com/ }))
     expect(screen.queryByRole('link', { name: 'My account' })).toBeNull()
-    // No workspace name or slug yet (a trial from an invitation email): the switcher says what it does.
-    expect(switcher()).toHaveAccessibleName('Switch workspace: Switch workspace')
   })
 
   it('shows the name alone when the user has no email, and nothing of a user the SDK does not have', () => {
     frame.user = { sub: 'u-1', name: 'Ada Lovelace' }
     window.history.replaceState({}, '', '/t/acme/dashboard')
     const { unmount } = render(<App basename="/t/acme" />)
-    expect(sidebar().getByText('Ada Lovelace')).toBeInTheDocument()
-    expect(sidebar().queryByText('ada@acme.com')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Ada Lovelace' })).toBeInTheDocument()
+    expect(screen.queryByText('ada@acme.com')).toBeNull()
     unmount()
     frame.user = undefined
     render(<App basename="/t/acme" />)
-    expect(sidebar().queryByText('Ada Lovelace')).toBeNull()
-    expect(sidebar().getByRole('button', { name: 'Sign out' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Ada Lovelace' })).toBeNull()
   })
 
   it('on a narrow screen, the bar opens and closes the sidebar, and a link or Escape closes it', () => {
@@ -581,18 +598,14 @@ describe('App sidebar (app-chrome handoff, option A)', () => {
     expect(page()).not.toHaveAttribute('inert')
     toggle().focus()
     fireEvent.click(toggle())
-    expect(switcher()).toHaveFocus()
+    expect(nav().getByRole('link', { name: 'Dashboard' })).toHaveFocus()
     expect(page()).toHaveAttribute('inert')
     // Escape with focus anywhere closes it, and focus goes back to the menu button.
     fireEvent.keyDown(document.body, { key: 'Escape' })
     expect(toggle()).toHaveAttribute('aria-expanded', 'false')
     expect(toggle()).toHaveFocus()
     expect(page()).not.toHaveAttribute('inert')
-    // Escape in Switch workspace closes that first, the drawer stays.
     fireEvent.click(toggle())
-    fireEvent.click(switcher())
-    fireEvent.keyDown(screen.getByLabelText('Work email or workspace name'), { key: 'Escape' })
-    expect(screen.queryByLabelText('Work email or workspace name')).toBeNull()
     expect(toggle()).toHaveAttribute('aria-expanded', 'true')
     // A link closes it too, with focus back on the menu button.
     nav().getByRole('link', { name: 'Tenders' }).focus()
@@ -615,10 +628,10 @@ describe('App sidebar (app-chrome handoff, option A)', () => {
     window.history.replaceState({}, '', '/t/acme/dashboard')
     render(<App basename="/t/acme" remotes={ALL} sidebar={preference} />)
     const toggle = () => screen.getByRole('button', { name: /menu$/ })
-    // Collapsed beside the page: tooltips; the same choice in the open drawer: none (the labels show).
-    expect(nav().getByRole('link', { name: 'Tenders' })).toHaveAttribute('title', 'Tenders')
+    // Hidden beside the page (collapsed), the drawer opens all the same.
+    expect(aside()).toHaveClass('lg:hidden!')
     fireEvent.click(toggle())
-    expect(nav().getByRole('link', { name: 'Tenders' })).not.toHaveAttribute('title')
+    expect(aside()).not.toHaveClass('invisible')
     onChange!() // still narrow: stays open
     expect(toggle()).toHaveAttribute('aria-expanded', 'true')
     mq.matches = true
@@ -628,105 +641,44 @@ describe('App sidebar (app-chrome handoff, option A)', () => {
     vi.restoreAllMocks()
   })
 
-  it('closes Switch workspace on Escape, when focus moves out of it, and on a press outside it', () => {
-    window.history.replaceState({}, '', '/t/acme/dashboard')
-    render(<App basename="/t/acme" remotes={ALL} />)
-    fireEvent.click(switcher())
-    expect(switcher()).toHaveAttribute('aria-expanded', 'true')
-    fireEvent.keyDown(switcher(), { key: 'Escape' })
-    expect(switcher()).toHaveAttribute('aria-expanded', 'false')
-    fireEvent.click(switcher())
-    const cancel = () => screen.getByRole('button', { name: 'Cancel' })
-    fireEvent.blur(switcher(), { relatedTarget: cancel() })
-    expect(switcher()).toHaveAttribute('aria-expanded', 'true')
-    fireEvent.blur(switcher(), { relatedTarget: sidebar().getByRole('button', { name: 'Sign out' }) })
-    expect(switcher()).toHaveAttribute('aria-expanded', 'false')
-    // A blur with no new focus (WebKit does not focus a clicked button) leaves it open; a press outside closes it.
-    fireEvent.click(switcher())
-    fireEvent.blur(switcher(), { relatedTarget: null })
-    expect(switcher()).toHaveAttribute('aria-expanded', 'true')
-    fireEvent.pointerDown(cancel())
-    expect(switcher()).toHaveAttribute('aria-expanded', 'true')
-    fireEvent.pointerDown(document.body)
-    expect(switcher()).toHaveAttribute('aria-expanded', 'false')
-    fireEvent.click(switcher())
-    fireEvent.click(switcher())
-    expect(switcher()).toHaveAttribute('aria-expanded', 'false')
-    // A blur while it is closed changes nothing.
-    fireEvent.blur(switcher(), { relatedTarget: document.body })
-    expect(switcher()).toHaveAttribute('aria-expanded', 'false')
-  })
 
   it("signs out through the SDK's useSignOut (global)", () => {
     window.history.replaceState({}, '', '/t/acme/dashboard')
     render(<App basename="/t/acme" />)
-    fireEvent.click(sidebar().getByRole('button', { name: 'Sign out' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Ada Lovelace' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Sign out' }))
     expect(frame.signOut).toHaveBeenCalledWith()
   })
 
-  it("switches workspace through the SDK's useSwitchWorkspace with what the user typed", async () => {
-    window.history.replaceState({}, '', '/t/acme/dashboard')
-    render(<App basename="/t/acme" />)
-    fireEvent.click(switcher())
-    const input = screen.getByLabelText('Work email or workspace name')
-    expect(input).toHaveFocus()
-    // Nothing typed: nothing asked.
-    fireEvent.submit(input)
-    expect(frame.switchWorkspace).not.toHaveBeenCalled()
-    fireEvent.change(input, { target: { value: '  globex ' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
-    expect(frame.switchWorkspace).toHaveBeenCalledWith('globex')
-    expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled()
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Continue' })).toBeEnabled())
-    expect(screen.queryByRole('alert')).toBeNull()
-    // Cancel closes it.
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
-    expect(screen.queryByLabelText('Work email or workspace name')).toBeNull()
+
+
+  it("opens My account again from the top bar's menu while already in it (the section remounts)", () => {
+    window.history.replaceState({}, '', '/t/acme/me/profile')
+    render(<App basename="/t/acme" remotes={ALL} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Ada Lovelace' }))
+    fireEvent.click(screen.getByRole('link', { name: 'My account' }))
+    expect(window.location.pathname).toBe('/t/acme/me')
   })
 
-  it('says so when the workspace service cannot answer, and lets the user try again', async () => {
-    frame.switchWorkspace.mockRejectedValueOnce(new Error('PUB-1 unreachable'))
-    window.history.replaceState({}, '', '/t/acme/dashboard')
-    render(<App basename="/t/acme" />)
-    fireEvent.click(switcher())
-    fireEvent.change(screen.getByLabelText('Work email or workspace name'), { target: { value: 'globex' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
-    expect(await screen.findByRole('alert')).toHaveTextContent("We couldn't reach the workspace service. Try again.")
-    fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
-    // A second submit while the first is pending is ignored.
-    fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
-    expect(frame.switchWorkspace).toHaveBeenCalledTimes(2)
-  })
-
-  it('collapses to the icon rail and back on a wide screen: labels kept for assistive technology, icons titled', () => {
+  it("hides the sidebar completely from the top bar's menu button, and shows it again", () => {
     window.history.replaceState({}, '', '/t/acme/dashboard')
     render(<App basename="/t/acme" remotes={ALL} />)
-    const toggle = () => sidebar().getByRole('button', { name: /sidebar$/ })
-    const tenders = () => nav().getByRole('link', { name: 'Tenders' })
-    expect(toggle()).toHaveAccessibleName('Collapse sidebar')
-    expect(toggle()).toHaveAttribute('aria-expanded', 'true')
-    expect(tenders()).not.toHaveAttribute('title')
-    fireEvent.click(switcher())
+    const toggle = () => screen.getByRole('button', { name: 'Toggle sidebar' })
+    expect(aside()).not.toHaveClass('lg:hidden!')
+    expect(sidebar().queryByRole('button', { name: /^(Collapse|Expand) sidebar$/ })).toBeNull() // no button at the bottom of the sidebar
     fireEvent.click(toggle())
-    // Collapsed: Switch workspace closes, the labels are hidden on a wide screen only (still the links' names).
-    expect(toggle()).toHaveAccessibleName('Expand sidebar')
-    expect(toggle()).toHaveAttribute('aria-expanded', 'false')
-    expect(screen.queryByLabelText('Work email or workspace name')).toBeNull()
-    expect(tenders().querySelector('[data-label]')).toHaveClass('lg:sr-only!')
-    expect(tenders()).toHaveAttribute('title', 'Tenders')
-    expect(switcher()).toHaveAttribute('title', 'acme')
-    expect(sidebar().getByRole('button', { name: 'Sign out' })).toHaveAttribute('title', 'Sign out')
+    expect(aside()).toHaveClass('lg:hidden!')
     fireEvent.click(toggle())
-    expect(tenders().querySelector('[data-label]')).not.toHaveClass('lg:sr-only!')
+    expect(aside()).not.toHaveClass('lg:hidden!')
   })
 
-  it('starts collapsed when the user chose so, and saves each choice', () => {
+  it('starts hidden when the user chose so, and saves each choice', () => {
     let saved = true
     const sidebarPreference = { collapsed: () => saved, setCollapsed: vi.fn((c: boolean) => void (saved = c)) }
     window.history.replaceState({}, '', '/t/acme/dashboard')
     const { unmount } = render(<App basename="/t/acme" sidebar={sidebarPreference} />)
-    const toggle = () => sidebar().getByRole('button', { name: /sidebar$/ })
-    expect(toggle()).toHaveAccessibleName('Expand sidebar')
+    const toggle = () => screen.getByRole('button', { name: 'Toggle sidebar' })
+    expect(aside()).toHaveClass('lg:hidden!')
     fireEvent.click(toggle())
     expect(sidebarPreference.setCollapsed).toHaveBeenLastCalledWith(false)
     fireEvent.click(toggle())
@@ -734,7 +686,7 @@ describe('App sidebar (app-chrome handoff, option A)', () => {
     // A page load starts as the user left it.
     unmount()
     render(<App basename="/t/acme" sidebar={sidebarPreference} />)
-    expect(toggle()).toHaveAccessibleName('Expand sidebar')
+    expect(aside()).toHaveClass('lg:hidden!')
   })
 
   it('gives each section its icon, and the Admin entry point its own group', () => {
@@ -744,10 +696,10 @@ describe('App sidebar (app-chrome handoff, option A)', () => {
     const svgs = nav()
       .getAllByRole('link')
       .map((l) => l.querySelector('svg')?.getAttribute('aria-hidden'))
-    expect(svgs).toEqual(['true', 'true', 'true', 'true', 'true'])
-    const lists = nav().getAllByRole('list')
-    expect(lists).toHaveLength(2)
-    expect(within(lists[1]!).getByRole('link')).toHaveAccessibleName('Admin')
+    expect(svgs).toEqual(['true', 'true', 'true', 'true'])
+    // Admin is in the same list, as a button that opens its sub-menu.
+    expect(nav().getAllByRole('list')).toHaveLength(1)
+    expect(nav().getByRole('button', { name: 'Admin' }).querySelector('svg')).toHaveAttribute('aria-hidden', 'true')
   })
 
   it('is off where the runtime config sets shell.frame to false', () => {
@@ -765,13 +717,13 @@ describe('AppSidebar', () => {
   it('draws a generic icon for a section it has none for (a future remote)', async () => {
     const { AppSidebar } = await import('../../src/presentation/widgets/AppSidebar')
     const link = { id: 'reports', label: 'Reports', to: '/reports', href: '/t/acme/reports', current: false }
-    render(<AppSidebar links={[link]} onNavigate={() => {}} onSwitchWorkspace={async () => {}} onSignOut={() => {}} />)
+    render(<AppSidebar links={[link]} onNavigate={() => {}} />)
     expect(screen.getByRole('link', { name: 'Reports' }).querySelector('svg')).not.toBeNull()
   })
 
   it('opens and closes its drawer without an onDrawerChange, ignoring keys other than Escape', async () => {
     const { AppSidebar } = await import('../../src/presentation/widgets/AppSidebar')
-    render(<AppSidebar links={[]} onNavigate={() => {}} onSwitchWorkspace={async () => {}} onSignOut={() => {}} />)
+    render(<AppSidebar links={[]} onNavigate={() => {}} />)
     const toggle = screen.getByRole('button', { name: 'Open menu' })
     fireEvent.click(toggle)
     fireEvent.keyDown(document.body, { key: 'Enter' })

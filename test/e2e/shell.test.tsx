@@ -403,36 +403,26 @@ describe('the shell, end to end', () => {
       ['Tenders', '/t/acme/tenders'],
       ['Drafting', '/t/acme/drafting'],
       ['Workflows', '/t/acme/workflows'],
-      ['Admin', '/t/acme/admin'], // an owner (manage:members)
     ])
+    // An owner (manage:members) gets Admin: a button that opens its sub-menu, not a link.
+    expect(nav.getByRole('button', { name: 'Admin' })).toHaveAttribute('aria-expanded', 'false')
     await userEvent.click(nav.getByRole('link', { name: 'Tenders' }))
     await screen.findByRole('heading', { name: 'Tenders for Ada Lovelace in acme' }, { timeout: 5_000 })
     expect(window.location.pathname).toBe('/t/acme/tenders')
     expect(assigned).toEqual([]) // no page load, no sign-in round trip
     expect(injected).toEqual([ENTRY, TENDERS_ENTRY])
 
-    // The sidebar names the workspace (P-1's name, then its slug) and the user, and links My account (mfe-me).
-    const sidebar = within(screen.getByRole('complementary', { name: 'Workspace and sections' }))
-    await waitFor(() => expect(sidebar.getByRole('button', { name: /^Switch workspace:/ })).toHaveAccessibleName('Switch workspace: Acme acme'))
-    expect(sidebar.getByText('Ada Lovelace')).toBeInTheDocument()
-    await userEvent.click(sidebar.getByRole('link', { name: 'My account' }))
+    // The top bar's user menu names the user and links My account (mfe-me).
+    await userEvent.click(screen.getByRole('button', { name: 'Ada Lovelace' }))
+    await userEvent.click(screen.getByRole('link', { name: 'My account' }))
     await screen.findByRole('heading', { name: 'me for Ada Lovelace in acme' }, { timeout: 5_000 })
     expect(window.location.pathname).toBe('/t/acme/me')
 
-    await userEvent.click(sidebar.getByRole('button', { name: 'Sign out' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Ada Lovelace' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Sign out' }))
     await screen.findByRole('heading', { name: 'You are signed out' }, { timeout: 5_000 })
     expect(document.getElementById('app')!.childElementCount).toBe(0)
     expect(posted.map((p) => p.url)).toEqual([`POST ${IDP}/realms/tenant-acme/protocol/openid-connect/logout`])
-  })
-
-  it("the sidebar's Switch workspace resolves the name (PUB-1) and signs in to that workspace asking for credentials", async () => {
-    await signInByEmail()
-    await userEvent.click(screen.getByRole('button', { name: /^Switch workspace:/ }))
-    await userEvent.type(screen.getByLabelText('Work email or workspace name'), 'acme')
-    await userEvent.click(screen.getByRole('button', { name: 'Continue' }))
-    await until(() => assigned.length > 0, 'the redirect to Keycloak')
-    expect(net.sent('/api/v1/public/tenants/resolve').map((r) => new URL(r.url).searchParams.get('identifier'))).toEqual([EMAIL, 'acme'])
-    expect(new URL(assigned[0]!).pathname).toBe('/realms/tenant-acme/protocol/openid-connect/auth')
   })
 
   it('a member sees no Admin link in the sidebar', async () => {

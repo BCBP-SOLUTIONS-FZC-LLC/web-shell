@@ -5,7 +5,7 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        sans: ['"Geist Variable"', '"Inter Variable"', 'system-ui', '-apple-system', 'sans-serif'],
+        sans: ['"Inter Variable"', 'system-ui', '-apple-system', 'sans-serif'],
       },
       colors: {
         brand: {
