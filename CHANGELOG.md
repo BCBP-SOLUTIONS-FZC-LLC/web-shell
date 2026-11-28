@@ -10,6 +10,9 @@ Pull requests that change the shell, its dependencies, or the image add an entry
 
 ## [Unreleased]
 
+### Changed (2026-11-28 — the sidebar's selection is #ff4fa3)
+**The selected item in the sidebar is a `#ff4fa3` tile with white text, and a selected sub-menu item's text is `#ff4fa3`.** `CURRENT_TILE` and `CURRENT` in `AppSidebar.tsx`. White on `#ff4fa3` is 3.05:1, below AA's 4.5:1 for small text, so the browser test holds the selected label to 3:1 (the minimum for interface components and large text) instead of 4.5:1; every other sidebar colour stays at AA. LLD §6.6d updated. *(Previously: `#be185d`, 6:1.)*
+
 ### Changed (2026-11-28 — buttons in the page are #8b5cf6)
 **The primary buttons of every remote (`bg-aura-primary` buttons and links, daisyUI's `.btn-primary`) are `#8b5cf6` with white text and a violet glow.** `.shell-page` rules in `src/shared/ui/index.css` (with `!important`, a stopgap like the type, drop-down and placeholder rules: LLD §15 #23). Their links, tabs, progress bars and the sidebar's selected item keep the brand pink; outline buttons are unchanged. White on `#8b5cf6` is 4.2:1, just under the 4.5:1 AA asks for small text (the buttons are bold 14px). *(Previously: the brand pink `#d92672`.)*
 
