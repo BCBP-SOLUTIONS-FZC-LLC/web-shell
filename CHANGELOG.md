@@ -10,6 +10,9 @@ Pull requests that change the shell, its dependencies, or the image add an entry
 
 ## [Unreleased]
 
+### Changed (2026-11-28 — drop-down chevrons inset from the field's edge)
+**Every drop-down in the page area (every remote's) draws its chevron 14px in from the field's end edge, with room for it on the text's side.** `.shell-page select` in `src/shared/ui/index.css` sets `appearance: none`, a stroke-grey chevron as an inline-SVG `background-image` (a `data:` image, which the CSP's `img-src 'self' data:` allows), `background-position: right 0.875rem center` (left in RTL) and `padding-inline-end: 2.5rem`. daisyUI's own `.select` and list boxes (`multiple`, `size`) are left alone. A stopgap in the same way as the type rule above it (LLD §15 #23): a remote that draws its own selects replaces it. *(Previously: the browser's native arrow, flush against the field's edge.)*
+
 ### Changed (2026-11-28 — Inter only, a smaller base size)
 **The shell uses one typeface, Inter, and a 14px base size.** `font-sans` in `tailwind.config.js` is `Inter Variable` then the system fonts (it named Geist first); `@fontsource-variable/geist` is removed (`package.json`, `package-lock.json`, the import in `bootstrap.tsx`), so the bundle no longer carries it. `html { font-size: 14px }` in `src/shared/ui/index.css` (it was the browser's 16px) scales every rem size, the remotes' too, as the sidebar, top bar, cards and pages shrink together; px sizes (the 248px sidebar) do not change. `.shell-page` (the column that holds the remote) forces Inter on everything in it with `!important`, because a remote's own Tailwind stack still names Geist first (mfe-admin's does); a stopgap until each remote drops Geist or the platform owns the type (LLD §15 #23). The browser test checks `Inter Variable` loads; ARCHITECTURE §Fonts and `test/browser/README.md` updated. *(Previously: Geist first, Inter second, and the 16px browser default.)*
 

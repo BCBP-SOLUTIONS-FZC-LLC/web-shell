@@ -39,6 +39,23 @@
   font-family: 'Inter Variable', system-ui, -apple-system, sans-serif !important;
 }
 
+/* A drop-down's chevron sits inset from the field's end edge (a native one is flush against it), in every remote:
+   the browser's arrow is replaced by one drawn here, with room for it on the text's side. A stopgap like the type
+   above, until each remote draws its own selects (LLD §15 #23). daisyUI's own `.select` and lists (`multiple`,
+   `size`) keep theirs. */
+.shell-page select:not(.select):not([multiple]):not([size]) {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236c7688' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.875rem center;
+  background-size: 1rem;
+  padding-inline-end: 2.5rem;
+}
+
+.shell-page:dir(rtl) select:not(.select):not([multiple]):not([size]) {
+  background-position: left 0.875rem center;
+}
+
 @keyframes hero-image-in {
   from {
     opacity: 0;
