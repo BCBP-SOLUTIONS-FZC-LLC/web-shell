@@ -10,6 +10,9 @@ Pull requests that change the shell, its dependencies, or the image add an entry
 
 ## [Unreleased]
 
+### Changed (2026-11-28 — #ff4fa3 for the selected tab and a notice card's edge)
+**The selected tab (mfe-me's underline, mfe-admin's pill text) and the coloured start edge of a notice card (`.notice`, every kind) are `#ff4fa3` in every remote.** `.shell-page` rules in `src/shared/ui/index.css` (with `!important`, a stopgap like the type and button rules: LLD §15 #23); the notice's other three edges stay the card's white edge. Every kind of notice (error, warning, info) now shares the one colour, so the words, not the colour, say which it is. Pink on the pill's soft pink background and on white is about 2.6–3:1. *(Previously: the brand pink for tabs, and red, amber or violet for notices by kind.)*
+
 ### Changed (2026-11-28 — the sidebar's selection is #ff4fa3)
 **The selected item in the sidebar is a `#ff4fa3` tile with white text, and a selected sub-menu item's text is `#ff4fa3`.** `CURRENT_TILE` and `CURRENT` in `AppSidebar.tsx`. White on `#ff4fa3` is 3.05:1, below AA's 4.5:1 for small text, so the browser test holds the selected label to 3:1 (the minimum for interface components and large text) instead of 4.5:1; every other sidebar colour stays at AA. LLD §6.6d updated. *(Previously: `#be185d`, 6:1.)*
 

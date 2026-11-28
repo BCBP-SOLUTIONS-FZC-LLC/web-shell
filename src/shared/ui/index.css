@@ -68,6 +68,30 @@
   box-shadow: 0 4px 16px rgba(139, 92, 246, 0.38) !important;
 }
 
+/* The highlight colour of the page, #ff4fa3, as in the sidebar's selection: the selected tab (an underline in mfe-me,
+   a pill's text in mfe-admin) and the coloured edge on the start side of a notice card. A stopgap like the type
+   above (LLD §15 #23). */
+.shell-page .border-aura-primary,
+.shell-page .notice,
+.shell-page .notice-error,
+.shell-page .notice-warning,
+.shell-page .notice-info {
+  border-color: #ff4fa3 !important;
+}
+
+.shell-page .notice,
+.shell-page .notice-error,
+.shell-page .notice-warning,
+.shell-page .notice-info {
+  /* Only the start edge is coloured: the other three keep the card's white edge. */
+  border-block-color: rgb(255 255 255 / 0.7) !important;
+  border-inline-end-color: rgb(255 255 255 / 0.7) !important;
+}
+
+.shell-page [role='tab'][aria-selected='true'] {
+  color: #ff4fa3 !important;
+}
+
 /* A drop-down's chevron sits inset from the field's end edge (a native one is flush against it), in every remote:
    the browser's arrow is replaced by one drawn here, with room for it on the text's side. A stopgap like the type
    above, until each remote draws its own selects (LLD §15 #23). daisyUI's own `.select` and lists (`multiple`,
