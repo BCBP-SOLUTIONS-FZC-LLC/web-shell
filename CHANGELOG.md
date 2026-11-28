@@ -10,6 +10,9 @@ Pull requests that change the shell, its dependencies, or the image add an entry
 
 ## [Unreleased]
 
+### Changed (2026-11-28 — placeholder colour #BCC1C9)
+**Placeholder text in every field of every remote is `#BCC1C9`, at full opacity.** `.shell-page` in `src/shared/ui/index.css` sets `--aura-placeholder` to it (a remote that colours its placeholders through the variable, as mfe-admin does, follows) and `.shell-page input::placeholder, .shell-page textarea::placeholder` set the colour for the rest. A stopgap like the type and drop-down rules (LLD §15 #23). Placeholder text is a hint, not the field's label, which every field keeps. *(Previously: each remote's own grey, `#858D9C` in mfe-admin.)*
+
 ### Changed (2026-11-28 — drop-down chevrons inset from the field's edge)
 **Every drop-down in the page area (every remote's) draws its chevron 14px in from the field's end edge, with room for it on the text's side.** `.shell-page select` in `src/shared/ui/index.css` sets `appearance: none`, a stroke-grey chevron as an inline-SVG `background-image` (a `data:` image, which the CSP's `img-src 'self' data:` allows), `background-position: right 0.875rem center` (left in RTL) and `padding-inline-end: 2.5rem`. daisyUI's own `.select` and list boxes (`multiple`, `size`) are left alone. A stopgap in the same way as the type rule above it (LLD §15 #23): a remote that draws its own selects replaces it. *(Previously: the browser's native arrow, flush against the field's edge.)*
 

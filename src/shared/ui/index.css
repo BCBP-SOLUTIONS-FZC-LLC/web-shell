@@ -39,6 +39,19 @@
   font-family: 'Inter Variable', system-ui, -apple-system, sans-serif !important;
 }
 
+/* Placeholder text in every field of every remote: #BCC1C9, full opacity. A remote that sets its own placeholder
+   colour through `--aura-placeholder` follows the variable; the rule below covers the rest. A stopgap like the type
+   above (LLD §15 #23). */
+.shell-page {
+  --aura-placeholder: #bcc1c9;
+}
+
+.shell-page input::placeholder,
+.shell-page textarea::placeholder {
+  color: #bcc1c9;
+  opacity: 1;
+}
+
 /* A drop-down's chevron sits inset from the field's end edge (a native one is flush against it), in every remote:
    the browser's arrow is replaced by one drawn here, with room for it on the text's side. A stopgap like the type
    above, until each remote draws its own selects (LLD §15 #23). daisyUI's own `.select` and lists (`multiple`,
